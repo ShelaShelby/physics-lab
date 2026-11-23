@@ -57,6 +57,10 @@ static void testConstants() {
     check("constants: the page's Earth/Moon ratio agrees with the Horizons header within 1e-7 (measured value above)", std::fabs(ratio / hz - 1) < 1e-7);
 }
 
+// 0.75.2: the exact lit share, written here from the triangle Earth - Moon - Sun alone (law of cosines for the angle at the Moon, the phase angle i; Meeus, Astronomical Algorithms, ch. 48:
+// k = (1 + cos i) / 2), independent of the app's vectors: EM, ES and MS are the three side lengths.
+static double exactLitShare(double EM, double ES, double MS) { return (1.0 + (EM * EM + MS * MS - ES * ES) / (2.0 * EM * MS)) / 2.0; }
+
 static void testPhaseGeometry() {
     // Known geometry, Sun along +x seen from Earth, the Moon at 0, 45, 90 ... degrees of longitude from the Sun. Longitude difference (Moon minus Sun) grows from new moon.
     static const char* names[8] = {"new moon", "waxing crescent", "first quarter", "waxing gibbous", "full moon", "waning gibbous", "last quarter", "waning crescent"};
@@ -66,10 +70,18 @@ static void testPhaseGeometry() {
         const double a = k * 45.0 * units::kPi / 180;
         const MoonPhase p = moonPhase(Vec3{3.844e8 * std::cos(a), 3.844e8 * std::sin(a), 0}, sun);
         namesOk = namesOk && std::string(p.name) == names[k] && p.index == k;
-        fracOk = fracOk && std::fabs(p.fraction - (1 - std::cos(a)) / 2) < 1e-12 && std::fabs(p.elongationDeg - (k <= 4 ? 45.0 * k : 360 - 45.0 * k)) < 1e-9;
+        const double EM = 3.844e8, ES = 1.496e11, MS = std::sqrt(EM * EM + ES * ES - 2 * EM * ES * std::cos(a));
+        fracOk = fracOk && std::fabs(p.fraction - exactLitShare(EM, ES, MS)) < 1e-12 && std::fabs(p.elongationDeg - (k <= 4 ? 45.0 * k : 360 - 45.0 * k)) < 1e-9;
     }
     check("phase: the 8 names at 0, 45 ... 315 degrees from the Sun, in order, starting at new moon", namesOk);
-    check("phase: fraction = (1 - cos elongation) / 2 and the elongation is the angle at the Earth (0 .. 180)", fracOk);
+    // (0.75.2: the reference was (1 - cos elongation) / 2, the first-order share; the deliberate change to the exact (1 + cos i) / 2 made it the exact triangle formula above. At the quarters the two differ by 0.0013.)
+    check("phase: fraction = (1 + cos i) / 2 from the Earth-Moon-Sun triangle (exact) and the elongation is the angle at the Earth (0 .. 180)", fracOk);
+    {
+        const double a = 90.0 * units::kPi / 180, EM = 3.844e8, ES = 1.496e11;
+        const MoonPhase p = moonPhase(Vec3{EM * std::cos(a), EM * std::sin(a), 0}, sun);
+        check("phase: at 90 degrees of elongation the exact share is 0.5013, not the first-order 0.5000 (the Sun is not at infinity)", std::fabs(p.fraction - 0.5) > 0.0010 && std::fabs(p.fraction - 0.5) < 0.0016 && p.fraction > 0.5);
+        (void)ES;
+    }
     // the names follow the lit fraction: new moon under 2 %, crescent to 40 %, quarter to 60 %, gibbous to 98 %, full above. In elongation: acos(1 - 2 f) = 16.26, 78.46, 101.54, 163.74 degrees.
     auto nameAt = [&](double deg) { const double a = deg * units::kPi / 180; return std::string(moonPhase(Vec3{std::cos(a), std::sin(a), 0}, sun).name); };
     check("phase: new moon below 16.26 degrees (2 % lit), waxing crescent above", nameAt(16.0) == "new moon" && nameAt(16.5) == "waxing crescent" && nameAt(-16.0) == "new moon" && nameAt(-16.5) == "waning crescent");
@@ -78,8 +90,9 @@ static void testPhaseGeometry() {
     check("phase: gibbous to 163.74 degrees (98 % lit), full moon above", nameAt(163.0) == "waxing gibbous" && nameAt(164.5) == "full moon" && nameAt(-163.0) == "waning gibbous" && nameAt(-164.5) == "full moon");
     // so the name never disagrees with the percent: "quarter" only between 40 and 60 % lit
     // out of the ecliptic: 5 degrees above the Sun's direction is still "new" but the angle at the Earth is 5 degrees, so a sliver (not 0) is lit
-    const MoonPhase q = moonPhase(Vec3{std::cos(5 * units::kPi / 180), 0, std::sin(5 * units::kPi / 180)}, sun);
-    check("phase: 5 degrees above the Sun's direction: new moon, elongation 5 degrees, fraction (1 - cos 5 deg) / 2", std::string(q.name) == "new moon" && std::fabs(q.elongationDeg - 5) < 1e-9 && std::fabs(q.fraction - (1 - std::cos(5 * units::kPi / 180)) / 2) < 1e-12);
+    const MoonPhase q = moonPhase(Vec3{3.844e8 * std::cos(5 * units::kPi / 180), 0, 3.844e8 * std::sin(5 * units::kPi / 180)}, sun);
+    const double qa = 5 * units::kPi / 180, qEM = 3.844e8, qES = 1.496e11, qMS = std::sqrt(qEM * qEM + qES * qES - 2 * qEM * qES * std::cos(qa));   // (the Moon's vector there has the Moon's length)
+    check("phase: 5 degrees above the Sun's direction: new moon, elongation 5 degrees, the exact share", std::string(q.name) == "new moon" && std::fabs(q.elongationDeg - 5) < 1e-9 && std::fabs(q.fraction - exactLitShare(qEM, qES, qMS)) < 1e-9);
 }
 
 // A system in Real mode at a Julian date (TDB, used as the lab does).
@@ -254,7 +267,8 @@ static void testFallbackAndSimple() {
         std::string one = all; for (char& ch : one) if (ch == '\n') ch = ' ';
         check("card: ... says the four main phases are exact and the in-between phase names use this app's own cut-offs (2, 40, 60, 98 %)", one.find("The four main phases (new, first quarter, full, last quarter) are exact") != std::string::npos && one.find("(crescent, gibbous) use this app’s own cut-offs: 2%, 40%, 60% and 98% lit") != std::string::npos);
     }
-    check("card: ... says the angle is the geocentric elongation, to first order", all.find("first order") != std::string::npos);
+    // (0.75.2, on purpose: the card gives the exact lit share from the phase angle at the Moon, no longer the first-order one)
+    check("card: ... says the lit part is (1 + cos i) / 2 with the phase angle at the Moon (exact)", all.find("(1 + cos i) / 2") != std::string::npos && all.find("first order") == std::string::npos);
     // the card of another moon (Jupiter's Io) is not touched
     int ij = -1;
     for (std::size_t i = 0; i < sys.bodies.size(); i++) if (sys.bodies[i].name == "Jupiter") ij = static_cast<int>(i);

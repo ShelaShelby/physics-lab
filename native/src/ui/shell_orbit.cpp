@@ -219,6 +219,7 @@ void timePanel(AppState& app, Panel& p) {
         p.y += std::max(lineH(Type::Title), hb) + m.s4;
     }
     pBody(p, orbit::dateLine(app.sys));
+    if (const std::string out = orbit::outsideRangeNote(app.sys.currentUnixMs()); !out.empty()) pCaption(p, out);   // 0.75.2: time that ran past 2100 (or back before 1800) says so
     const bool manual = app.sys.jumped || g_manual;
     int mode = manual ? 1 : 0;
     if (pSegmented(p, "time.mode", {"Live", "Set manually"}, &mode)) {

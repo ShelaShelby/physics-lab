@@ -52,7 +52,10 @@ struct Body {
 // A planet's position and velocity from its JPL elements on a Julian day (m, m/s, Sun at the origin; planet number 0 = Mercury ... 7 = Neptune).
 State planetStateAt(std::size_t i, double jd);
 
-// The orbit shape worked out from position and velocity (two-body formulas).
+// 0.75.2: the GM the heliocentric two-body formulas of a body belong with: G(M_sun + m) (solar_system.cpp).
+double heliocentricGM(const Body& b);
+
+// The orbit shape worked out from position and velocity (two-body formulas, GM = heliocentricGM).
 struct OrbitShape {
     double r;        // distance from the Sun, m
     double v;        // speed, m/s

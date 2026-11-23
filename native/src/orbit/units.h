@@ -49,10 +49,10 @@ constexpr double kSunInEarthMasses = 332946.0487;     // the Sun's mass over Ear
 // --- integrator settings ----------------------------
 constexpr double kPhysicsStep = 1.0 / 240.0;          // s of real time per physics step
 constexpr double kMaxFrameDt = 0.05;                  // s, a slow frame never counts as more than this
-inline const double kMaxSubStep = 0.004 * kSimTime;   // s of simulated time: leapfrog sub-steps are never longer (about 5.6 hours)
-inline const double kSoftening = 1e-6 * kSimLength * kSimLength * kSimLength;
+// 0.75.2 (outside review, the Sun's "crash radius" 0.15 AU = 32 solar radii): nothing is integrated into the Sun any more (Simple places every body from its elements, solar_system.cpp step), so there
+// is no crash radius. This radius is only the DRAWN Sun in "Easy to see" (the Sun's own radius, kSunRadius above, is 0.00465 AU); it is 0.15 AU so the Sun can be found, and the
+// texts say so (shell_orbit.cpp, the Learn pages: "about 32 times too big").
 inline const double kCrashRadius = 0.7 * kSimLength;
-inline const double kLostRadius = 800.0 * kSimLength;
 
 // --- Time speed slider -------------------------------------------------------------
 // The slider value v means: 1 real second = 58.13 × 10^v days of simulated time,

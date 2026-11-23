@@ -69,9 +69,20 @@ inline std::string physicsGuideText(bool real) {
         return "<p class=\"lrnP\"><b>Planet physics: Real.</b> The planets and the dwarf planets move under the pull of the Sun <b>and of each other</b> (the dwarf planets are pulled "
                "but too light to pull back), from JPL’s positions on 1 Jan 2026, with Einstein’s correction as an option. Measured against JPL, they stay close to the real places from "
                "1800 to 2100. Simplified: the asteroids do not pull, and the moons, comets and belt rocks keep to their own fixed paths.</p>";
-    return "<p class=\"lrnP\"><b>Planet physics: Simple.</b> Each planet starts where it really is on the date and then feels only the Sun’s pull, not the pull of the other planets. "
-           "Over a few years that is very close to the real thing, but if you run time for centuries, the planets slowly drift away from where they would really be "
-           "(set Planet physics to Real for the planets’ pull on each other).</p>";
+    // 0.75.2 (outside review): until 0.75.1 running time followed a Sun-only leapfrog that left the table's slow rates out, so it drifted from a jump to the same date; now both place each planet from the table
+    return "<p class=\"lrnP\"><b>Planet physics: Simple.</b> Each planet is put where JPL’s table of approximate orbits says it is on the date, the same whether you jump to the date or run time to it, "
+           "and the planets do not pull on each other. The table is made for 1800–2050 and is off by up to a few million km for the outer planets (the note under the setting gives each "
+           "planet’s worst error); set Planet physics to Real for the planets’ pull on each other.</p>";
+}
+
+// 0.75.2 (outside review): time running past the edges. A jump stops at 1800 / 2100, but the fastest time speed runs on. Chosen: the lab keeps running and says so under the date, instead of a stop at
+// the edge (a stop would end a long run at the fastest speed with no way to look further; the owner can still read the date). Beyond the edge: Delta T (UT - TDB) is held at its value after the last
+// leap second, 69.2 s (it has been held there since 2017, not only after 2100: ROADMAP), the big moons fall back to the fitted orbits and made-up angles, the Moon to its Kepler ellipse, and the
+// accuracy of Real was never measured (real_errors.h: 1800-2100). Empty inside 1800-2100.
+inline std::string outsideRangeNote(int64_t nowMs) {
+    if (nowMs >= kDateMinMs && nowMs <= kDateMaxMs) return "";
+    return std::string(nowMs > kDateMaxMs ? "Past 2100" : "Before 1800") + ": outside the years this lab checks against JPL. The Moon is on a simple ellipse, the big moons start at made-up places, "
+           "the Earth's turning (Delta T) is held at today's value, and Real's accuracy was never measured here. Treat what you see as a picture, not a prediction.";
 }
 
 // What the date box says before any date is picked.

@@ -19,6 +19,21 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.75.2", "Orbit Lab corrections from an outside review, and rings at their own angle for every giant",
+     "An outside reviewer checked the Orbit Lab's numbers against published sources; what held up is fixed. Planet cards: the spin's outward push is now worked out as "
+     "omega squared times the radius (Jupiter takes off 0.23 g, not 0.17) and the pull alone is what you feel plus that push; \"x Earth\" sizes compare like with like "
+     "(planets with Earth's equatorial radius, dwarf planets with its mean radius) and the dwarf planets' gravity is worked out properly in standard g. Eris is 2,326 km "
+     "wide (its 2010 occultation, Sicardy et al. 2011), a little smaller than Pluto. In Simple, running time and jumping now agree: every planet and dwarf planet is put where "
+     "JPL's table says at each step, so a run to a date gives the places of a jump to it (before, running time drifted away from the table: Jupiter by 1.4 degrees a "
+     "century). The cards' orbit numbers now use the Sun's pull plus the planet's own, as the real velocities do (Jupiter's orbit was 0.005 AU too big, its year 8 days too "
+     "long). The Moon's lit share is the exact one from the angle at the Moon. Time that runs past 2100 (or back before 1800) now says that the lab no longer checks it. "
+     "The barycentre card gives the Sun's swing from Jupiter (1.07 Sun radii) and Saturn (0.59). Text fixes: the spin axes are marked + (the right-hand-rule end: for "
+     "Venus and Uranus that is the IAU's south pole); Saturn's, Uranus's and Neptune's cards name the newer rotation periods beside the IAU's; one asteroid count (about 1.2 "
+     "million, give or take 0.5 million) in the belt card and the guide; the dust tail is not a straight tail; Haumea is a squashed rugby ball; the Moon's distance is its "
+     "semi-major axis; 1 AU is a defined length; Real's note says which dates are UT; the guide no longer says our Moon is not real in Simple; eclipse times are given "
+     "with the real errors of the fitted moons and the light's travel time. Jupiter's, Uranus's and Neptune's rings now take each part's own viewing angle, as Saturn's did "
+     "in 0.75.1. Not done (see the roadmap): the Sun's darker edge (the paper is not saved), the moons outside 1800-2100 on JPL's mean elements, photometric functions for "
+     "Mercury and Pluto."},
     {"0.75.1", "Saturn's rings, each part at its own angle",
      "Close up, the near and far parts of Saturn's rings are seen at very different angles, and now each part is drawn as it would look from there: how much light "
      "it stops and how brightly it shines are worked out for every pixel from that pixel's own viewing angle (the camera is at one height above the ring plane, so the "

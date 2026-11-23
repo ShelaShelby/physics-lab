@@ -108,6 +108,13 @@ std::vector<std::string> spinLines(const Body& b, const SolarSystem& sys, double
     const long long tm = std::llround(days * 1440);       // minutes
     const std::string per = days < 2 ? std::to_string(tm / 60) + " h " + std::to_string(tm % 60) + " min" : (days < 100 ? fmt::fixed(days, 1) : fmt::fixed(days, 0)) + " days";
     std::vector<std::string> lines = {"Turns once in " + per, "Axis leans " + fmt::fixed(tilt, 1) + "° from upright"};
+    // 0.75.2 (outside review): the giants have no solid surface, so "one turn" is a choice. The app turns them at the IAU's rate (Voyager's radio period, which NASA's fact sheets also give);
+    // newer, better measurements are named beside it (saved: data/planets/mankovich2019_arxiv1805.10286.pdf: Saturn's ring waves, 10 h 33 m 38 s +- 1 min; data/planets/lamy2025_uranus_rotation_northumbria.html:
+    // Uranus 17.247864 +- 0.000010 h = 17 h 14 min 52 s; data/planets/karkoschka2011_neptune_sciencedaily.html: Neptune 15 h 57 min 59 s, from two cloud features, as reported there). The spin shown is not changed.
+    const char* newer = b.name == "Saturn" ? "The turn shown is the radio period measured by Voyager (the IAU's). Saturn's rings tell of a deeper turn: 10h 33m 38s, give or take a minute (Mankovich et al. 2019)"
+                      : b.name == "Uranus" ? "The turn shown is Voyager's 1986 value (the IAU's). Hubble's auroras give 17h 14m 52s (Lamy et al. 2025)"
+                      : b.name == "Neptune" ? "The turn shown is Voyager's radio period (the IAU's). Two steady cloud features give 15h 57m 59s (Karkoschka 2011)" : nullptr;
+    if (newer) for (auto& l : wrapWords(newer, 44)) lines.push_back(l);
     if (tilt > 90) lines.push_back(tilt >= 150 ? "Upside down, so it turns backwards" : "Tipped past its side, so it turns backwards");   // 0.39.3: Venus 177°; Uranus 98° and Pluto 120° are not upside down
     const double rps = turnsPerSecond(b.name, tspeed);
     if (rps > 1.2 && !paused) for (auto& l : wrapWords(tooFast(rps), 44)) lines.push_back(l);
@@ -133,7 +140,7 @@ bool earthSeason(const Body& b, const SolarSystem& sys, EarthSeason& out) {
     if (b.name != "Earth") return false;
     const OrbitShape o = orbitOf(b);
     if (!o.bound || o.e > 0.9) return false;
-    const double GM = kGMSun, TAU = 2 * kPi;
+    const double GM = heliocentricGM(b), TAU = 2 * kPi;   // (0.75.2: the same GM as orbitOf)
     SpinFrame sf;
     spinFrame("Earth", sys.julianDay(), sf);
     const Vec3 P = sf.P, r = b.pos - b.drawShift, v = b.vel;   // 0.52.1: the orbit's own point (the Earth-Moon barycentre: Kepler's laws hold for it); the Sun's direction below is from Earth itself

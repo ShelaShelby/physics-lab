@@ -71,6 +71,7 @@ static void runSteps(SolarSystem& sys, double tspeed, int steps) {
 #include "test_rocks.inc"   // 0.13 stage 4 part A: the belt rocks against Kepler's equation as the textbook has it
 #include "test_camera.inc"   // 0.75.0: the 3D pinhole camera against pinhole geometry
 #include "test_rings075.inc"   // 0.75.1: Saturn's rings, each part at its own viewing slant
+#include "test_review0752.inc"   // 0.75.2: the outside review's corrections (gravity and spin, Simple running vs a jump, orbit numbers, rings of the other giants ...)
 
 // 0.15 stage 5c, bug fix A: which labels the picture may draw under the bars. WRITTEN BEFORE the code. References: plain geometry (a rectangle is clear when it lies wholly inside the free area)
 // and the owner's screenshot: at a far zoom-out the ring label "6,500,000,000 AU · 103,000 light years" sat on the breadcrumb in the top bar.
@@ -930,6 +931,7 @@ static void testAlphaCen073() {
 int main() {
     testCamera075();
     testRings075();
+    testReview0752();
     testAlphaCen073();
     testPointColour0521();
     testIauMoons050();
@@ -1167,7 +1169,7 @@ int main() {
         }
         // 0.46.3 (outside review): the guide's physics paragraph follows the setting: Real does not say "only the Sun's pull"
         check(has(physicsGuideText(true), "and of each other") && !has(physicsGuideText(true), "only the Sun"), "guide: Real says the planets pull on each other");
-        check(has(physicsGuideText(false), "only the Sun’s pull") && has(physicsGuideText(false), "Simple"), "guide: Simple says each planet feels only the Sun");
+        check(has(physicsGuideText(false), "do not pull on each other") && has(physicsGuideText(false), "table of approximate orbits") && has(physicsGuideText(false), "Simple"), "guide: Simple says the planets are put by the table and do not pull on each other (0.75.2, on purpose: it no longer says they feel only the Sun, because they are no longer integrated)");
         // row 6: the Voyager caption before it can be shown
         check(has(voyagerFallbackCaption(1960, 1977, 1990), "not launched yet"), "Voyager caption 1960: not launched yet");
         check(has(voyagerFallbackCaption(1980, 1977, 1990), "launched in 1977") && has(voyagerFallbackCaption(1980, 1977, 1990), "from 1990 on") && !has(voyagerFallbackCaption(1980, 1977, 1990), "not launched yet"), "Voyager caption 1980: launched in 1977, shown from 1990 on");
@@ -1300,21 +1302,21 @@ int main() {
             // measured 0.01348 arcsec (0.29, the accurate step, relativity off; 0.28: 0.00244, its integrator error happening to cancel); guard about 1 % above
             check(std::fabs(sep - hsep) * 3600 <= 0.0137, "Real: the Jupiter-Saturn angle on 21 Dec 2020 within the regression guard of Horizons'");
         }
-        // row 21, "Earth back after one year": the leapfrog round the Sun must bring Earth back after exactly one orbital period, P = 2 pi sqrt(a^3 / GM) with a from the orbit's energy
-        // (Kepler's third law, independent of the code). The old check allowed 15,000 km after a Julian year (which is not the period).
+        // row 21, "Earth back after one year". 0.75.2 (on purpose): Simple no longer integrates the planets round the Sun (running time places each planet from JPL's table at every date, as a jump does),
+        // so the old reference, the leapfrog returning after the Kepler period P = 2 pi sqrt(a^3 / GM), no longer describes what the code does. The new reference is the table's own: Earth's mean longitude
+        // comes back after 360 degrees / (its rate per century) = 36525 x 360 / 35999.37244981 days (JPL's table, data/jpl/approx_pos_2026-11-23.html), and the other elements move by a few thousandths of a
+        // degree a year, so the planet must be within a few hundred km of its start (measured below). The table's own mean motion and its a differ by 7e-6 (the old check measured that as 6,958 km).
         {
             SolarSystem s; s.loadAt(ref::kEpochMs);
             const Vec3 p0 = s.bodies[2].pos - s.bodies[2].drawShift;                             // 0.52.1: Earth's orbit point, the barycentre (Earth itself is drawn off it)
-            const OrbitShape o = orbitOf(s.bodies[2]);
-            const double P = 2 * units::kPi * std::sqrt(o.a * o.a * o.a / units::kGMSun);        // s
+            const double P = 36525.0 * 360.0 / 35999.37244981 * 86400.0;                         // s, the table's period of the mean longitude
             const double realSeconds = P / units::kSimTime;                                       // at Time speed 0: 1 real second = kSimTime
             const int steps = static_cast<int>(realSeconds / units::kPhysicsStep);
             for (int k = 0; k < steps; k++) s.step(units::kPhysicsStep, 0.0);
             s.step(realSeconds - steps * units::kPhysicsStep, 0.0);
             const double backKm = length(s.bodies[2].pos - s.bodies[2].drawShift - p0) / 1000;
-            std::printf("  Simple: Earth after one orbital period (%.4f years) is %.2f km from its start\n", P / units::kYear, backKm);
-            // measured 1,423.18 km (leapfrog with sub-steps of at most 5.6 hours; the exact orbit would give 0)
-            check(backKm <= 1438, "Simple: Earth is back at its start after one orbital period, within the regression guard (Kepler's third law)");
+            std::printf("  Simple: Earth after one period of the table's mean longitude (%.4f years) is %.2f km from its start\n", P / units::kYear, backKm);
+            check(backKm <= 1000, "Simple: Earth is back at its start after one period of the table's mean longitude (the table's own reference)");
         }
         // row 22: the 2026 equinoxes. "Next season starts in N days" must land on Horizons' equinox within 0.2 hours, in Simple and in Real, from five start dates.
         {
@@ -1421,7 +1423,8 @@ int main() {
         std::printf("  Real note lengths: %zu / %zu characters (off / on), Simple note %zu\n", realOff.size(), realOn.size(), simple.size());
         // 444 characters (relativity off) showed as 10 lines on 2026-10-03 (1280 x 800, normal text size, about 43 characters a line); 11 lines would be about 470. Guard: 460.
         check(realOff.size() <= 460 && realOn.size() <= 460, "Real note: no longer than the text that showed as 10 lines, plus a little (guard in characters)");
-        check(has(simple, "fixed orbit") && has(simple, "Saturn 8.0") && has(simple, "1800-2050"), "Simple note: fixed orbits and the measured errors: " + simple);
+        // (0.75.2, on purpose: Simple no longer calls the orbits fixed: each planet is put where the table says at the date; the note says so)
+        check(has(simple, "table of approximate elements") && has(simple, "Saturn 8.0") && has(simple, "1800-2050"), "Simple note: the table and the measured errors: " + simple);
     }
 
     // 17) 0.10.5 stage 5, row 18: numbers with a named source, and the ones marked as having none

@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "orbit/saturn_profile.h"
+#include "orbit/saturn_rings.h"
 
 namespace orbit {
 
@@ -47,7 +48,29 @@ const std::vector<RingBand>& saturnDrawnBandsFlat(double eqKm, double r, double 
     return drawn;
 }
 
+std::vector<RingBand> giantDrawnBands(const std::vector<rings::Band>& bands, double eqKm, double r) {
+    std::vector<RingBand> drawn;
+    for (const auto& bd : bands) {
+        const double rin = bd.innerKm / eqKm, rout = bd.outerKm / eqKm, mid = 0.5 * (rin + rout);
+        const double wPx = (rout - rin) * r, drawPx = std::max(wPx, 1.0), cover = wPx / drawPx;   // a narrow ring is widened to a pixel, its opacity scaled down by the share that is its own
+        // a band too faint to show even at the flattest slant is left out (Jupiter's main ring, tau 5e-6); its light is under the albedo (0.03 at most) times its opacity, so nothing either
+        if (rings::blocked(bd.tau, kRingMuMin) * cover < 0.002) continue;
+        RingBand nb;
+        nb.a0 = mid - 0.5 * drawPx / r; nb.a1 = mid + 0.5 * drawPx / r; nb.cover = cover; nb.tauBand = true; nb.tau = bd.tau; nb.albedo = bd.albedo;
+        drawn.push_back(nb);
+    }
+    return drawn;
+}
+
 RingValue ringBandValue(const RingFrame& f, const RingBand& b, double mu) {
+    if (b.tauBand) {   // 0.75.2: the other giants' rings: the same formulas as the single slant of 0.75.1 (blocked share 1 - exp(-tau / mu), light albedo / 0.5 x the single-scattering shine) at this point's mu
+        const float alpha = static_cast<float>(rings::blocked(b.tau, mu) * b.cover);
+        const double shine = b.albedo / 0.5 * rings::shine(b.tau, mu, f.mu0, f.sunlit) * b.cover;
+        RingValue v;
+        v.alpha = alpha; v.faint = alpha < 0.002f && shine < 0.002;
+        v.k = static_cast<float>(alpha > 1e-6f ? std::min(1.0, shine / alpha) : 0.0);
+        return v;
+    }
     const rings::ProfileBin m = rings::saturnGroupMeans(b.i0, b.n, mu, f.mu0, f.sunlit);
     const float alpha = static_cast<float>(m.blocked * b.cover);
     const double shine = m.shine * b.cover;

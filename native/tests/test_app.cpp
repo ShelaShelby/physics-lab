@@ -1762,8 +1762,9 @@ static void testPlanetPhysics() {
     a.loadAt(ms); b.loadAt(ms);
     const double jd = timescale::tdbFromUT(ms / 86400000.0 + 2440587.5);   // 0.46.3: the elements are evaluated at the TDB moment of the UT date
     bool same = true;
+    // 0.75.2 (on purpose): the velocity is the elements' ellipse under G(M_sun + m), the planet system's GM added (orbit/solar_system.cpp planetStateSimple); until 0.75.1 it was the Sun's GM alone
     // 0.52.1: Earth's orbit point is pos - drawShift (Earth itself is drawn off the Earth-Moon barycentre): equal to the elements' state within 1 mm (the shift added and taken off again)
-    for (std::size_t i = 0; i < 8; i++) { const orbit::State st = orbit::planetStateAt(i, jd); const orbit::Vec3 p = a.bodies[i].pos - a.bodies[i].drawShift; same = same && orbit::length(p - st.pos) < 1e-3 && a.bodies[i].vel.x == st.vel.x && (i == 2 || (p.x == st.pos.x && p.y == st.pos.y && p.z == st.pos.z)); }
+    for (std::size_t i = 0; i < 8; i++) { const orbit::State st = orbit::planetStateAt(i, jd); const orbit::Vec3 p = a.bodies[i].pos - a.bodies[i].drawShift; same = same && orbit::length(p - st.pos) < 1e-3 && a.bodies[i].vel.x == st.vel.x * std::sqrt((units::kGMSun + orbit::kRealGM[i + 1]) / units::kGMSun) && (i == 2 || (p.x == st.pos.x && p.y == st.pos.y && p.z == st.pos.z)); }
     checkTrue("Simple: the planets start exactly at the orbital elements' state (Earth's barycentre within 1 mm)", same);
     b.setRealPlanets(true);
     bool differs = false;

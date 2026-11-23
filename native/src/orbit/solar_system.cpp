@@ -35,6 +35,29 @@ State planetStateAt(std::size_t i, double jd) {
     return keplerState(a * kAU, e, I, O, w - O, L - w);
 }
 
+// 0.75.2 (outside review): the GM the heliocentric two-body formulas of a body belong with. The JPL positions and velocities (and the elements' rates) describe the body relative to the Sun, whose
+// relative motion obeys G(M_sun + m), not G M_sun (Jupiter: m / M_sun = 9.5e-4, which made its card's orbit 0.005 AU too big and its year about 8 days too long). Planets: the Sun's GM plus the planet system's
+// (kRealGM, JPL DE440, nbody.h; Earth: Earth + Moon, because the orbit is the Earth-Moon barycentre's); dwarf planets: plus their mass in Earth masses times Earth's GM; comets: massless.
+double heliocentricGM(const Body& b) {
+    if (b.type == BodyKind::Planet) {
+        for (std::size_t i = 0; i < kPlanetCount; i++) if (b.name == kPlanets[i].name) return kGMSun + kRealGM[i + 1];
+        return kGMSun;
+    }
+    return kGMSun + b.massEarths * kRealGMEarthAlone;
+}
+
+// A planet's state as the Simple mode places it: the JPL elements' position, and the velocity of the same ellipse under G(M_sun + m) (planetStateAt's velocity is for the Sun's GM alone).
+static State planetStateSimple(std::size_t i, double jd) {
+    State st = planetStateAt(i, jd);
+    st.vel = st.vel * std::sqrt((kGMSun + kRealGM[i + 1]) / kGMSun);
+    return st;
+}
+
+// A dwarf planet from its elements at their own epoch: the mean anomaly grows by the mean motion per day.
+static State dwarfStateAt(const DwarfData& d, double jd) {
+    return keplerState(d.aAU * kAU, d.e, d.inclDeg, d.nodeDeg, d.periDeg, d.meanAnomDeg + d.meanMotionDegPerDay * (jd - d.epochJD));
+}
+
 void SolarSystem::loadAt(int64_t unixMs) {
     bodies.clear();
     sunTrail.clear();
@@ -47,7 +70,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
 
     for (std::size_t i = 0; i < kPlanetCount; i++) {     // planets: JPL elements, each with its rate per century
         const PlanetData& d = kPlanets[i];
-        const State st = planetStateAt(i, jd);
+        const State st = planetStateSimple(i, jd);
         Body b;
         b.id = ++nextId_;
         b.name = d.name; b.color = d.color; b.kind = d.kind; b.type = BodyKind::Planet;
@@ -61,8 +84,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
     }
     for (std::size_t i = 0; i < kDwarfCount; i++) {      // dwarf planets: elements at their own epoch, mean anomaly grows by n per day
         const DwarfData& d = kDwarfs[i];
-        const State st = keplerState(d.aAU * kAU, d.e, d.inclDeg, d.nodeDeg, d.periDeg,
-                                     d.meanAnomDeg + d.meanMotionDegPerDay * (jd - d.epochJD));
+        const State st = dwarfStateAt(d, jd);
         Body b;
         b.id = ++nextId_;
         b.name = d.name; b.color = d.color; b.kind = "dwarf planet"; b.type = BodyKind::Dwarf;
@@ -192,12 +214,8 @@ void SolarSystem::setRelativity(bool on) {
 }
 
 void SolarSystem::step(double dt, double tspeed) {
-    // Simulated time for this step, cut into equal sub-steps of at most kMaxSubStep
-    // (about 5.6 simulated hours) so fast Time speeds stay accurate.
+    // Simulated time for this step.
     const double total = dt * kSimTime * std::pow(10.0, tspeed);   // s
-    const int nSub = std::max(1, static_cast<int>(std::ceil(total / kMaxSubStep)));
-    const double h = total / nSub, hh = h / 2;
-    const double GM = kGMSun;
     if (!real_)                                           // 0.52.1: Simple: Earth's state is the Earth-Moon barycentre; the drawn shift (shiftEarthSimple) is taken off before the step
         for (Body& b : bodies) if (b.type == BodyKind::Planet && b.name == "Earth") { b.pos = b.pos - b.drawShift; b.drawShift = Vec3{}; }
     {
@@ -206,47 +224,37 @@ void SolarSystem::step(double dt, double tspeed) {
         moonFast_ = kSimTime / kDay * std::pow(10.0, tspeed) / period > kMoonFastLaps;   // (0.52.1: in Simple too)
     }
 
-    // Leapfrog (kick-drift-kick, a.k.a. velocity Verlet) around the Sun:
-    //   v += a·h/2;  x += v·h;  a = −GM·x/(r³ + ε);  v += a·h/2
-    // Each body only feels the Sun, so every body can run all its sub-steps in one go.
-    // The pull at the end of one sub-step is the pull at the start of the next, so it is
-    // worked out once and reused.
-    for (Body& b : bodies) {
-        if (b.type == BodyKind::Comet) continue;          // comets follow their exact orbit (set below)
-        if (real_ && fromClock(b)) continue;              // Real: the planets (and since 0.32 Pluto) come from the N-body clock (below)
-        double x = b.pos.x, y = b.pos.y, z = b.pos.z, vx = b.vel.x, vy = b.vel.y, vz = b.vel.z;
-        double r2 = x * x + y * y + z * z, r = std::sqrt(r2), q = -GM / (r2 * r + kSoftening);
-        double ax = q * x, ay = q * y, az = q * z;        // acceleration, m/s²
-        auto& tr = b.trail;
-        bool haveLast = !tr.empty();
-        Vec3 lt = haveLast ? tr.back() : Vec3{};
-        for (int k = 0; k < nSub; k++) {
-            vx += ax * hh; vy += ay * hh; vz += az * hh;  // half kick
-            x += vx * h; y += vy * h; z += vz * h;        // drift
-            r2 = x * x + y * y + z * z; r = std::sqrt(r2); q = -GM / (r2 * r + kSoftening);
-            ax = q * x; ay = q * y; az = q * z;           // new pull of the Sun
-            vx += ax * hh; vy += ay * hh; vz += az * hh;  // half kick
-            // a trail point every 2 % of the distance to the Sun, so trails look the same at any time speed
-            const double lim = 0.02 * (r > kSimLength ? r : kSimLength);
-            const double dx = x - lt.x, dy = y - lt.y, dz = z - lt.z;
-            if (!haveLast || dx * dx + dy * dy + dz * dz > lim * lim) {
-                lt = {x, y, z}; haveLast = true;
-                tr.push_back(lt);
-                if (tr.size() > 1000) tr.pop_front();
+    // 0.75.2 (outside review): Simple no longer integrates the planets round the Sun. Until 0.75.1 a jump placed them from JPL's table of approximate elements (with their rates) but running time
+    // followed a Sun-only leapfrog without the rates, so a planet ran away from the table (Jupiter 1.36 degrees a century, Mercury 0.36, Earth 0.19) and the quoted errors (real_errors.h
+    // kSimpleErrKm) held only at loaded dates. Now every planet and dwarf planet is put where its elements say at each step's date, exactly as a jump does, so running from date A to date B
+    // gives the places of a jump to B (tests/test_orbit.cpp). The bodies move in steps of at most 2 days, with a trail point where the old rule wanted one (every 2 % of the distance).
+    if (!real_) {
+        const int nPl = std::max(1, std::min(2000, static_cast<int>(std::ceil(total / (2 * kDay)))));
+        const double t0 = t;
+        for (int k = 1; k <= nPl; k++) {
+            t = t0 + total * k / nPl;
+            const double jdk = julianDayTDB();
+            for (Body& b : bodies) {
+                if (b.type == BodyKind::Comet) continue;
+                State st;
+                if (b.type == BodyKind::Planet) {
+                    std::size_t i = 0;
+                    while (i < kPlanetCount && b.name != kPlanets[i].name) i++;
+                    if (i == kPlanetCount) continue;
+                    st = planetStateSimple(i, jdk);
+                } else {
+                    std::size_t i = 0;
+                    while (i < kDwarfCount && b.name != kDwarfs[i].name) i++;
+                    if (i == kDwarfCount) continue;
+                    st = dwarfStateAt(kDwarfs[i], jdk);
+                }
+                b.pos = st.pos; b.vel = st.vel;
+                const double lim = 0.02 * (length(st.pos) > kSimLength ? length(st.pos) : kSimLength);
+                if (b.trail.empty() || length(st.pos - b.trail.back()) > lim) { b.trail.push_back(st.pos); if (b.trail.size() > 1000) b.trail.pop_front(); }
             }
         }
-        b.pos = {x, y, z};
-        b.vel = {vx, vy, vz};
+        t = t0;                                           // (t itself is advanced below, as in Real)
     }
-    // bodies that hit the Sun or fly far away are removed
-    bodies.erase(std::remove_if(bodies.begin(), bodies.end(), [&](const Body& b) {
-                     if (b.type == BodyKind::Comet) return false;
-                     if (real_ && fromClock(b)) return false;
-                     const double r = length(b.pos);
-                     if (r < kCrashRadius) { crashed++; return true; }
-                     if (r > kLostRadius) { escaped++; return true; }
-                     return false;
-                 }), bodies.end());
     if (real_) {                                          // the planets: walk to the new date in steps of about 2 days, with a trail point where needed
         const int nSub = std::max(1, std::min(2000, static_cast<int>(std::ceil(total / (2 * kDay)))));
         for (int k = 1; k <= nSub; k++) {
@@ -284,7 +292,7 @@ bool orbitAxes(const Body& b, Vec3& P, Vec3& Q, double& a, double& e, double& bA
     const OrbitShape o = orbitOf(b);
     if (!o.bound) return false;
     const Vec3 bp = b.pos - b.drawShift;                  // 0.52.1: the orbit's own point (Earth: the Earth-Moon barycentre)
-    const double GM = kGMSun, v2 = dot(b.vel, b.vel), rv = dot(bp, b.vel);
+    const double GM = heliocentricGM(b), v2 = dot(b.vel, b.vel), rv = dot(bp, b.vel);
     const Vec3 hv = cross(bp, b.vel), ev = (bp * (v2 - GM / o.r) - b.vel * rv) * (1.0 / GM);
     const double h = length(hv);
     if (h <= 0) return false;
@@ -323,7 +331,7 @@ void orbitPath(const Body& b, double E0, double E1, int n, std::vector<Vec3>& ou
 }
 
 OrbitShape orbitOf(const Body& b) {
-    const double GM = kGMSun;
+    const double GM = heliocentricGM(b);                  // 0.75.2: G(M_sun + m) for the heliocentric relative state (was the Sun's GM alone)
     OrbitShape o{};
     const Vec3 bp = b.pos - b.drawShift;                  // 0.52.1: the orbit's own point (Earth: the Earth-Moon barycentre, as the card says)
     o.r = length(bp);

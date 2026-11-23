@@ -1,5 +1,6 @@
 #include "card_text.h"
 #include "alphacen.h"
+#include "nbody.h"
 #include "sun_facts.h"
 #include "shapes.h"
 #include "moon_sats.h"
@@ -15,6 +16,17 @@
 #include "real_errors.h"
 
 namespace orbit {
+// NASA Planetary Fact Sheet, "Sidereal rotation period (hrs)" (saved: data/nssdc/<planet>fact.html, read 2026-11-08; the fact sheets' own signs left out): the period the fact sheets' felt value used.
+static double spinPeriodNasaHours(const std::string& name) {
+    static const struct { const char* n; double h; } k[] = {{"Mercury", 1407.6}, {"Venus", 5832.6}, {"Earth", 23.9345}, {"Mars", 24.6229}, {"Jupiter", 9.925}, {"Saturn", 10.656}, {"Uranus", 17.24}, {"Neptune", 16.11}};
+    for (const auto& e : k) if (name == e.n) return e.h;
+    return 0;
+}
+double spinPushMS2(const std::string& name, double radiusM) {   // ω² R_eq, m/s²; 0 when the planet is not in the table
+    const double h = spinPeriodNasaHours(name), w = h > 0 ? 2 * units::kPi / (h * 3600) : 0;
+    return w * w * radiusM;
+}
+
 
 using namespace units;
 
@@ -119,7 +131,7 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const double speed = 2 * kPi * m.aKm / (m.periodDays * 86400);               // km/s, circular-orbit speed
         c.title = std::string(m.name) + " · moon of " + b->name;
         c.lines = {"Radius: " + fmt::kmPlain(m.radiusKm) + (std::string(m.name) == "Moon" ? std::string() : " (" + fmt::fixed(m.radiusKm / 1737.4, m.radiusKm < 100 ? 3 : 2) + " × our Moon)"),
-                   "Distance from " + b->name + ": " + fmt::km(m.aKm) + " (mean)",   // night hunt 0.39.2: the mean (the semi-major axis), not where the moon is now
+                   "Distance from " + b->name + ": " + fmt::km(m.aKm) + " (the semi-major axis; the average over time is a (1 + e²/2) = " + fmt::km(m.aKm * (1 + m.e * m.e / 2)) + ")",   // night hunt 0.39.2: the semi-major axis, not where the moon is now; 0.75.2 (outside review): it was called "mean", but the time-averaged distance of an ellipse is a (1 + e²/2) (the Moon: 384,400 -> about 385,000 km)
                    "Orbit: " + (m.periodDays < 10 ? fmt::fixed(m.periodDays, 2) : fmt::fixed(m.periodDays, 1)) + " days" + (m.retrograde ? ", going backwards" : ""),
                    "Speed: " + fmt::kms(speed, 2),
                    m.note};
@@ -129,7 +141,11 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         if (satState(m.name, sys.julianDayTDB(), sp, sv))   // 0.27: the 13 big moons at their real places (orbit/moon_sats.h)
             c.lines.push_back("Its place is the real one: an orbit fitted to JPL Horizons, within " + fmt::km(satWorstErrKm(m.name)) + " of it from 1800 to 2100");
         else if (!(b->name == "Earth" && sel.moon == 0))   // any moon outside 1800-2100 rides a fixed Kepler ellipse from a made-up start; our Moon's own lines below say what it is (0.46.3: real in Simple too)
+        {
             c.lines.push_back("Its place on the orbit is not the real one: it starts at a made-up angle");
+            // 0.75.2 (outside review): the fallback ellipse is tilted about the spring-equinox direction by the planet's tilt, not about the planet's Laplace plane with JPL's node and inclination, so its plane is only roughly right (Triton: 157.3° to Neptune's equator in JPL's mean elements); ROADMAP
+            for (auto& l : wrapWords("Its orbit's plane is only roughly right too: JPL's mean elements for its tilt and node are not used yet", 56)) c.lines.push_back(l);
+        }
         if (!(b->name == "Earth" && sel.moon == 0)) {   // 0.50 (review item 10): how its ball is drawn
             Vec3 ax[3];
             if (iauBodyAxes(m.name, sys.julianDayTDB(), ax))
@@ -142,8 +158,8 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
             if (sys.realMoon()) {
                 const MoonPhase p = moonPhase(sys.moonGeocentric(), b->pos * -1.0);   // Sun (at the origin) seen from Earth
                 c.lines.push_back(std::string("Phase now: ") + p.name + ", " + std::to_string(static_cast<int>(std::lround(100 * p.fraction))) + "% lit");
-                c.lines.push_back("It is " + fmt::fixed(p.elongationDeg, 0) + "° from the Sun in the sky. The lit part is (1 − cos of that angle) / 2, to first order (the geocentric elongation, not the exact phase angle)");
-                c.lines.push_back("Distance from " + b->name + " right now: " + fmt::km(length(sys.moonGeocentric()) / kKm) + " (the one above is the mean)");
+                c.lines.push_back("It is " + fmt::fixed(p.elongationDeg, 0) + "° from the Sun in the sky. The lit part is (1 + cos i) / 2 with i the angle Sun–Moon–Earth seen from the Moon (the exact phase angle, not the elongation)");
+                c.lines.push_back("Distance from " + b->name + " right now: " + fmt::km(length(sys.moonGeocentric()) / kKm) + " (the one above is the semi-major axis)");
                 c.lines.push_back("Real position and phase: ELP2000-82B, a 1988 theory; within " + fmt::fixed(kMoonElpWorstKm, 1) + " km of JPL Horizons at worst at the dates checked (1800 to 1 Jan 2100)");
                 for (auto& l : wrapWords("The four main phases (new, first quarter, full, last quarter) are exact; the names in between (crescent, gibbous) use this app’s own cut-offs: 2%, 40%, 60% and 98% lit", 56)) c.lines.push_back(l);
             } else
@@ -160,7 +176,9 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
                    "They orbit this point, not the Sun’s centre",
                    "Now " + fmt::fixed(dR, 1) + " Sun radii from the Sun’s centre",
                    "Ranges from inside the Sun to about 2 Sun radii out",
-                   "Mostly Jupiter’s pull, a bit Saturn’s",
+                   // 0.75.2 (outside review: "mostly Jupiter's pull, a bit Saturn's"): the Sun's swing round the barycentre from one planet is about (m / M_sun) a: Jupiter 1.07 Sun radii, Saturn 0.59,
+                   // about half as much (tests/test_orbit.cpp computes both from the app's own masses and orbits)
+                   "Jupiter moves the Sun about 1.07 Sun radii, Saturn about 0.59, the rest less",
                    !opt.trueScale ? "Here the Sun is drawn about " + fmt::commas(drawn) + "× too big" : "The Sun is drawn at its true size here"};
         return true;
     }
@@ -191,13 +209,18 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const OrbitShape o = orbitOf(b);
         const double d = o.r / kAU;                                          // AU
         const double Teq = 254.6 * std::pow(sp.L, 0.25) / std::sqrt(d) - 273.15;   // equilibrium temperature with no atmosphere, °C
-        const double Rp = b.radius / kEarthRadius, Mp = b.massEarths;        // in Earth radii and Earth masses
+        // 0.75.2 (outside review): like with like. The planets' radii are equatorial (NASA), so "× Earth" divides by Earth's equatorial radius, 6,378.1 km (fact sheet); the dwarf planets' are mean
+        // radii, so they divide by Earth's mean radius, 6,371 km. (Until 0.75.1 both used 6,371 km.)
+        const double earthR = b.type == BodyKind::Planet ? 6378.1 * kKm : kEarthRadius;
+        const double Rp = b.radius / earthR, Mp = b.massEarths;              // in Earth radii (of the kind above) and Earth masses
         const std::string shape = !o.bound ? "escaping the star" : o.e < 0.03 ? "near-circle, " + fmt::fixed(o.rPeri / kAU, 3) + " to " + fmt::fixed(o.rApo / kAU, 3) + " AU" : "ellipse, " + fmt::au(o.rPeri / kAU) + " to " + fmt::au(o.rApo / kAU);
         const std::string mass = Mp < 0.05 ? fmt::kg(Mp * kEarthMassKg) : Mp >= 100 ? fmt::fixed(Mp / 317.8, 1) + " Jupiters"   /* Jupiter = 317.8 Earths, this lab's planet table (NASA Planetary Fact Sheet); was 318 */ : (Mp < 1 ? fmt::fixed(Mp, 2) : fmt::fixed(Mp, 1)) + " Earths";
-        const double g = b.gravityG >= 0 ? b.gravityG : Mp / (Rp * Rp);    // surface gravity in g: M/R² in Earth units
-        const double vEsc = std::sqrt(2 * kGMSun / o.r);                     // escape speed from the Sun here, m/s
+        // surface gravity in g (standard gravity, 9.80665 m/s²): the pull alone, GM/R² with GM = Earth's GM times the mass in Earths (JPL DE440 value, nbody.h), at the mean radius (0.75.2: was Earth's
+        // 6,371 km ratio, which is 9.82 m/s², called g)
+        const double g = b.gravityG >= 0 ? b.gravityG : Mp * kRealGMEarthAlone / (b.radius * b.radius) / kStandardGravity;
+        const double vEsc = std::sqrt(2 * heliocentricGM(b) / o.r);                     // escape speed from the Sun here, m/s
         c.title = b.name + " · " + b.kind;
-        c.lines = {"Size: " + fmt::fixed(Rp, Rp < 1 ? 2 : 1) + " × Earth (" + (b.type == BodyKind::Planet ? "equatorial radius " : "radius ") + fmt::km(Rp * 6371) + ")",   // (0.22 stage 6: the planets' radii are equatorial, NASA fact sheet; the dwarf planets' are mean radii)
+        c.lines = {"Size: " + fmt::fixed(Rp, Rp < 1 ? 2 : 1) + " × Earth (" + (b.type == BodyKind::Planet ? "equatorial radius " : "radius ") + fmt::km(b.radius / kKm) + ")",   // ("× Earth" is in Earth's equatorial radius, 6,378.1 km, for a planet and in its mean radius, 6,371 km, for a dwarf planet: 0.75.2)   // (0.22 stage 6: the planets' radii are equatorial, NASA fact sheet; the dwarf planets' are mean radii)
                    // 0.46.3 (outside review): a planet's card gives what you would feel at the equator (gravity minus the spin's push, NASA), and the pull alone in brackets
                    "Mass: " + mass + "  ·  " + (b.feltG >= 0 ? "you would feel " + fmt::fixed(b.feltG, 2) + " g at the equator" : "gravity " + fmt::fixed(g, g < 0.1 ? 3 : 1) + " g"),
                    "Distance: " + fmt::au(d) + " (" + fmt::millionKm(d * kAU / kKm / 1e6) + ")",
@@ -206,13 +229,19 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
                    o.bound ? "One lap: " + fmt::years(o.periodYears) : "One lap: never (it leaves)",
                    b.hasTemp ? "Temperature: " + fmt::celsius(b.tempC) + " (real, " + b.tempNote + ")"
                              : "Temperature: about " + fmt::celsius(std::round(Teq)) + " (an estimate, not measured: a bare ball that reflects 30 % of the sunlight)"};   // (0.25: it read as if the body had no atmosphere; Pluto has a thin one)
-        if (b.feltG >= 0) c.lines.insert(c.lines.begin() + 2, "Gravity alone " + fmt::fixed(g, 2) + " g there; the spin's outward push takes off " + fmt::fixed(g - b.feltG, 2) + " g (NASA)");
+        if (b.feltG >= 0) {
+            // 0.75.2 (outside review): the spin's push is ω² R_eq (ω from NASA's sidereal rotation period, data/nssdc/<planet>fact.html: the period its felt value used) and the pull alone is what you
+            // feel plus that push. Until 0.75.1 the pull alone was JPL's GM/R² and "the push" was GM/R² minus what you feel, which mixed the planet's flattening into the spin (the equatorial pull of a
+            // flattened planet is about GM/R² (1 + 3/2 J2): Jupiter 25.33 against 24.79 m/s²; its push is 2.21, not 1.67).
+            const double push = spinPushMS2(b.name, b.radius) / kStandardGravity;   // in g
+            c.lines.insert(c.lines.begin() + 2, "Gravity alone " + fmt::fixed(b.feltG + push, 2) + " g there; the spin's outward push takes off " + fmt::fixed(push, push < 0.01 ? 3 : 2) + " g (ω² R, from NASA's rotation period)");
+        }
         if (const BodyShape* sh = bodyShape(b.name.c_str()); sh && sh->polarKm < sh->eqKm) {   // 0.27: the real shape (orbit/shapes.h, NASA fact sheets)
             const double f = (sh->eqKm - sh->polarKm) / sh->eqKm;
             c.lines.push_back("Shape: squashed at the poles, polar radius " + fmt::km(sh->polarKm) + " (" + fmt::fixed(100 * f, f < 0.01 ? 2 : 1) + " % less)");
         }
         if (b.name == "Haumea")   // 0.27: two measurements that disagree; its turning angle is not known here, so it is drawn as a ball
-            c.lines.push_back("Shape: an egg, about 2,122 × 1,688 × 1,028 km (Proudfoot et al. 2026; the size above is the ball of the same volume); Ortiz et al. 2017 found the longest axis at least 2,322 km. Drawn as a ball: which way it points is not modelled");
+            c.lines.push_back("Shape: a triaxial ellipsoid (a squashed rugby ball), about 2,122 × 1,688 × 1,028 km (Proudfoot et al. 2026; the size above is the ball of the same volume); Ortiz et al. 2017 found the longest axis at least 2,322 km. Drawn as a ball: which way it points is not modelled");
         for (auto& l : spinLines(b, sys, opt.tspeed, opt.paused)) c.lines.push_back(l);   // how it turns (planets and Pluto)
         for (auto& l : seasonLines(b, sys)) c.lines.push_back(l);                        // Earth: which season it is
         if (b.type == BodyKind::Dwarf && sys.realPlanets() && b.name == "Pluto") {   // 0.32: in Real, Pluto is the tenth body of the N-body model (orbit/nbody.h)

@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "orbit/giant_rings.h"
 #include "orbit/ring_draw.h"
 
 namespace orbit {
@@ -16,7 +17,10 @@ constexpr double kRingTint[3] = {0.91, 0.83, 0.66};      // 0.50 (review item 7)
 const std::vector<RingBand>& saturnDrawnBands(double eqKm, double r);
 // 0.75.0's bands, for the tests: the opacity and light at one slant for the whole system (mu, mu0, the face), neighbours that look the same merged
 const std::vector<RingBand>& saturnDrawnBandsFlat(double eqKm, double r, double mu, double mu0, bool sunlitFace);
-// a profile band's opacity (blocked share x cover) and light k at the slant mu, with the Sun's mu0 and face of f (f.mu0, f.sunlit); k: drawn colour x opacity = the light;
+// 0.75.2: the drawn bands of Jupiter's, Uranus's or Neptune's rings for a planet of r points (giant_rings.h; a narrow ring widened to a pixel, a band too faint to show left out):
+// each carries its tau and albedo (tauBand) and takes each point's own slant through ringBandValue, as Saturn's do
+std::vector<RingBand> giantDrawnBands(const std::vector<rings::Band>& bands, double eqKm, double r);
+// a band's opacity (blocked share x cover) and light k at the slant mu, with the Sun's mu0 and face of f (f.mu0, f.sunlit); k: drawn colour x opacity = the light;
 // faint: both under 0.002 (nothing to see)
 struct RingValue { float alpha, k; bool faint; };
 RingValue ringBandValue(const RingFrame& f, const RingBand& b, double mu);

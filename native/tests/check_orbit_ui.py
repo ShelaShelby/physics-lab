@@ -245,6 +245,13 @@ def part_card(binary, work):
             live = ("Phase now:", "It is ", "Distance from Earth right now:", "Real position and phase:", "The four main phases", "quarter) are exact", "gibbous) use", "98% lit")
             n = [n[0]] + [x for x in n[1:] if not x.startswith(live)]   # (0.46.6, on purpose: a near-circle gives its closest and farthest distance; the saved old card does not)
         n = [n[0]] + [x.replace("Dots here: the 1,800 largest known, at their real places (JPL)", "Dots here: 1,800 stand in for the millions") for x in n[1:]]   # (0.27, on purpose: the belt is real asteroids now)   # (0.27, on purpose: the real shapes add a Shape line; the saved old card has none)
+        # (0.75.2, on purpose: the pull alone now includes the planet's flattening (felt + omega^2 R; tests/test_review0752.inc), the Moon's distance names the semi-major axis, the belt's count is
+        #  Tedesco & Desert 2002's 1.2 million +- 0.5; the saved old card has the old numbers and words)
+        og = next((m.group(1) for x in o for m in [re.search(r"gravity ([0-9.]+) g at the equator", x)] if m), None)
+        if og:
+            n = [n[0]] + [re.sub(r"gravity [0-9.]+ g at the equator", f"gravity {og} g at the equator", x) for x in n[1:]]
+        n = [n[0]] + [re.sub(r" \(the semi-major axis; the average over time is .*\)$", "", x) for x in n[1:]]
+        n = [n[0]] + [x.replace("About 1.2 million rocks wider than 1 km (give or take 0.5 million)", "More than 700,000 rocks wider than 1 km") for x in n[1:]]
         audit = {"4.39 light years (278,000 AU)": "4.34 light years (275,000 AU)", "left it 4.39 years": "left it 4.34 years"}
         if tile == "Alpha Centauri":
             for a, b in audit.items():
@@ -289,6 +296,10 @@ def part_time(binary, work):
                 check(fit, f"{view} {size}: the Time panel's content fits without scrolling ({need})")
             else:
                 print(f"note: {view} {size}: the Time panel's content needs more than it has and scrolls inside ({need})") if not fit else None
+
+    # 0.75.2 (outside review): time that runs past 2100 says so under the date (the jump stops at 2100, the fastest speed runs on). Starts at the last minute of 2100, the Time panel open, the speed at its top.
+    r = run_app(binary, work, "time_past2100", {"PL_NEWUI": "on", "PL_DATE": "2100-12-31", "PL_TIME": "23:59", "PL_SCRIPT": "20:click=top.chip;24:click=time.speed@1.0;28:click=top.play"}, frames=120)
+    check(any("Past 2100" in t for _, _, t in r.texts), "the Time panel says so when time has run past 2100 (Past 2100: outside the years this lab checks)")
 
 def part_chip(binary, work):
     # the chip keeps its place while time runs (its words change every frame), so the play and Today buttons inside it never slide under the pointer

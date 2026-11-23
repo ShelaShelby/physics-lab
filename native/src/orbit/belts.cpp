@@ -110,7 +110,7 @@ double beltMeanMotion(const BeltGroup& g, int k) {
 
 Vec3 beltPoint(const BeltGroup& g, int k, double t) {
     if (g.isStatic) return {g.x[k], g.y[k], g.z[k]};
-    // mean anomaly M = M0 + n·t, with n = √(GM/aN³); Trojans also sway with a 150-year period
+    // mean anomaly M = M0 + n·t, with n = √(GM/aN³); 0.75.2: no Trojan sway any more (libA is 0 for every rock: plain fixed ellipses; the line below stays for a nonzero libA)
     double M = g.M0[k] + beltMeanMotion(g, k) * t;
     if (g.libA[k] != 0) M += g.libA[k] * std::sin(t / kYear / 150 * 6.2832 + g.libPh[k]);
     const double e = g.e[k];
@@ -138,8 +138,10 @@ const char* beltTitle(const std::string& key) {
     return "Kuiper belt";
 }
 
+// 0.75.2 (outside review): the main belt's count is one number from one saved source in both the card and the Learn page: Tedesco & Desert 2002, AJ 123, 2070, abstract: the cumulative number of main-belt
+// asteroids with diameters greater than 1 km is (1.2 +- 0.5) x 10^6 (data/planets/tedesco_desert2002_aj123_2070_iop.html). (The card said "more than 700,000", the lower end of that range; Learn said "millions".)
 static std::vector<std::string> beltLinesRaw(const std::string& key) {
-    if (key == "main") return {"Between Mars and Jupiter, about 2.1 – 3.3 AU", "More than 700,000 rocks wider than 1 km", "Total mass: only about 3% of our Moon",
+    if (key == "main") return {"Between Mars and Jupiter, about 2.1 – 3.3 AU", "About 1.2 million rocks wider than 1 km (give or take 0.5 million)", "Total mass: only about 3% of our Moon",
                                "Ceres alone holds 39% of it", "Gaps are where Jupiter's pull clears orbits", "Dots here: the 1,800 largest known, at their real places (JPL)"};
     if (key == "oort") {
         const auto years = [](double au) { return fmt::commas(std::stod(fmt::precision(voyagerYearsFromSun(au), 2))); };   // two figures, as the far card does

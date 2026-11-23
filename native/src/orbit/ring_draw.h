@@ -74,7 +74,8 @@ inline bool ringPointAtPixel(const RingFrame& f, double px, double py, double q[
 // a drawn band: inner and outer edge in planet radii (a narrow ring widened to a pixel), its opacity (coverage folded in) and its light k (the tint's factor)
 // 0.75.1: a band of Saturn's profile (i0 >= 0) has no fixed opacity and light: they are the means over its measurements i0 .. i0 + n - 1 at each point's own slant
 // (orbit/saturn_profile.h saturnGroupMeans), times cover (the share of the drawn width that is the band's own); alpha and k are then the values at the middle's slant.
-struct RingBand { double a0 = 0, a1 = 0; float alpha = 0, k = 0; int i0 = -1, n = 0; double cover = 1; };
+// 0.75.2: a band of Jupiter's, Uranus's or Neptune's rings (giant_rings.h; tauBand) has its optical depth tau and albedo here and, like Saturn's, takes each point's own slant (ringBandValue).
+struct RingBand { double a0 = 0, a1 = 0; float alpha = 0, k = 0; int i0 = -1, n = 0; double cover = 1; bool tauBand = false; double tau = 0, albedo = 0; };
 
 // The ring plane and the Sun for a pole (px, py, pz on the screen, not necessarily unit), the Sun's direction (Lx, Ly, Lz: right, up, towards you).
 // K: nullptr without a spin model (the Sun's direction is then used as it is).

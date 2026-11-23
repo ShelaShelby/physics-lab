@@ -23,6 +23,9 @@ struct Selection {
     bool operator!=(const Selection& o) const { return !(*this == o); }
 };
 
+// 0.75.2: the spin's outward push at the equator, ω² R_eq in m/s² (ω from NASA's sidereal rotation period); radiusM the equatorial radius in metres.
+double spinPushMS2(const std::string& name, double radiusM);
+
 struct Card {
     std::string title;
     std::vector<std::string> lines;

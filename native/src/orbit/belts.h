@@ -36,7 +36,8 @@ struct Mulberry32 {
     double next();
 };
 
-// All belts for a start date (Unix ms). Jupiter's place on that date sets where the Trojans sit.
+// All belts for a start date (Unix ms). 0.75.2: every rock of the three real belts is a real asteroid on the fixed ellipse of its own JPL record (belts.cpp); Jupiter's place plays no part, and
+// there is no Trojan sway (the libA / libPh arrays are zero: plain fixed ellipses, the card and Learn say Jupiter's pull on them is not modelled).
 // scale 1 is the normal number of rocks (always, in the app); the benchmark's stress scene asks for more of the same kinds.
 std::vector<BeltGroup> makeBelts(int64_t unixMs, int scale = 1);
 
@@ -45,7 +46,7 @@ std::vector<BeltGroup> makeBelts(int64_t unixMs, int scale = 1);
 // that squared) and at most 60 steps; a bisection safety net if the result still misses by more than 1e-9. 0.13 stage 4 part A: up to 0.13 stage 3 the belts used exactly 3 steps from M + e sin M,
 // which is exact for every rock the app makes (e <= 0.498) but not for e >= 0.8 (e = 0.99: 0.45 rad off). For e < 0.8 the first three steps are the same, so a rock of the app is where it was.
 double solveKepler(double e, double M);
-// The mean motion of rock k, rad/s: Kepler's third law with the rock's own speed distance aN (the Trojans use Jupiter's), n = sqrt(GM / aN^3). One function for the CPU and for the GPU upload.
+// The mean motion of rock k, rad/s: Kepler's third law with the rock's own speed distance aN (from its record's mean motion, Trojans too), n = sqrt(GM / aN^3). One function for the CPU and for the GPU upload.
 double beltMeanMotion(const BeltGroup& g, int k);
 
 // Where rock k of group g is, `t` seconds after the start date (m, Sun at the origin).

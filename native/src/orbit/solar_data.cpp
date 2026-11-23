@@ -44,17 +44,20 @@ const PlanetData kPlanets[] = {
 // paper as its axes, B. Proudfoot, W. Grundy, F. L. Rommel, E. Fernandez-Valenzuela, D. Ragozzine, "Triaxial Shapes and Densities of G!kun||'homdima, Haumea, and Varda from
 // Stellar Occultations", Planetary Science Journal 7 (2026), doi:10.3847/PSJ/ae77fa, Table 1 (read on its page 2026-11-08): a 1061, b 844, c 514 km, density 2050 kg/m3.
 // Check: 2 x cbrt(1061 x 844 x 514) = 1,544 km; with JPL's 4.006e21 kg that is 2,060 kg/m3, the paper's density within its error. (JPL's 715 km mean radius is older.)
+// 0.75.2 (outside review): Eris's diameter is 2 x 1,163 +- 6 km = 2,326 +- 12 km, from its stellar occultation of 6 Nov 2010: Sicardy et al., "A Pluto-like radius and a high albedo for the dwarf
+// planet Eris from an occultation", Nature 478, 493 (2011), abstract (saved: data/planets/sicardy2011_eris_nature10550.html). JPL's 2,400 km (radius 1,200 +- 50) was an older value. That makes Eris
+// a little smaller than Pluto (2,376 km); its mass is still JPL's.
 const DwarfData kDwarfs[] = {
     {"Ceres", "#a3a3a3", "Only dwarf planet inside the asteroid belt",
      2461200.5, 0.07969229514816586, 2.765552595034094, 10.58802780183462, 80.24862682043221, 73.29421453021587, 274.4193463761342, 0.21430445064843, 939.4, 9.384e20},
     {"Pluto", "#c9a98a", "Ranked as a dwarf planet since 2006",
      2457588.5, 0.2518378778576892, 39.58862938517124, 17.14771140999114, 110.2923840543057, 113.7090015158565, 38.68366347318184, 0.003956838955553025, 2376, 1.303e+22},
-    {"Haumea", "#d8d0c0", "Spins in 3.9 hours, so it is egg-shaped",
+    {"Haumea", "#d8d0c0", "Spins in 3.9 hours, so it is a squashed rugby ball",
      2461200.5, 0.1944430148898797, 43.06029023650952, 28.20847393040364, 121.7860561329425, 240.6905472508661, 223.2104118812299, 0.003488097731816818, 1544, 4.006e+21},
     {"Makemake", "#c98f6a", "Named after the Rapa Nui creator god",
      2461200.5, 0.1588889953992523, 45.57093317300052, 29.02785603743067, 79.2948338209406, 297.0922733397207, 169.9379962048232, 0.003203850120050116, 1428, 3.1e+21},
     {"Eris", "#e4e4e4", "Its discovery led to Pluto's reclassification",
-     2461200.5, 0.4382385347971672, 67.93394687853566, 43.9258279471791, 36.00477044417249, 150.7949235840312, 211.774434275007, 0.001760247770619088, 2400, 1.66e+22},
+     2461200.5, 0.4382385347971672, 67.93394687853566, 43.9258279471791, 36.00477044417249, 150.7949235840312, 211.774434275007, 0.001760247770619088, 2326, 1.66e+22},
 };
 // 2026-11-05 audit: Phobos and Deimos from the NASA Mars fact sheet (nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html: 9378 / 23459 km, 0.31891 / 1.26244 d,
 // e 0.0151 / 0.0005; radius = the geometric mean of the three axes, 11.1 / 6.2 km); Charon e 0.0 as the NASA Pluto fact sheet (it was 0.0002, no source).

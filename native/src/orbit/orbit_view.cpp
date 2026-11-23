@@ -804,7 +804,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         c.px = dot(f.P, VX); c.py = dot(f.P, VY); c.pz = dot(f.P, VZ);
         return true;
     };
-    // the turning axis as a dashed line through the ball, N at the end it turns counter-clockwise around (right-hand rule)
+    // the turning axis as a dashed line through the ball, "+" (0.75.2: was "N") at the end it turns counter-clockwise around (right-hand rule: for Venus and Uranus, which turn backwards, that end is the IAU's SOUTH pole)
     const auto spinAxis = [&](const std::string& name, const SpinCtx& c, double x, double y, double r, bool back) {
         if (r < 9 || bigR(W, H, r)) return;
         const double sg = spinRateDegPerDay(name) < 0 ? -1 : 1, ux = sg * c.px, uy = -sg * c.py, uz = sg * c.pz, n = std::hypot(ux, uy);
@@ -815,7 +815,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             pen.to(x, y); pen.to(x + half * ux * L, y + half * uy * L);
         }
         if (!back && r >= 13 && !(uz < 0 && L * n < r * 1.02))
-            T.text("N", x + ux * L + ux / n * 9, y + uy * L + uy / n * 9 + 4, 11, Color{1, 1, 1, 1});
+            T.text("+", x + ux * L + ux / n * 9, y + uy * L + uy / n * 9 + 4, 11, Color{1, 1, 1, 1});
     };
     // The rings of the giant planets (0.26): half behind the ball (back) and half in front, in the planet's equator, tilted with its real axis.
     // Saturn: NASA's Saturnian Rings Fact Sheet (orbit/saturn_rings.h); Jupiter, Uranus, Neptune: NASA's ring fact sheets (orbit/giant_rings.h).
@@ -848,18 +848,15 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         if (rs.bands.empty() || r < 1) return;
         // the pole on the screen (right, up, towards you); without a spin model, a fixed tilt as before
         const double px0 = c ? c->px : std::sin(-0.22) * 0.94, py0 = c ? c->py : std::cos(-0.22) * 0.94, pz0 = c ? c->pz : 0.34;
-        const double pz = pz0 / std::sqrt(px0 * px0 + py0 * py0 + pz0 * pz0);
-        const double mu = std::max(std::fabs(pz), 0.004), mu0 = std::max(std::fabs(sunElev), 1e-3);
-        const bool sunlitFace = (pz >= 0) == (sunElev >= 0);   // you see the face the Sun lights
-        const auto slab = [&](double tau) { return rings::shine(tau, mu, mu0, sunlitFace); };   // orbit/saturn_rings.h, tested
+        const double mu0 = std::max(std::fabs(sunElev), 1e-3);
         // 0.46.7: the real Sun (right, up, towards you), as the ball; 0.27: the planet's real shape (orbit/shapes.h): in its own frame (K) with the pole axis
         // stretched by eq / polar radius the body is a ball of radius 1. 0.64.0: the geometry and the triangles in orbit/ring_draw.h (shared with the card's check)
         RingFrame fr = ringFrame(x, y, r, px0, py0, pz0, c ? c->K : nullptr, c ? polarRatio(rs.name) : 1.0, sun.x, -sun.y, sun.z);
         // 0.75.0: the pinhole (3D): a ring point q is at depth Zc (1 - zr qz), zr = (the radius unit, m) / Zc = r / focal; the near plane over Zc. The rings' light and
-        // opacity stay those seen along the line to the planet's middle (mu), not each part's own slant: a simplification close up.
+        // opacity are each part's own slant since 0.75.1 (Saturn) and 0.75.2 (the other giants: ringMu per triangle corner).
         if (d3) { fr.ppx = cam.ppx; fr.ppy = cam.ppy; fr.zr = r / cam.F; fr.wn = cam.zNear / pq.Z; }
         // 0.75.1: Saturn's rings (from the profile) take each point's own slant ringMu(fr, q) and the face the camera sees (in 3D the camera's side of the plane; the map: pz);
-        // the other ring systems keep the one slant along the line to the middle
+        // 0.75.2: so do the other ring systems (their bands carry tau and albedo: ring_draw.h RingBand.tauBand)
         fr.mu0 = mu0; fr.sunlit = ringCameraOnPoleSide(fr) == (sunElev >= 0);
         if (rs.profile && back) {                           // (the checks, PL_RINGS_LOG=1: this frame's ring plane, camera and Sun, for the ui check's own pinhole arithmetic)
             static const bool logRings = std::getenv("PL_RINGS_LOG") != nullptr;
@@ -877,16 +874,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const std::vector<RingBand>* drawnP = &drawnOther;
         if (rs.profile) drawnP = &saturnDrawnBands(rs.eqKm, r);
         else {
-            drawnOther.clear();
-            for (const auto& bd : rs.bands) {
-                const double rin = bd.innerKm / rs.eqKm, rout = bd.outerKm / rs.eqKm, mid = 0.5 * (rin + rout);
-                const double wPx = (rout - rin) * r, drawPx = std::max(wPx, 1.0), cover = wPx / drawPx;
-                const float alpha = static_cast<float>(rings::blocked(bd.tau, mu) * cover);
-                const double shine = bd.albedo / 0.5 * slab(bd.tau) * cover;   // the light the ring sends you, 1 = the full tint
-                if (alpha < 0.002f && shine < 0.002) continue;      // too faint to show at all (Jupiter's main ring, Neptune's dusty rings)
-                const float k = static_cast<float>(alpha > 1e-6f ? std::min(1.0, shine / alpha) : 0.0);   // drawn colour x opacity = the light
-                drawnOther.push_back({mid - 0.5 * drawPx / r, mid + 0.5 * drawPx / r, alpha, k});
-            }
+            drawnOther = giantDrawnBands(rs.bands, rs.eqKm, r);   // 0.75.2: orbit/ring_bands.h
         }
         const std::vector<RingBand>& drawn = *drawnP;
         // 0.64.0: Saturn's rings on the graphics card (Vulkan; render/shaders.h kRingsFS: the same chords, bands and shadow per pixel) once its start-up check passed
@@ -898,7 +886,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             // 0.50 (review item 3): the ring's light k multiplies the tint in LINEAR light (the tint decoded with IEC 61966-2-1), then the result is encoded (render/shading.h)
             const Color litC{static_cast<float>(render::shadeEncoded(kRingTint[0], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[1], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[2], b.k)), b.alpha};
             const Color darkC{0, 0, 0, b.alpha};
-            if (b.i0 >= 0) {   // 0.75.1: a profile band on the processor's path: its opacity and light worked out at each corner's own slant, blended across the triangle
+            if (b.i0 >= 0 || b.tauBand) {   // 0.75.1: a profile band (0.75.2: and a band of the other giants' rings) on the processor's path: its opacity and light worked out at each corner's own slant, blended across the triangle
                 ringTriangles(fr, b, back, W, H, [&](double x0, double y0, double x1, double y1, double x2, double y2, bool lit, const double* q0, const double* q1, const double* q2) {
                     const double* qs[3] = {q0, q1, q2};
                     Color cc[3];

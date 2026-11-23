@@ -28,7 +28,7 @@ constexpr long kRealErrKmDwarf[2][4] = {{12051, 186, 187, 71}, {9324, 150, 163, 
 constexpr long kRealErrKmRelOn[kRealErrCount] = {25, 5, 14, 125, 378, 360, 134, 1436};                  // general relativity (the Sun's 1PN field) on
 
 
-// 0.10.5 stage 3: the same for "Planet physics: Simple" (planets from JPL's approximate Keplerian elements, 1800-2050 table, kept as fixed orbits when time runs), quoted in the Simple note.
+// 0.10.5 stage 3: the same for "Planet physics: Simple" (planets from JPL's approximate Keplerian elements, 1800-2050 table, running time (until 0.75.1) followed a Sun-only leapfrog from them, so it drifted; since 0.75.2 it places each planet from the table at every date), quoted in the Simple note.
 // Heliocentric position error against the same Horizons tables at the same 301 dates, measured by tests/test_jpl.cpp (the "Simple" block; the maximum over all 301 dates, so it includes
 // 2050-2100, which the table is not made for; Saturn's worst is in 2067), each rounded UP to a whole km; the test checks they are the measured maxima. Earth = the Earth-Moon barycentre.
 // 0.10.5 stage 4: they were 7641, 13959, 16314, 90248, 1840647, 7999511, 2912393, 2302277 km before; tests/test_jpl.cpp checks that no
@@ -61,14 +61,14 @@ inline std::string realWorstErrorList(bool relativityOn) {
 inline std::string realNoteText(bool relativityOn) {
     char moon[32];
     std::snprintf(moon, sizeof moon, "%.1f km", kMoonElpWorstKm);
-    return std::string("Real: Sun, 8 planets and Pluto pull on each other (with moons; Earth and Moon apart). "
-                       "Start: JPL Horizons (DE441), 1 Jan 2026 12:00; all dates TDB. "
+    return std::string("Real: Sun, 8 planets and Pluto pull on each other. "
+                       "Start: JPL Horizons (DE441), 1 Jan 2026 12:00 TDB; shown dates are UT, turned into TDB inside. "
                        "Moon: ELP2000-82B, 1800 to 1 Jan 2100 only; other moons as in Simple. "
                        "Ceres etc.: pulled only. No asteroids. "
                        "Worst error vs Horizons, 1800-2100: Moon ") + moon + ", Pluto " + fmt::commas(double(kRealErrKmPluto[relativityOn ? 1 : 0])) + " km; planets, relativity " + (relativityOn ? "on" : "off") + ": " + realWorstErrorList(relativityOn) + ".";
 }
 inline std::string simpleNoteText() {
-    return "Simple: each planet moves alone on a fixed orbit round the Sun, and the planets do not pull on each other. Worst error vs JPL Horizons, 1800-2100 (JPL's table is made for 1800-2050), "
+    return "Simple: each planet is put where JPL's table of approximate elements (with their slow rates) says for the date, running or jumped; the planets do not pull on each other. Worst error vs JPL Horizons, 1800-2100 (JPL's table is made for 1800-2050), "
            "in million km: " + simpleWorstErrorList() + ".";
 }
 

@@ -164,7 +164,12 @@ MoonPhase moonPhase(Vec3 moonFromEarth, Vec3 sunFromEarth) {
     static const char* const kNames[8] = {"new moon", "waxing crescent", "first quarter", "waxing gibbous", "full moon", "waning gibbous", "last quarter", "waning crescent"};
     const double cosE = std::max(-1.0, std::min(1.0, dot(moonFromEarth, sunFromEarth) / (length(moonFromEarth) * length(sunFromEarth))));
     const double rad = 180.0 / 3.14159265358979323846;
-    const double fraction = (1.0 - cosE) / 2.0;
+    // 0.75.2 (outside review): the exact lit share is (1 + cos i) / 2 with i the phase angle, the angle Sun - Moon - Earth AT THE MOON (Meeus, Astronomical Algorithms, ch. 48: k = (1 + cos i) / 2),
+    // from the Moon's vectors to the Sun and to Earth. Until 0.75.1 it was (1 - cos of the elongation) / 2, the elongation seen from Earth, which is only the first-order form (the Sun is 1.5e8 km away,
+    // the Moon 3.8e5: the two differ by up to about 0.15 degree in angle, 0.2 % in the share).
+    const Vec3 moonToSun = sunFromEarth - moonFromEarth, moonToEarth = moonFromEarth * -1.0;
+    const double cosI = std::max(-1.0, std::min(1.0, dot(moonToSun, moonToEarth) / (length(moonToSun) * length(moonToEarth))));
+    const double fraction = (1.0 + cosI) / 2.0;
     double d = (std::atan2(moonFromEarth.y, moonFromEarth.x) - std::atan2(sunFromEarth.y, sunFromEarth.x)) * rad;   // Moon minus Sun, degrees of ecliptic longitude
     d = std::fmod(d, 360.0);
     if (d < 0) d += 360.0;
