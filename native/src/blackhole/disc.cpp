@@ -103,6 +103,64 @@ double DiscPhys::hottest(double* where) const {
     if (where) *where = r;
     return temperature(r);
 }
+// 0.79.0: the thickness (disc.h; Zhu App. B). SI inside: F (W/m^2), Q (s^-2), h (m), then h / r_g.
+double zhuQ(double r) { const double L = orbitAngMom(r, 0); return L * L / (r * r * r * r); }   // (1 / r^3) (u_phi^2 / r)
+bool heightOn(double a) { return a == 0; }
+double DiscPhys::heightRad(double r) const {
+    if (!heightOn(aSigned) || !(r > discInner(aSigned))) return 0;
+    const double rg = gravRadiusM(massSun);
+    return kZhuKappa * flux(r) * rg / (2 * kC * kC * kC * zhuQ(r));               // kappa F / (2 c Q), Q = (c / r_g)^2 zhuQ, over r_g
+}
+double DiscPhys::height(double r, double* gasShare) const {
+    if (gasShare) *gasShare = 0;
+    if (!heightOn(aSigned) || !(r > discInner(aSigned))) return 0;
+    const double rg = gravRadiusM(massSun), F = flux(r), Q = (kC / rg) * (kC / rg) * zhuQ(r), Om = kC / rg / (r * std::sqrt(r));
+    const double RF = (1 - 2 / r) / (1 - 3 / r);                                   // (B1d) at a = 0
+    const double A = 2 * F / (3 * kDiscAlpha * Om * RF);                          // P_tot h, from (B1c), (B1d)
+    const double aRad = 4 * stefanBoltzmann() / kC;                               // the radiation constant
+    const double mH = 1.00782503223 * 1.66053906892e-27, kT = kK / (kZhuMu * mH);  // k / (mu m_H)
+    const double hr = kZhuKappa * F / (2 * kC * Q);
+    double h = hr > 0 ? hr : 1e-30, pg = 0;
+    for (int it = 0; it < 200; it++) {                                            // h = h_rad / 2 + (h_rad^2 / 4 + k T(h) / (mu Q))^(1/2): a contraction (factor 1/4)
+        const double T = std::pow(3 * F * kZhuKappa * A / (2 * aRad * kC * Q * h * h), 0.25);
+        pg = kT * T;
+        const double hn = 0.5 * hr + std::sqrt(0.25 * hr * hr + pg / Q);
+        const bool done = std::fabs(hn - h) <= 1e-15 * hn;
+        h = hn;
+        if (done) break;
+    }
+    if (gasShare) *gasShare = pg / (Q * h * h);
+    return h / rg;
+}
+double HeightTable::at(double r) const {
+    if (h.empty() || !(r > 0)) return 0;
+    const double q = (std::log(r) - ln0) / dln;
+    if (q <= 0) return 0;
+    const int n = static_cast<int>(h.size());
+    if (q >= n - 1) return h.back();
+    const int i = static_cast<int>(q);
+    return h[static_cast<std::size_t>(i)] + (q - i) * (static_cast<double>(h[static_cast<std::size_t>(i) + 1]) - h[static_cast<std::size_t>(i)]);
+}
+HeightTable heightTable(const DiscPhys& p) {
+    HeightTable t;
+    if (!heightOn(p.aSigned)) return t;
+    t.ln0 = std::log(discInner(p.aSigned));
+    t.dln = (std::log(1.05 * 2000) - t.ln0) / (kHeightN - 1);
+    t.h.resize(kHeightN);
+    for (int i = 0; i < kHeightN; i++) t.h[static_cast<std::size_t>(i)] = static_cast<float>(i == 0 ? 0.0 : p.height(std::exp(t.ln0 + i * t.dln)));
+    return t;
+}
+double surfaceStep(double rk, double drk, double C, const HeightTable& h, const DiscGeom& d) {
+    if (!(C > 0) || !(rk > 0)) return 0;
+    const double kMax = kSurfaceMax;
+    double delta = std::asin(std::min(h.at(std::clamp(rk, d.rIn, d.rOut)) / (rk * C), std::sin(kMax)));
+    for (int it = 0; it < kSurfaceSteps; it++) {
+        const double r = rk - drk * delta, z = r * C * std::sin(delta), R = std::sqrt(std::max(r * r - z * z, 0.0));
+        delta = std::asin(std::min(h.at(R) / (std::max(r, 1e-9) * C), std::sin(kMax)));
+    }
+    return delta;
+}
+
 double afFluxCoefficient() {
     const double gm = units::kGMSun, c4 = kC * kC * kC * kC;
     return 3 * eddingtonLuminosity(1) * c4 / (8 * kPi * gm * gm) * 1e3;           // W/m^2 -> erg cm^-2 s^-1
@@ -402,6 +460,27 @@ bool DiscTable::lookup(double x, double phi, double& u) const {
     return true;
 }
 
+bool DiscTable::lookupD(double x, double phi, double& u, double& du) const {
+    const int side = x > 0 ? 0 : 1;
+    const double P = phiEnd(x);
+    if (!(phi <= P)) return false;
+    const double q = (sOf(std::fabs(x)) - s0_[side]) / ds_[side];
+    double wr[4], wc[4], dc[4];
+    const int i0 = stencil(q, nS_, wr);
+    const double qc = std::clamp(phi / P * (nT_ - 1), 0.0, static_cast<double>(nT_ - 1));
+    const int j0 = stencil(qc, nT_, wc);
+    const double v = qc - (j0 + 1);                                                // (the cubic's own variable)
+    dc[0] = -(3 * v * v - 6 * v + 2) / 6; dc[1] = (3 * v * v - 4 * v - 1) / 2; dc[2] = -(3 * v * v - 2 * v - 2) / 2; dc[3] = (3 * v * v - 1) / 6;
+    double a = 0, b = 0;
+    for (int k = 0; k < 4; k++) {
+        const double* row = &u_[(static_cast<std::size_t>(side) * nS_ + i0 + k) * nT_ + j0];
+        a += wr[k] * (wc[0] * row[0] + wc[1] * row[1] + wc[2] * row[2] + wc[3] * row[3]);
+        b += wr[k] * (dc[0] * row[0] + dc[1] * row[1] + dc[2] * row[2] + dc[3] * row[3]);
+    }
+    u = a; du = b * (nT_ - 1) / P;
+    return true;
+}
+
 bool DiscTable::lookupT(double x, double phi, double& t) const {
     const int side = x > 0 ? 0 : 1;
     const double P = phiEnd(x);
@@ -430,13 +509,32 @@ DiscHit discRayTable(const DiscTable& t, double x, double A, double B, double Lz
     const double psi = (kPi - t.alphaSh()) - x;
     h.b = cameraImpact(t.rO(), psi);
     h.captured = x < 0;
-    const double p0 = firstCrossing(A, B);
+    const double p0 = firstCrossing(A, B), C = std::hypot(A, B);
     for (int k = 0; k < kDiscOrders; k++) {
-        double u;
-        if (!t.lookup(x, p0 + k * kPi, u)) break;
-        const double r = 1 / u;
+        const double pk = p0 + k * kPi;
+        double u, du = 0;
+        if (d.height && d.height->on() ? !t.lookupD(x, pk, u, du) : !t.lookup(x, pk, u)) break;
+        double r = 1 / u, psi = pk, z = 0;
+        if (d.height && d.height->on() && u > 0 && k < kSurfaceOrders) {  // 0.79.0: the surface at |z| = h (disc.h surfaceStep)
+            double delta = surfaceStep(r, -du / (u * u), C, *d.height, d), u2 = u;
+            bool ok = true;
+            for (int it = 0; it < kSurfaceExact && delta > 0 && ok; it++) {    // the steps on the table's own r(psi)
+                ok = t.lookup(x, pk - delta, u2) && u2 > 0;
+                if (!ok) break;
+                const double rr = 1 / u2, zz = rr * C * std::sin(delta), R = std::sqrt(std::max(rr * rr - zz * zz, 0.0));
+                delta = std::asin(std::min(d.height->at(R) / (rr * C), std::sin(kSurfaceMax)));
+            }
+            if (!ok) continue;
+            if (delta > 0) {
+                if (!t.lookup(x, pk - delta, u2) || !(u2 > 0)) continue;
+                const double rr = 1 / u2;
+                z = rr * C * std::sin(delta);
+                r = std::sqrt(std::max(rr * rr - z * z, 0.0));
+                psi = pk - delta;
+            }
+        }
         if (u > 0 && r >= d.rIn && r <= d.rOut) {
-            h.order = k; h.r = r; h.Lz = h.b * LzOverB; h.g = discShift(r, h.Lz);
+            h.order = k; h.r = r; h.Lz = h.b * LzOverB; h.g = discShift(r, h.Lz); h.psi = psi; h.z = z;
             return h;
         }
     }

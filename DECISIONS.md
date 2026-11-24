@@ -84,6 +84,16 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
 - The gas disc (owner, 24 Nov 2026; replaces "The moving gas" of 23 Nov 2026): the gas disc is ugly in both looks, Film worst. All four bother him: it is
   flat like a sticker, too smooth and plastic, its edges are hard, and its colour and glow look cheap. He wants the most realistic option. Research job
   0.78.1 wrote the plan (native/PLAN_DISC.md); its questions (section 10) wait for him (ROADMAP, Waiting for the owner).
+- The gas disc, the owner's answers (24 Nov 2026, after seeing native/docs/blackhole/disc078_*.png): build the recommended version of PLAN_DISC.md.
+  (1) The recommended version. (2) Keep the true thickness at 0.1 L_Edd. (3) Sagittarius A*: the model's colour, its range named in the guide. (4) The streaks
+  replace 0.72's round patches in Real and Film; the clump stays (labelled). (5) Film keeps the lab's own glow, but Film should look better than
+  disc078_film.png (labelled as the lab's own). D5 (the Illinois simulation data, M87*'s model) is not chosen.
+  The order: 0.79.0 the Real feeding disc (D1's thin-disc parts and D2: streaks, true thickness, the thinning inner edge); 0.80.0 the hot flow for
+  Sagittarius A* (D1's hot-flow parts and D3); 0.81.0 Film (D4); 0.82.0 the camera (planned with the owner first).
+- The camera after the disc (24 Nov 2026): a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every
+  side". Planned with the owner before it is built (0.82.0; ROADMAP, Black Hole Lab).
+- A benchmark job after the camera (24 Nov 2026): 0.83.0, after the camera job (0.82.0). New Black Hole scenes that move as a user does (circling, moving in and
+  out, over the top and under), and the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
 - No lower resolution while moving (17 Nov 2026): the picture stays sharp while the user drags. A lower resolution only on a card whose whole picture takes
   over 16.7 ms (fewer than 60 sharp pictures a second); Settings, Performance then says so, with the switch "Lower resolution while moving" (Auto / Off).
 - Something must happen in the lab (17 Nov 2026): moving gas comes before flying the camera. Wishes: true speeds, a bright clump circling the hole, a time

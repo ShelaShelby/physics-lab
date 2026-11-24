@@ -224,7 +224,7 @@ def precision_sky(binary, work):
     r = run_app(binary, work, "bh_precision_sky", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
     seen = set()
     for ln in r.out.splitlines():
-        if ln.startswith("PLBHSKY") and ln not in seen: print(ln); seen.add(ln)
+        if (ln.startswith("PLBHSKY") or ln.startswith("PLBHTONE")) and ln not in seen: print(ln); seen.add(ln)
     m = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYMATH ")]
     check(len(m) >= 1, "the sky shader's elliptic functions were compared")
     if m:
@@ -286,7 +286,8 @@ def precision_sky(binary, work):
               f"(rel {x['rel']}; log-average {x['cardlogavg']} against {x['logavg']}, {x['lrel']}; {x['n']} points)")
     # 0.70.0: the camera curve, the card's Real picture against the processor's (toneCompare): at most 1 % of the disc's inner pixels over 8 levels of 255
     tc = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHTONE ")]
-    check({x["case"] for x in tc} == {"near", "far", "spin"}, f"the curve's picture compared at spin 0 near and far and at 0.9 ({len(tc)})")
+    # 0.79.0: case "streaks", the feeding preset's surface, streaks and clump at 10^6 M of running against the processor's (blackhole_view.cpp toneCompare)
+    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks"}, f"the curve's picture compared at spin 0 near and far, at 0.9, and with the streaks ({len(tc)})")
     for x in tc:
         check(x["ok"] == "1" and int(x["pixels"]) > 50000 and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")
     # the card's moving picture and its picture at rest at the same resolution: not one pixel differs (the same formulas), Film at the paper's view and
@@ -376,10 +377,12 @@ def part_precision(binary, work):   # (0.76.0: the sky's half and the card's are
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
     # 0.72.0, the moving gas at spin 0 (kLensFS uDebug 3) after 10^6 M of running: every pixel of the first disc image has phi within 2e-3 rad of the geometry
     # in double and t within 1e-3 of the double lookup (DiscTable::lookupT), every 16th pixel t within 1e-3 of Dormand-Prince on Binet's equation (disc.h
-    # rayTime), the pattern's factor and the clump within 1e-3 of gas.cpp's at the card's own r, phi, t (limits fixed before looking: sky_card.h kSky*Limit)
+    # rayTime), the streaks' factor (0.79.0; 0.72-0.78: the pattern's) and the clump within 1e-3 of gas.cpp's at the card's own r, phi, t (limits fixed before looking: sky_card.h kSky*Limit)
     g0 = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHGAS0 ")]
     check(len(g0) == 2 and all(int(x["px"]) > 1000 and int(x["refpx"]) > 100 and int(x["gaspx"]) > 1000 and x["bad"] == "0" for x in g0),
           f"the moving gas at spin 0: the card's phi, t, factor and clump = the processor's within their limits ({g0})")
+    # 0.79.0: the disc's surface (Real, spin 0): the card's radius against the double lookup's, pixels over 3e-4 relative at most 0.1 % (limit fixed before looking)
+    check(all(int(x["rbad"]) * 1000 <= int(x["px"]) for x in g0), f"the disc's surface at spin 0: the card's radius = the processor's ({[(x['dr'], x['rbad'], x['px']) for x in g0]})")
 
 def disc_note(r):
     return bh(r, "bhdisc ")

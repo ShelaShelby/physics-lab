@@ -116,11 +116,21 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "because the inner rings go round faster.") +
         p("<b>What is a model.</b> No telescope has seen the face of such a disc. The bright clump is the model astronomers fit to the flares of Sagittarius A* "
           "(Broderick and Loeb 2006; GRAVITY Collaboration 2018; Wielgus et al. 2022): its place, size and brightness are the lab's choices, and it keeps its "
-          "shape as in that model, where real gas would shear it into an arc. The bright and dark patches follow a computer simulation of a magnetised disc "
-          "(Schnittman, Krolik and Hawley 2006): their size, lifetime and strength are from it, where they are is drawn at random. In the Film look both are "
-          "added by the lab: the film's own disc texture is not published and James et al. 2015 does not say how it moved.") +
+          "shape as in that model, where real gas would shear it into an arc. The streaks follow computer simulations of magnetised discs: magnetic "
+          "turbulence makes long thin filaments, tilted about 15° from the orbit and trailing (Guan et al. 2009), about 25° long (Schnittman, Krolik and Hawley 2006) "
+          "and 0.18 of that across (Guan et al.); the lab draws them as a random field with that shape (Lee and Gammie 2021), renewed every 0.3 of an orbit "
+          "(Schnittman et al.). Where each streak is, is drawn at random; their strength is set so that the ring from 6 to 10 GM/c² flickers by the 43.8 % of "
+          "Schnittman et al.'s Table 2. In the Film look both are added by the lab: the film's own disc texture is not published and James et al. 2015 does not "
+          "say how it moved.") +
+        p("<b>The disc's thickness</b> (Real, a non-spinning hole). The disc is drawn at its true thickness: its surface sits at the height h where the pressure "
+          "of its own light (near the hole) and of its gas (far out) holds it up against the hole's pull, from the vertical balance of Zhu et al. 2012 (their "
+          "appendix B, one zone in height). At a tenth of the Eddington limit it is at most about 1.5 % of its radius thick, near 20 GM/c²: the bright disc of a feeding "
+          "hole really is nearly flat, which is why it shows only as a slightly fuller inner rim. It thins to nothing at the innermost stable orbit, where the gas "
+          "stops making heat, instead of ending at a sharp line. Limits: one zone in height; the surface drawn opaque at h; the gas at the surface moving as in the "
+          "plane; no darkening towards the disc's edge; no light from inside the innermost orbit (simulations put about 4 % of the light there); a spinning hole's disc "
+          "is drawn in its plane.") +
         p("<b>How it is drawn.</b> The graphics card works out, for every pixel, where on the disc its light left and when, from the same closed forms, then the "
-          "clump and the patches there; a patch smaller than a pixel is drawn as its average over the pixel. The processor keeps the same steps in double "
+          "surface's height there, then the clump and the streaks; streaks finer than a pixel are drawn as their average over the pixel. The processor keeps the same steps in double "
           "precision: the lab checks the card against it when it first draws, and uses it where the card cannot.")});
     v.push_back({"soft", "〰️ What is soft",
         p("<b>The sky map.</b> Gaia's map has about 0.09° per map pixel. Near the Einstein ring the hole magnifies the sky many times, so the map's own blur "

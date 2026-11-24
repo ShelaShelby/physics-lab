@@ -16,7 +16,7 @@ Rules for new checks are in CLAUDE.md (Build and test). Git keeps every deleted 
 | check_shell.py:smoke | new | KEEP | ui_smoke | the app starts, each lab draws a frame that is not empty with zero validation errors, the app ends cleanly |
 | check_atom_chip.py:classicside, classicsideglow, classicslice, classicsliceglow | 150 each | KEEP | ui_atom* | GPU vs CPU: the other four Classic scenes (split from classic) |
 | check_molecule.py:cardpic, cardpiclight | 172, 86 | KEEP | ui_molecule* | GPU vs CPU: the Density cloud's pictures (split from card) |
-| check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision) |
+| check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision); 0.79.0: the streaks' factor at spin 0.99, and toneCompare's case "streaks" (the disc's surface, streaks and clump, at most 1 % of pixels over 8 levels) |
 | check_blackhole.py:precisioncard | 74 | KEEP | ui_blackhole_sky | GPU vs CPU: the card's light paths against the double-precision reference (split from precision) |
 | check_orbit_ui.py:planets | 22 (new in 0.77.0) | KEEP | ui_orbit_card | GPU vs CPU: six balls with maps (measured brightness, Earth's clouds and air) against tests/planet_picture.cpp |
 
@@ -49,7 +49,7 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_atom_chip.py:classic | 737 | KEEP | ui_atom_classic | GPU vs CPU: the Classic dots, card against processor; split into five parts, one per scene (737 s, over the 5-minute limit) |
 | check_5h.py:fit | 300 | DELETE | - | the sheet fits at three sizes: pixel layout |
 | check_molecule.py:card | 465 | KEEP | ui_molecule | GPU vs CPU: the Density cloud's start-up check against the processor (guard runs trimmed to one step); its pictures are parts cardpic and cardpiclight |
-| check_blackhole.py:precision | 300 | KEEP | ui_blackhole | GPU vs CPU: the card's light paths and bent sky against the double-precision reference; its sky and card halves are now parts sky and precisioncard |
+| check_blackhole.py:precision | 300 | KEEP | ui_blackhole | GPU vs CPU: the card's light paths and bent sky against the double-precision reference; its sky and card halves are now parts sky and precisioncard; 0.79.0: the disc's surface radius (PLBHGAS0 rbad) and the streaks' factor at spin 0 |
 | check_shell.py:vulkan2d | over 300 | DELETE | - | Vulkan coverage views with validation, 1500-frame runs (2 h once). Its glare check compares the GPU with the GPU, not with the CPU (job rule: delete). The GPU light paths against the CPU stay in check_blackhole precision |
 | check_blackhole.py:smooth | 596 (GitHub) | DELETE | - | frame times and new pictures per frame: smoothness (failed in 0.75.3, job rule: delete) |
 | check_atom_chip.py:card | 319 | KEEP | ui_atom_card | GPU vs CPU: the Slice's dots and the jump's groups against the processor (guard runs trimmed to one step per program) |

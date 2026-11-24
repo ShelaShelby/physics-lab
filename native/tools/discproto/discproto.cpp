@@ -6,6 +6,7 @@
 //   discproto sgra <out.png>   Sagittarius A*, Real: today (the thin disc one click away, 0.1 L_Edd) | the hot flow (BL06's RIAF) at the same exposure |
 //                              the hot flow at its own exposure (the factor printed)
 //   discproto film <out.png>   Film (J15's disc): today | proposed (soft edges, streaks, partly see-through; the lab's own, labelled)
+//   discproto real079 <out.png> 0.79.0: today | the app's new disc (gas.h streaks, disc.h thickness table, the clump), each at its own automatic exposure
 //   discproto count            steps per ray and samples per ray for the GPU estimate (PLAN_DISC.md section 6)
 // Every number is from a named source (PLAN_DISC.md sections 2-5) or is marked CHOICE (the prototype's own, labelled in the plan).
 //
@@ -41,6 +42,7 @@
 #include "blackhole/spin.h"
 #include "blackhole/tone.h"
 #include "render/cie1931.h"
+#include "patches078.h"
 
 using namespace blackhole;
 
@@ -233,7 +235,7 @@ template <class F> void forRows(F f) {
 void lerp5(const double* a, const double* b, double t, double* o) { for (int i = 0; i < 5; i++) o[i] = a[i] + t * (b[i] - a[i]); }
 
 // today's light at a crossing: the lab's rule (lab.cpp discLight) times 0.72's moving gas (the pattern's factor and the clump, at one moment, no travel time)
-std::array<double, 3> todayLight(const Settings& s, double r, double phi, double g, const GasPattern& gp, const Clump& cl) {
+std::array<double, 3> todayLight(const Settings& s, double r, double phi, double g, const patches078::GasPattern& gp, const Clump& cl) {
     const double fac = gp.factor(r, phi, 0) * (1 + cl.A * cl.density(r, phi, 0));
     DiscPixel q;
     discLight(s, r, g, q);
@@ -266,7 +268,7 @@ std::vector<std::array<double, 3>> joinPanels(const std::vector<std::vector<std:
 // ---------------- the three pictures ----------------
 std::atomic<long> g_steps{0}, g_samples{0}, g_rays{0};
 
-int realPicture(const std::string& out) {
+int realPicture(const std::string& out, bool app079 = false) {
     Settings s = settingsDefaults();
     applyPreset(s, kFeedingKey);
     const DiscPhys P = discPhys(s);
@@ -274,11 +276,15 @@ int realPicture(const std::string& out) {
     const View v;
     const KerrBL ch(0);
     Field fld; fld.make(78101);
-    GasPattern gp = GasPattern::reduced(); gp.a = 0; gp.rIn = rIn; gp.rOut = rOut;
+    patches078::GasPattern gp = patches078::GasPattern::reduced(); gp.a = 0; gp.rIn = rIn; gp.rOut = rOut;
     Clump cl; cl.a = 0; cl.rc = gasClumpRadius(s); cl.init();
     Panel A = newPanel(), B = newPanel();
     double hMax = 0, hrMax = 0, hrAt = 0;
-    for (double R = rIn; R < 200; R *= 1.001) { const double h = hRad(R, l, eta); if (h / R > hrMax) { hrMax = h / R; hrAt = R; } hMax = std::max(hMax, h); }
+    // 0.79.0 (app079): the app's own model on the right: the thickness table with the gas's pressure (disc.h heightTable, Zhu App. B), the streaks (gas.h
+    // StreakField) and the clump at the same moment as the left's (t = 0, no travel time)
+    const HeightTable ht = heightTable(P);
+    const auto hOf = [&](double R) { return app079 ? ht.at(R) : hRad(R, l, eta); };
+    for (double R = rIn; R < rOut; R *= 1.001) { const double h = hOf(R); if (R < 200 && h / R > hrMax) { hrMax = h / R; hrAt = R; } hMax = std::max(hMax, h); }
     const double t0 = now();
     forRows([&](int y) {
         for (int x = 0; x < kW; x++) {
@@ -324,18 +330,19 @@ int realPicture(const std::string& out) {
                             lerp5(prev, cur, hi, cur);
                             R = cur[0] * std::sin(cur[1]); z = 0;
                         }
-                        if (R >= rIn && R <= rOut && std::fabs(z) <= hRad(R, l, eta)) {
+                        if (R >= rIn && R <= rOut && std::fabs(z) <= hOf(R)) {
                             double lo = 0, hi = 1, st[5];                  // bisection between prev (outside) and cur (inside)
                             for (int it = 0; it < 40; it++) {
                                 const double m = (lo + hi) / 2;
                                 lerp5(prev, cur, m, st);
                                 const double Rm = st[0] * std::sin(st[1]), zm = st[0] * std::cos(st[1]);
-                                if (Rm >= rIn && Rm <= rOut && std::fabs(zm) <= hRad(Rm, l, eta)) hi = m; else lo = m;
+                                if (Rm >= rIn && Rm <= rOut && std::fabs(zm) <= hOf(Rm)) hi = m; else lo = m;
                             }
                             lerp5(prev, cur, hi, st);
                             const double Rh = st[0] * std::sin(st[1]);
                             const double g = discShiftKerr(Rh, p.b, 0);   // (the gas at R on its equatorial orbit: h/R < 0.07, PLAN_DISC.md section 2)
-                            const double T = P.temperature(Rh) * std::pow(fld.S(Rh, st[2]), 0.25);
+                            const double Sg = app079 ? streakField().factor(Rh, st[2], 0, 0) * (1 + cl.A * cl.density(Rh, st[2], 0)) : fld.S(Rh, st[2]);
+                            const double T = P.temperature(Rh) * std::pow(Sg, 0.25);
                             const auto L = blackBodyLinearFast(g * T);
                             for (int q = 0; q < 3; q++) cb[q] += L[q];
                             nb++;
@@ -359,6 +366,40 @@ int realPicture(const std::string& out) {
     const ToneExposure e = toneFromSamples(ys, 0);
     std::vector<std::array<double, 3>> a(A.rgb.size()), b(B.rgb.size());
     for (std::size_t i = 0; i < a.size(); i++) { a[i] = toneRGB(A.rgb[i], e); b[i] = toneRGB(B.rgb[i], e); }
+    if (app079) {                                                       // each panel at its own automatic exposure (the app's rule, tone.h), and its numbers
+        std::vector<double> yb;
+        for (std::size_t i = 0; i < B.Y.size(); i++) if (B.on[i]) yb.push_back(B.Y[i]);
+        std::sort(yb.begin(), yb.end(), std::greater<double>());
+        const ToneExposure eb = toneFromSamples(yb, 0);
+        for (std::size_t i = 0; i < b.size(); i++) b[i] = toneRGB(B.rgb[i], eb);
+        const auto stats = [&](const Panel& Pn, const std::vector<std::array<double, 3>>& im, const ToneExposure& ex, const char* name) {
+            std::vector<double> luma, lnY;
+            long n = 0, white = 0, clip = 0;
+            double sat = 0;
+            for (std::size_t i = 0; i < im.size(); i++) {
+                if (!Pn.on[i]) continue;
+                n++;
+                const double r = encS(im[i][0]), g = encS(im[i][1]), bl = encS(im[i][2]), mx = std::max({r, g, bl}), mn = std::min({r, g, bl});
+                if (r >= 254.5 / 255 && g >= 254.5 / 255 && bl >= 254.5 / 255) white++;
+                if (mx >= 254.5 / 255) clip++;
+                sat += mx > 0 ? (mx - mn) / mx : 0;
+                luma.push_back(0.2126 * r + 0.7152 * g + 0.0722 * bl);
+                if (Pn.Y[i] > 0) lnY.push_back(std::log(Pn.Y[i]));
+            }
+            std::sort(luma.begin(), luma.end());
+            double m = 0, v = 0;
+            for (double q : lnY) m += q;
+            m /= static_cast<double>(std::max<std::size_t>(lnY.size(), 1));
+            for (double q : lnY) v += (q - m) * (q - m);
+            const auto pc = [&](double f) { return luma.empty() ? 0.0 : luma[static_cast<std::size_t>(f * static_cast<double>(luma.size() - 1))]; };
+            std::printf("  %s at its own exposure (k %.4g, log-average %.4g, brightest Y %.4g): %ld disc pixels, %.2f %% full white, %.2f %% with a channel at 255; "
+                        "screen luma (sRGB 0-1) 5/50/95 %%: %.3f %.3f %.3f; spread of ln Y (scene) %.3f; mean saturation %.3f\n",
+                        name, ex.k, ex.logAvg, ex.yMax, n, 100.0 * white / std::max(n, 1L), 100.0 * clip / std::max(n, 1L), pc(0.05), pc(0.5), pc(0.95),
+                        std::sqrt(v / static_cast<double>(std::max<std::size_t>(lnY.size(), 1))), sat / std::max(n, 1L));
+        };
+        stats(A, a, e, "today (0.78.1: thin, patches, clump)");
+        stats(B, b, eb, "0.79.0 (surface, streaks, clump)");
+    }
     int W = 0;
     const auto joined = joinPanels({a, b}, W);
     writePng(out, joined, W, kH);
@@ -381,7 +422,7 @@ int sgraPicture(const std::string& out) {
     const double D = pr->distPc * parsecM();                            // m
     const View v;
     const KerrBL ch(0);
-    GasPattern gp = GasPattern::reduced(); gp.a = 0; gp.rIn = discGeom(s).rIn; gp.rOut = discGeom(s).rOut;
+    patches078::GasPattern gp = patches078::GasPattern::reduced(); gp.a = 0; gp.rIn = discGeom(s).rIn; gp.rOut = discGeom(s).rOut;
     Clump cl; cl.a = 0; cl.rc = gasClumpRadius(s); cl.init();
     const DiscGeom dg = discGeom(s);
     Panel A = newPanel();
@@ -520,7 +561,7 @@ int filmPicture(const std::string& out) {
     const View v;
     const KerrBL ch(s.spin);
     Field fld; fld.make(78102);
-    GasPattern gp = GasPattern::reduced(); gp.a = s.spin; gp.rIn = dg.rIn; gp.rOut = dg.rOut;
+    patches078::GasPattern gp = patches078::GasPattern::reduced(); gp.a = s.spin; gp.rIn = dg.rIn; gp.rOut = dg.rOut;
     Clump cl; cl.a = s.spin; cl.rc = gasClumpRadius(s); cl.init();
     const auto film = filmDiscLinear();
     // CHOICES (the lab's own, labelled in the plan): the edges fade over kFade in ln r inside J15's edges; the disc is "marginally optically thick" (J15 4.1.1):
@@ -617,9 +658,10 @@ int main(int argc, char** argv) {
     const std::string m = argc > 1 ? argv[1] : "";
     const std::string out = argc > 2 ? argv[2] : m + ".png";
     if (m == "real") return realPicture(out);
+    if (m == "real079") return realPicture(out, true);   // 0.79.0: the app's model on the right, each panel at its own exposure
     if (m == "sgra") return sgraPicture(out);
     if (m == "film") return filmPicture(out);
     if (m == "count") return counts();
-    std::fprintf(stderr, "usage: discproto real|sgra|film <out.png> | count\n");
+    std::fprintf(stderr, "usage: discproto real|real079|sgra|film <out.png> | count\n");
     return 1;
 }

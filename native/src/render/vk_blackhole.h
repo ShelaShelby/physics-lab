@@ -160,10 +160,13 @@ private:
     // the textures
     Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
     void toneUniforms(VkUniforms& u, const LensSky& L);   // 0.70.0
+    void gasTextures(VkCommandBuffer cb, const LensSky& L);   // 0.79.0: the streaks' field and the thickness table to the card when new
     void gasUniforms(VkUniforms& u, const LensSky& L);    // 0.72.0
     std::vector<Tex> exp_;
     std::vector<Tex> sum_;                 // 0.70.0: the log-average's chain (kExpSumFS); its last texel is the whole exposure
     Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_, discTt_;
+    Tex streak_, hgt_;                                     // 0.79.0: the streaks' field (sent once), the disc's thickness table
+    std::uint64_t hgtVer_ = ~std::uint64_t(0);
     bool discTtOk_ = false;                                // 0.72.0: discTt_ holds the travel times of the disc table now sent
     std::uint64_t tableVer_ = ~std::uint64_t(0), discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0), kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     int lensN_ = 0;

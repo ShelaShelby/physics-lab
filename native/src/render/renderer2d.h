@@ -260,17 +260,22 @@ public:
         bool sky = true;                    // false: nothing behind (black), the disc alone
         bool disc = false, debugDisc = false;
         bool debugGas = false;              // 0.72.0 (tests): the first crossing's phi, t and the moving gas's (factor, n) with no footprint (kLensFS uDebug 3)
-        // 0.72.0: the moving gas (blackhole/gas.h; render/shaders.h kGasPart): gas on; gasT (unused, c, 1 / norm, the clump's A or 0), gasC (r_c, its phase
-        // at the epoch, Omega_c, 1 / (2 R_S^2)), gasG (g_rr, g_phph + u_phi^2 at r_c, the spin, the pattern's rIn), gasN (the first bin, the bins, the
-        // pattern on, 0), gasBin (4 floats a bin: f, K div 65536, K mod 65536, 0), gasTau (the far time now since the epoch, M), gasCam (the camera's phi),
-        // gasE1, gasE2 (the sky frame's x and y on the view frame: spin 0), timeR (the radii whose crossings get phi and t: the spinning hole), discTime (spin
-        // 0: the table's travel times, as discU; disc.h DiscTable::tValues), gasVer (a new number with any change of them: a new picture)
-        bool gas = false;
-        float gasT[4] = {0, 0, 1, 0}, gasC[4] = {0, 0, 0, 0}, gasG[4] = {0, 0, 0, 0};
-        int gasN[4] = {0, 0, 0, 0};
-        float gasBin[4 * 72] = {};
-        float gasW = 3;
+        // 0.72.0: the moving gas (blackhole/gas.h; render/shaders.h kGasPart): gas on; gasT (unused, c, 1: the streaks on, the clump's A or 0), gasC (r_c, its
+        // phase at the epoch, Omega_c, 1 / (2 R_S^2)), gasG (g_rr, g_phph + u_phi^2 at r_c, the spin, 0); 0.79.0, the streaks (gas.h StreakField; they replace
+        // 0.72's patches): strkV (per level c00, cx, cy, cd), strkW (per level the covariance with the next), strkB (per clock bin f, K div 65536, K mod 65536, 0),
+        // streak (the field's atlas, streakW x streakH; sent once); gasTau (the far time now since the epoch, M), gasCam (the camera's phi), gasE1, gasE2 (the sky
+        // frame's x and y on the view frame: spin 0), timeR (the radii whose crossings get phi and t: the spinning hole), discTime (spin 0: the table's travel
+        // times, as discU; disc.h DiscTable::tValues), gasVer (a new number with any change of them: a new picture)
+        bool gas = false, gasNoFoot = false;   // 0.79.0: gasNoFoot (tests): the streaks read with no footprint (kLensFS uGasFoot 0)
+        float gasT[4] = {0, 0, 0, 0}, gasC[4] = {0, 0, 0, 0}, gasG[4] = {0, 0, 0, 0};
+        float strkV[32] = {}, strkW[8] = {}, strkB[68] = {};
+        const std::vector<float>* streak = nullptr;
+        int streakW = 0, streakH = 0;
         float gasTau = 0, gasCam = 0, gasE1[3] = {1, 0, 0}, gasE2[3] = {0, 1, 0}, timeR[2] = {0, 0};
+        // 0.79.0: the disc's thickness at spin 0 (blackhole/disc.h HeightTable; kLensFS uHgt): its values, (ln r_0, d ln r, count, 1: drawn), a new number for a new table
+        const std::vector<float>* hgt = nullptr;
+        float hgtR[4] = {0, 1, 0, 0};
+        std::uint64_t hgtVersion = 0;
         const std::vector<float>* discTime = nullptr;
         std::uint64_t gasVer = 0;
         const std::vector<float>* discU = nullptr;   // nT x (2 nS): rows side 0 then side 1

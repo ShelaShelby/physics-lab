@@ -1,0 +1,16 @@
+disc079_real_feeding.png (0.79.0; native/PLAN_DISC.md, REPORT 0.79.0), 964 x 300: two panels of 480 x 300, 2 x 2 rays a pixel
+Made by: build/discproto real079 disc079_real_feeding.png (native/tools/discproto/discproto.cpp; CPU, double precision, the lab's own ray paths: geodesic.h
+KerrBL and trace with every accepted state kept, rtol 1e-11). No sky. 47.9 s on 4 threads of the build machine.
+The view: the lab's starting view (lab.h): camera hovering at 50 GM/c^2, 10 degrees below the disc's plane, 45 degrees across the picture's height. Preset
+"A feeding black hole (model)": 10^8 Suns, 0.1 L_Edd, spin 0, disc from 6 to 2000 GM/c^2. One moment (t = 0), no light travel time, on both panels.
+Left, today (0.78.1): the thin disc at the plane with 0.72's patches and the clump (the patches' code of 0.78.1 kept in tools/discproto/patches078.h).
+Right, 0.79.0: the app's model: the surface at |z| = h(R) of disc.h heightTable (Zhu et al. 2012 App. B with the gas's pressure; largest h/R 0.0150 at
+20.6 GM/c^2), the streaks of gas.h StreakField (c = 1.3) and the clump.
+Exposure: EACH PANEL AT ITS OWN automatic exposure (the app's rule, tone.h, from its own disc samples). The owner's question of 24 Nov 2026 (disc078's
+right panel looked paler and flatter; it was drawn at the left panel's exposure):
+                         k        log-average  brightest Y  full white  a channel at 255  screen luma 5/50/95 %   spread of ln Y  mean saturation
+  today (0.78.1)         0.004304  41.82        474.3        0.00 %      8.02 %            0.092 0.490 0.707       1.709           0.363
+  0.79.0                 0.003758  47.89        408.8        0.00 %      4.64 %            0.098 0.509 0.702       1.472           0.358
+Read: at their own exposures the new disc is not paler (saturation 0.358 against 0.363, median luma 0.51 against 0.49). It is a little flatter in the
+scene (ln Y spread 1.47 against 1.71): the streaks are narrower than the patches (0.18 of their length across), so a pixel of the far disc covers several
+of them and their light averages out; 0.72's patches were 25 degrees by 0.3 of the radius, a pixel saw one at a time. Fewer pixels clip (4.6 % against 8.0 %).

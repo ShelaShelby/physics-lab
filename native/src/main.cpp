@@ -51,6 +51,7 @@
 #include "ui/molecule_learn.h"
 #include "ui/blackhole_learn.h"
 #include "blackhole/blackhole_view.h"
+#include "blackhole/gas.h"
 #include "ui/power.h"
 #include "app/display_scale.h"
 #include "atom/atom_tools.h"
@@ -520,6 +521,7 @@ int main(int argc, char** argv) {
     // 0.55.5: the Black Hole Lab works out its pictures on worker threads (the frame never waits for the processor); the automatic checks keep the
     // synchronous path (PL_BH_SPINWAIT, or PL_DRAWSTAT without PL_BH_ASYNC): their pictures are of the settings of the frame they are taken in
     app.blackholeView.async = !SDL_getenv("PL_BH_SPINWAIT") && (!SDL_getenv("PL_DRAWSTAT") || SDL_getenv("PL_BH_ASYNC"));
+    blackhole::streakFieldReady();                      // 0.79.0: the disc's streaks' field, made once on a worker from the start (gas.h)
     if (const char* g = SDL_getenv("PL_BH_GAST")) app.bhGasT = std::atof(g);   // 0.72.0 (tests): the moving gas's far time at the start (GM/c^3)
     if (SDL_getenv("PL_BH_GLARENOW")) app.blackholeView.glareNow = true;   // 0.62.0 (checks): the eye's glare made at once in its frame, on both APIs
     if (const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window))) if (dm->refresh_rate > 0) app.blackholeView.refreshHz = dm->refresh_rate;   // 0.56.0

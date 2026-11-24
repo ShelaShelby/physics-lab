@@ -144,7 +144,12 @@ struct Cross { float r, ph, t, g; };          // one crossing of the disc's plan
 constexpr int kOrders = 3;
 struct Pix { int order = -1; Cross c[kOrders]; int nc = 0; float w = 0; };   // order: index of the first crossing on the disc (-1: none)
 
-using Structure = GasPattern;   // SKH06 patches (blackhole/gas.h)
+// 0.79.0: the structure is the app's streaks (blackhole/gas.h StreakField; 0.56.4-0.78: SKH06's patches, removed): the same calls as before
+struct Structure {
+    double a = 0, rIn = 6, rOut = 20, contrast = kStreakC, norm = 1;   // (norm: the streaks' mean is 1 by construction)
+    void normalise(int) {}
+    double factor(double r, double ph, double t) const { return streakField().factor(r, ph, t, a, 0, 0, contrast); }
+};
 
 static void writeRaw(const std::string& path, const std::vector<float>& v) {
     FILE* fp = std::fopen(path.c_str(), "wb");
@@ -278,7 +283,7 @@ static int runRender(const std::string& dir) {
     // the structure model: three looks at the same view
     Structure st;
     st.a = a; st.rIn = rIn; st.rOut = rOut;
-    st.contrast = 0.65;   // chosen so that the face-on 6-10 M annulus varies by about SKH06 Table 2's 43.8 % rms (printed below)
+    st.contrast = kStreakC;   // (gas.h: the face-on 6-10 M annulus varies by about SKH06 Table 2's 43.8 % rms, printed below)
     if (const char* e = std::getenv("PL_MG_CONTRAST")) st.contrast = std::atof(e);   // for trying other strengths by hand
     st.normalise(20000);
     std::fprintf(meta, "structNorm %.4f\n", st.norm);

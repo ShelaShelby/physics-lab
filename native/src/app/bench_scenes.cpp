@@ -98,6 +98,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), "
             "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "
             "round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.");
+        add(true, "blackhole.disc_streaks", BenchKind::BlackHoleDiscStreaks, -1, "Black Hole Lab, the disc's surface and streaks at the closest distance, turning",
+            "The feeding preset (spin 0), Real look: the disc at its true thickness with its streaks and the clump moving at the fastest rate (10^7), the camera at "
+            "2.2 GM/c\xC2\xB2 (the closest the control allows) with a 360\xC2\xB0 view (the widest), 10\xC2\xB0 below the disc, turning slowly round the axis. "
+            "A new picture every frame on the graphics card.");
         add(true, "ui.guide_scroll", BenchKind::UiGuideScroll, -1, "Pages, the longest Learn guide scrolled",
             "The longest Learn guide (the Orbit Lab's timeline: 7,157 px of scrolling at 1280 x 800) open in the reading view over its lab, scrolled from top to bottom "
             "at a steady rate in the counted time (and back up in the warm-up).");
@@ -168,7 +172,9 @@ double benchPlannedS() {
 // 0.75.0: 35 scenes (orbit.flyby, CLAUDE.md: a new drawing adds its scene): 304.3 s planned; the limit is 5.1 minutes now (nothing shortened, REPORT 0.75.0)
 // 0.77.0: 36 scenes (orbit.earth_clouds, CLAUDE.md: a new drawing adds its scene): 310.8 s planned; the limit is 5.2 minutes now (nothing shortened, REPORT 0.77.0)
 // 0.78.0: 37 scenes (orbit.comet_tails, CLAUDE.md: a new drawing adds its scene): 317.3 s planned; the limit is 5.3 minutes now (nothing shortened, REPORT 0.78.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.3 * 60,
+// 0.79.0: 38 scenes (blackhole.disc_streaks, CLAUDE.md: a new drawing adds its scene) and 36 waits (response.blackhole_streaks: a new wait adds its line):
+// 328.6 s planned; the limit is 5.5 minutes now (nothing shortened, REPORT 0.79.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.5 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");

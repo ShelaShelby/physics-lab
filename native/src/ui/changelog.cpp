@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.79.0", "The feeding black hole's disc: streaks and its true thickness",
+     "In the Black Hole Lab the round bright and dark patches of the moving gas are gone. In their place the disc is streaked, as computer simulations of "
+     "magnetised discs show: long thin filaments tilted 15\xC2\xB0 from the orbit and trailing, carried round at each ring's own speed so they wind into spirals, "
+     "and renewed every 0.3 of an orbit. Their shape and size come from the simulations; where each streak is, and how strong, is a labelled model. In the Real "
+     "look the disc of a non-spinning hole now has its true thickness: at a tenth of the Eddington limit at most about 1.5 % of its radius, so it shows as a "
+     "slightly fuller inner rim, and it thins to nothing at the innermost stable orbit instead of stopping at a sharp line. The graphics card draws both every "
+     "frame; the processor keeps the same steps as the reference the tests check it against. The guide says what is real and what is a model, and its limits."},
     {"0.78.1", "Research: a realistic gas disc for the Black Hole Lab; no change to the app",
      "Research for a more realistic gas disc in the Black Hole Lab (PLAN_DISC.md); no change to what the app does. What real gas round a black hole is like, "
      "from saved papers: a feeding hole's bright disc is truly almost flat (under 2 % of its radius thick at the lab's feeding rate), its gas is streaked into "

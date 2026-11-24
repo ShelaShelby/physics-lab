@@ -2345,158 +2345,28 @@ static void testGas() {
               " pixels see the disc directly, " + f(orders[1] + orders[2]) + " through a later crossing): one orbit later it differs by " + f(dOrbit / peak) +
               " of its peak, half an orbit later by " + f(dHalf / peak));
     }
-    // 5. the pattern (SKH06): (a) a mark that does not fade comes back to its phi after one orbit T = 2 pi (r^(3/2) + a) (BPT (2.16)) and is half a turn on
-    //    after half; (b) the brightness factor averages 1 weighted by the disc's light (r F(r) dr dphi: the disc's total light unchanged), over points and times
-    //    not used for the norm, within 3 standard errors of the sample; (c) the face-on 6-10 M ring's light varies by SKH06 Table 2's rms within the plan's 20 %
-    {
-        const double a = 0.9, r = 8, T = 2 * kPi * (std::pow(r, 1.5) + a);
-        GasPatch p;
-        p.eta = std::log(r); p.phi = 1.0; p.tBirth = 100; p.life = 1;
-        const double back = GasPattern::patch(p, r, 1.0, 100 + T, a, false), half = GasPattern::patch(p, r, 1.0 + kPi, 100 + T / 2, a, false);
-        const double lateFade = GasPattern::patch(p, r, 1.0, 100 + T, a, true);
-        check(std::fabs(back - 1) < 1e-12 && std::fabs(half - 1) < 1e-12 && lateFade < 1e-30, "pattern: an unfading mark at 8 M (spin 0.9) is back at its phi after T_orb (" +
-              f(back) + ") and half a turn on after half (" + f(half) + "); with the fading of SKH06 (36) it is gone after " + f(T) + " M (" + f(lateFade) + ")");
-        GasPattern pat;
-        pat.a = 0; pat.rIn = 6; pat.rOut = 25;
-        pat.normalise();
-        // the test's own samples: as normalise() (r stratified, weighted by r F(r), times 10 lifetimes of the outermost bins apart: independent) at other
-        // places and times; the standard error of the difference is that of both means
-        const double gap = 10 * GasPattern::kLife * gasPeriod(1.3 * pat.rOut * std::exp(GasPattern::kWidthEta), 0);
-        double sw = 0, sx = 0, sx2 = 0, sw2 = 0;
-        const int n = 20000;
-        for (int i = 0; i < n; i++) {
-            const std::uint32_t h = gasHash(13u, 17u, static_cast<std::uint32_t>(i));
-            const double rr = pat.rIn + (pat.rOut - pat.rIn) * gasU01(h * 2891336453u + 7u), w = rr * discFlux(rr, 0);
-            const double x = pat.factor(rr, 2 * kPi * gasU01(h), 2e8 + gap * (i + gasU01(h * 747796405u + 1u)));
-            sw += w; sx += w * x; sx2 += w * x * x; sw2 += w * w;
-        }
-        const double mean = sx / sw, var = sx2 / sw - mean * mean, se = std::sqrt(var * sw2) / sw, se2 = std::sqrt(se * se + pat.normErr * pat.normErr);
-        check(std::fabs(mean - 1) < 3 * se2, "pattern: the brightness factor weighted by the disc's light averages " + f(mean) + " at 20000 independent places and times (1 within 3 standard errors of it and the norm, " +
-              f(3 * se2) + "; norm " + f(pat.norm) + ")");
-        const std::string skh = readExtract("blackhole/arxiv/astro-ph_0606615_schnittman_krolik_hawley2006.extract.txt");
-        const std::vector<double> row = numbersAfter(skh, "   6-10 ", 1);
-        double rms = 0;
-        {
-            std::vector<double> Ls;
-            for (int i = 0; i < 400; i++) {
-                const double t = 2000 + i * 8.0;
-                double s = 0;
-                for (double rr = 6.1; rr < 10; rr += 0.2)
-                    for (int j = 0; j < 90; j++) s += discFlux(rr, 0) * rr * pat.factor(rr, 2 * kPi * j / 90, t);
-                Ls.push_back(s);
-            }
-            double m = 0, v = 0;
-            for (double x : Ls) m += x;
-            m /= static_cast<double>(Ls.size());
-            for (double x : Ls) v += (x - m) * (x - m);
-            rms = std::sqrt(v / static_cast<double>(Ls.size())) / m;
-        }
-        check(row.size() == 1 && row[0] == 43.8 && std::fabs(rms / (row[0] / 100) - 1) < 0.2, "pattern: the face-on 6-10 M ring (spin 0, contrast " + f(pat.contrast) +
-              ") varies by " + f(100 * rms) + " % rms over 3200 M against SKH06 Table 2's " + (row.empty() ? std::string("?") : f(row[0])) + " % (thermal, > 10 Hz; the plan's 20 %)");
-    }
+    // 5. (0.72-0.78: SKH06's patches; removed with them in 0.79.0: the streaks, testStreaks)
 }
 
-// 0.72.0: the moving gas as the lab draws it (written before the card's code; limits fixed before looking).
-//  1. the cells the card looks at (gas.cpp sumAt's window) hold every patch that reaches a point: the window's sum = the sum over every cell of every slot, to
-//     the bit, for the full pattern and the one the lab draws, at 4000 points over 1.2 M to 2000 M and spins 0 to 0.998; the most cells per bin and slot
-//  2. the norms: the full pattern's kGasNorm and the lab's kGasNormCard against normalise(40000) here (spin 0.6, 6-25 M: a disc not used for them) within
-//     3 standard errors; the lab's pattern averages 1 weighted by the disc's light at 20000 independent places and times (3 standard errors); its face-on
-//     6-10 M ring varies by SKH06 Table 2's rms within the plan's 20 %
-//  3. the time for the card (gas.h gasCard): after 10^6 M (and 10^9 M) of running, each bin's E / T_life = K + f and the card's tau (both as the card's
-//     floats) give back T / T_life, and the clump's phase at the epoch plus Omega tau = phi0 + Omega T (mod 2 pi), within 1e-5 (of a lifetime; rad): tau below
-//     1024 M is rounded to 6.1e-5 M as a float, over the shortest lifetime here (8.4 M) 7e-6, times Omega (0.2 at most at 8 M) 1.2e-5 rad, and the phase at the epoch as a float (2 pi x 6e-8): 2e-5 rad; the limits does not
-//     grow with the running time (the test's first limit, 1e-6, was below this float rounding: corrected with this derivation, REPORT 0.72.0)
+// 0.72.0: the moving gas as the lab draws it (written before the card's code; limits fixed before looking). 0.79.0: parts 1-2 (the patches' cells and norms) and
+// part 3's bins went with the patches (CLAUDE.md: a removed feature's tests go too).
+//  3. the clump's phase for the card (gas.h gasCard) after 10^6 M (and 10^9 M) of running: the phase at the epoch plus Omega tau = phi0 + Omega T (mod 2 pi) within
+//     2e-5 rad (tau below the epoch is a float: at most 6.1e-5 M (1024 M until 0.78; 64 M now: 3.8e-6 M), times Omega, with the phase at the epoch as a
+//     float, 2 pi x 6e-8)
 //  4. the light's travel time at spin 0 (disc.h rayTime, DiscTable::lookupT): against the radial quadrature t = Int dr / ((1 - 2/r) (1 - b^2 (1 - 2/r) / r^2)^(1/2))
 //     on the inward part of three rays (1e-8 relative); the table's lookup against rayTime at 200 points on the disc's first crossings (1e-3 relative)
 static void testGasCard() {
-    {   int worstCells = 0;
-        double worst = 0;
-        long n = 0;
-        for (int v = 0; v < 2; v++)
-            for (double a : {0.0, 0.5, 0.9, 0.998}) {
-                GasPattern p = v == 0 ? GasPattern() : GasPattern::reduced();
-                p.a = a; p.rIn = iscoPageThorne(a); p.rOut = 2000;
-                for (int i = 0; i < 500; i++) {
-                    const double fr = i * 0.618034 - std::floor(i * 0.618034), r = p.rIn * std::exp(std::log(p.rOut / p.rIn) * fr * fr);
-                    const double phi = 2 * kPi * (i * 0.7548777 - std::floor(i * 0.7548777)), t = 1e5 * (i * 0.5698403 - std::floor(i * 0.5698403));
-                    int looked = 0, all = 0;
-                    const double s = p.sumAt(r, phi, t, 0, 0, &looked), b = p.sumAt(r, phi, t, 0, 0, &all, true);
-                    worst = std::max(worst, std::fabs(s - b));
-                    n++;
-                }
-                const double dp = 2 * kPi / p.cells, w = p.cutPhi * GasPattern::kWidthPhi / 2.3548;
-                for (double eta = std::log(p.rIn); eta < std::log(p.rOut); eta += 0.01) {
-                    const double r = std::exp(eta);
-                    const int ie = static_cast<int>(std::floor(eta / 0.13));
-                    for (int je = ie - 2; je <= ie + 2; je++) {
-                        if (je < p.binLo() || je > p.binHi()) continue;
-                        const double del = std::fabs(p.binLife(je) * (gasOmega(r, a) - p.binOmega(je)));
-                        worstCells = std::max(worstCells, static_cast<int>(std::ceil((del + 2 * w) / dp)) + 1);
-                    }
-                }
-            }
-        check(worst == 0, "gas: the cells looked at hold every patch that reaches a point (" + f(static_cast<double>(n)) + " points, the window's sum - every cell's: " + f(worst) +
-              "); at most " + f(worstCells) + " cells per bin and slot");
-    }
-    {   GasPattern full;
-        full.a = 0.6; full.rIn = iscoPageThorne(0.6); full.rOut = 25;
-        GasPattern lab = GasPattern::reduced();
-        lab.a = full.a; lab.rIn = full.rIn; lab.rOut = full.rOut;
-        GasPattern fn = full, ln = lab;
-        fn.normalise(40000); ln.normalise(40000);
-        check(std::fabs(fn.norm - kGasNorm) < 3 * fn.normErr * fn.norm && std::fabs(ln.norm - kGasNormCard) < 3 * ln.normErr * ln.norm,
-              "gas: the norms kGasNorm " + f(kGasNorm) + " and kGasNormCard " + f(kGasNormCard) + " = normalise(40000) at spin 0.6, 6-25 M (" + f(fn.norm) + " +- " + f(fn.normErr * fn.norm) +
-              ", " + f(ln.norm) + " +- " + f(ln.normErr * ln.norm) + ") within 3 standard errors");
-        const double gap = 10 * GasPattern::kLife * gasPeriod(1.3 * lab.rOut * std::exp(GasPattern::kWidthEta), lab.a);
-        double sw = 0, sx = 0, sx2 = 0, sw2 = 0;
-        for (int i = 0; i < 20000; i++) {
-            const std::uint32_t h = gasHash(19u, 23u, static_cast<std::uint32_t>(i));
-            const double rr = lab.rIn + (lab.rOut - lab.rIn) * gasU01(h * 2891336453u + 7u), w = rr * discFlux(rr, lab.a);
-            const double x = lab.factor(rr, 2 * kPi * gasU01(h), 3e8 + gap * (i + gasU01(h * 747796405u + 1u)));
-            sw += w; sx += w * x; sx2 += w * x * x; sw2 += w * w;
-        }
-        const double mean = sx / sw, se = std::sqrt((sx2 / sw - mean * mean) * sw2) / sw, se2 = std::sqrt(se * se + std::pow(0.01124 / kGasNormCard, 2));
-        check(std::fabs(mean - 1) < 3 * se2, "gas: the lab's pattern averages " + f(mean) + " weighted by the disc's light (1 within 3 standard errors, " + f(3 * se2) + ")");
-        GasPattern ring = GasPattern::reduced();
-        ring.a = 0; ring.rIn = 6; ring.rOut = 25;
-        std::vector<double> Ls;
-        for (int i = 0; i < 400; i++) {
-            double s = 0;
-            for (double rr = 6.1; rr < 10; rr += 0.2)
-                for (int j = 0; j < 90; j++) s += discFlux(rr, 0) * rr * ring.factor(rr, 2 * kPi * j / 90, 2000 + i * 8.0);
-            Ls.push_back(s);
-        }
-        double m = 0, v = 0;
-        for (double x : Ls) m += x;
-        m /= static_cast<double>(Ls.size());
-        for (double x : Ls) v += (x - m) * (x - m);
-        const double rms = std::sqrt(v / static_cast<double>(Ls.size())) / m;
-        const std::vector<double> row = numbersAfter(readExtract("blackhole/arxiv/astro-ph_0606615_schnittman_krolik_hawley2006.extract.txt"), "   6-10 ", 1);
-        check(row.size() == 1 && std::fabs(rms / (row[0] / 100) - 1) < 0.2, "gas: the lab's pattern: the face-on 6-10 M ring varies by " + f(100 * rms) + " % rms against SKH06 Table 2's " +
-              (row.empty() ? std::string("?") : f(row[0])) + " % (the plan's 20 %)");
-    }
-    {   double worstT = 0, worstPhi = 0;
+    // (0.79.0: parts 1-2, the patches' cells and norms, went with the patches; part 3 keeps the clump's phase after 10^6 and 10^9 M of running, within 2e-5 rad)
+    {   double worstPhi = 0;
         for (double T : {1e6 + 345.6, 1e9 + 77.7}) {
-            GasPattern p = GasPattern::reduced();
-            p.a = 0.9; p.rIn = iscoPageThorne(0.9); p.rOut = 2000;
             Clump c;
             c.a = 0.9; c.rc = 8; c.phi0 = 0.3;
             c.init();
             GasCard k;
-            gasCard(&p, &c, T, k);
-            for (int i = 0; i < k.N[1]; i++) {
-                const double life = p.binLife(k.N[0] + i);
-                const std::uint32_t K = static_cast<std::uint32_t>(k.bin[4 * i + 1]) * 65536u + static_cast<std::uint32_t>(k.bin[4 * i + 2]);
-                const double kd = std::floor(T / life);
-                const std::uint32_t want = static_cast<std::uint32_t>(static_cast<std::int64_t>(std::floor(k.epoch / life)));
-                const double back = static_cast<double>(k.bin[4 * i]) + static_cast<double>(k.tau) / life;   // T / T_life - K, as the card has it
-                worstT = std::max(worstT, K == want ? std::fabs(back - (T / life - std::floor(k.epoch / life))) : 1.0);
-                (void)kd;
-            }
+            gasCard(true, 0.9, &c, T, k);
             worstPhi = std::max(worstPhi, std::fabs(std::remainder(static_cast<double>(k.C[1]) + c.omega * k.tau - (c.phi0 + c.omega * T), 2 * kPi)));
         }
-        check(worstT < 1e-5 && worstPhi < 2e-5, "gas: the card's time after 10^6 and 10^9 M of running: T / T_life back to " + f(worstT) + " of a lifetime (limit 1e-5), the clump's phase to " + f(worstPhi) +
-              " rad (limit 2e-5: tau's float rounding times Omega, with the epoch's phase's own)");
+        check(worstPhi < 2e-5, "gas: the card's clump phase after 10^6 and 10^9 M of running to " + f(worstPhi) + " rad (limit 2e-5: tau's float rounding times Omega, with the epoch's phase's own)");
     }
     {   double worstQ = 0, worstL = 0;
         for (double psi : {2.0, 2.4, 2.8}) {
@@ -2960,7 +2830,319 @@ static void testTone() {
     check(worst < 1e-6, "chromaticity kept through the curve (" + f(worst) + ")");
 }
 
+
+// 0.79.0 (written before the code; limits fixed before looking; PLAN_DISC.md section 7, rows "thickness", "streak field", "surface hit"). On 0.78.1 these do
+// not build: disc.h had no thickness or surface, gas.h no streak field.
+// THE THICKNESS (disc.h DiscPhys::height, Zhu et al. 2012 App. B):
+//  1. far out, radiation pressure: h_rad -> (3/4) (l / eta) (kappa / kappa_es) M (the algebra of disc.h's comment: F -> 3 Mdot / (8 pi r^3), Q -> 1 / r^3),
+//     at r = 10^8 M within 1e-3 (PT's f = 1 - (r_ms / r)^(1/2) + ... : 2.4e-4 there)
+//  2. h = 0 at r_ms (PT's zero torque: F = 0), and h -> 0 as r -> r_ms
+//  3. h_rad / M is the same at 10^6 and 10^9 Suns at fixed r / M (1e-12): it scales with M
+//  4. h / R near 20 M against Zhu Fig. 3's L / L_Edd = 0.1 curve, read from the plot: about 0.02 (TLUSTY's density-weighted mean |z| of the full vertical
+//     structure, a different measure from the one-zone half thickness; their L_Edd's opacity is not stated): within a factor 1.5 either way
+//  5. the solution satisfies Zhu's (B1a)-(B1f) (each equation's two sides within 1e-9) at 50, 800 and 2000 M (10^8 Suns, 0.1 L_Edd); far out, where the
+//     gas's pressure wins, it meets the closed form of (B1) with P_rad left out of the balance, h = [k T-free form] (below), within 1 % at 10^6 M
+static void testDiscHeight() {
+    DiscPhys p;                                         // 10^8 Suns, 0.1 L_Edd, spin 0 (the feeding preset)
+    const double eta = discEfficiency(0), l = p.lEdd, rms = discInner(0);
+    {
+        const double want = 0.75 * (l / eta) * (kZhuKappa / kKappaEs), got = p.heightRad(1e8);
+        check(std::fabs(got / want - 1) < 1e-3, "thickness: far out h_rad = " + f(got) + " M against (3/4)(l/eta)(kappa/kappa_es) M = " + f(want) + " (1e-3)");
+    }
+    check(p.height(rms) == 0 && p.heightRad(rms) == 0 && p.height(rms * (1 + 1e-6)) < 1e-3 && p.height(rms * 1.01) > 0,
+          "thickness: h = 0 at r_ms (" + f(rms) + " M), " + f(p.height(rms * (1 + 1e-6))) + " M just outside, " + f(p.height(rms * 1.01)) + " M at 1.01 r_ms");
+    {
+        DiscPhys a = p, b = p;
+        a.massSun = 1e6; b.massSun = 1e9;
+        double worst = 0;
+        for (double r : {7.0, 20.0, 300.0}) worst = std::max(worst, std::fabs(a.heightRad(r) / b.heightRad(r) - 1));
+        check(worst < 1e-12, "thickness: h_rad in units of M the same at 10^6 and 10^9 Suns at 7, 20, 300 M (" + f(worst) + ")");
+    }
+    {
+        double hr = 0, at = 0, hf = 0;
+        for (double r = rms * 1.001; r < 60; r *= 1.001) { const double q = p.heightRad(r) / r; if (q > hr) { hr = q; at = r; } hf = std::max(hf, p.height(r) / r); }
+        check(hr > 0.02 / 1.5 && hr < 0.02 * 1.5, "thickness: largest h/R " + f(hr) + " at " + f(at) + " M (with the gas's pressure " + f(hf) + ") against Zhu Fig. 3's about 0.02 near 20 M at 0.1 L_Edd (a plot reading; factor 1.5)");
+    }
+    {
+        // (B1) by hand in SI: Q, Omega_k, R_F, F from the module's flux; then P_tot, rho, Sigma, T, P_rad, P_gas from h, each equation checked
+        const double c = 299792458.0, kB = 1.380649e-23, sig = stefanBoltzmann(), aR = 4 * sig / c, mH = 1.00782503223 * 1.66053906892e-27;
+        const double rg = gravRadiusM(p.massSun);
+        double worst = 0, share800 = 0, shareFar = 0, closedFar = 0, hFar = 0;
+        for (double r : {50.0, 800.0, 2000.0, 1e6}) {
+            double share = 0;
+            const double h = p.height(r, &share) * rg, F = p.flux(r), Q = (c / rg) * (c / rg) * zhuQ(r), Om = c / rg / std::pow(r, 1.5), RF = (1 - 2 / r) / (1 - 3 / r);
+            const double W = 4 * F / (3 * Om * RF);                     // (B1d)
+            const double Pt = W / (2 * h * kDiscAlpha);                 // (B1c)
+            const double rho = Pt / (Q * h * h);                        // (B1a)
+            const double Sig = 2 * h * rho;                             // (B1f)
+            const double Prad = F * kZhuKappa * Sig / (4 * c);          // (B1b), right side
+            const double T = std::pow(3 * Prad / aR, 0.25);             // (B1b), left side
+            const double Pg = rho * kB * T / (kZhuMu * mH);
+            if (r < 1e5) worst = std::max(worst, std::fabs((Pg + Prad) / Pt - 1));   // (B1e)
+            if (r == 800) share800 = share;
+            if (r == 1e6) {
+                shareFar = share; hFar = h;
+                // P_tot = P_gas: Q h^2 = (k / mu m_H) T, T^4 = 3 F kappa A / (2 a c Q h^2), A = 2 F / (3 alpha Omega_k R_F): h^(5/2) = (k / mu m_H) (3 F kappa A / (2 a c))^(1/4) / Q^(5/4)
+                const double A = 2 * F / (3 * kDiscAlpha * Om * RF);
+                closedFar = std::pow(kB / (kZhuMu * mH) * std::pow(3 * F * kZhuKappa * A / (2 * aR * c), 0.25) / std::pow(Q, 1.25), 0.4);
+            }
+        }
+        check(worst < 1e-9 && shareFar > 0.99 && std::fabs(hFar / closedFar - 1) < 0.01,
+              "thickness: Zhu (B1a)-(B1f) hold at 50, 800, 2000 M (" + f(worst) + "); P_gas / P_tot " + f(share800) + " at 800 M; at 10^6 M (" + f(shareFar) +
+              ") h against the gas-pressure closed form: " + f(hFar / closedFar));
+        double rHalf = 0;
+        for (double r = 50; r < 1e5; r *= 1.01) { double sh = 0; p.height(r, &sh); if (sh >= 0.5) { rHalf = r; break; } }
+        std::printf("  thickness (10^8 Suns, 0.1 L_Edd): h at 10, 20, 50, 200, 2000 M: %.4f %.4f %.4f %.4f %.4f M (radiation only: %.4f %.4f %.4f %.4f %.4f); the gas's pressure half the total from %.0f M\n",
+                    p.height(10), p.height(20), p.height(50), p.height(200), p.height(2000), p.heightRad(10), p.heightRad(20), p.heightRad(50), p.heightRad(200), p.heightRad(2000), rHalf);
+    }
+}
+
+// THE STREAKS (gas.h StreakField):
+//  1. the field at level 0: mean 0 and variance 1 over its texels (1e-3: the values are normal quantiles of their ranks)
+//  2. the mean of S = exp(c f - c^2 s^2 / 2) over 2^20 points spread evenly (another hash) at random times up to 10^9 M: 1 within 3 standard errors of the
+//     sample (level 0; the first limit, 5e-3, was below the sample's own error, 2e-3 at c = 1.3: corrected before it ever ran green, REPORT.md); and weighted by the disc's
+//     light (r F(r)) at 20000 independent places and times (each 10 lifetimes apart: a new copy) on 6-25 M: 1 within 3 standard errors
+//  3. the measured correlation of level 0 (its autocovariance by FFT): the distance where it falls to 1/2 along u1 and u2 against lambda1 s_h and lambda2 s_h
+//     (s_h: s K_1(s) = 1/2, LG21 (7) with nu = 1) within 5 %; the direction of the longest half-distance against u1 (15 degrees from the orbit, trailing) within 1
+//     degree
+//  4. SKH06's radial size (section 4's open point): the full width at half correlation along ln R, printed against SKH06's dR/R = 0.3
+//  5. the face-on 6-10 M ring's light varies by SKH06 Table 2's 43.8 % rms within the plan's 20 % (as 0.72's patches)
+//  6. no jump where a copy is reborn (its weight is 0 there): f just before and just after a rebirth within 1e-6 at 1000 places
+static void fftLine(std::vector<double>& re, std::vector<double>& im, int n, int stride, int off, bool inv) {   // radix 2, the test's own
+    std::vector<double> a(static_cast<std::size_t>(n)), b(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; i++) { a[static_cast<std::size_t>(i)] = re[static_cast<std::size_t>(off + i * stride)]; b[static_cast<std::size_t>(i)] = im[static_cast<std::size_t>(off + i * stride)]; }
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) { std::swap(a[static_cast<std::size_t>(i)], a[static_cast<std::size_t>(j)]); std::swap(b[static_cast<std::size_t>(i)], b[static_cast<std::size_t>(j)]); }
+    }
+    for (int len = 2; len <= n; len <<= 1)
+        for (int i = 0; i < n; i += len)
+            for (int k = 0; k < len / 2; k++) {
+                const double ang = 2 * kPi * k / len * (inv ? 1 : -1), wr = std::cos(ang), wi = std::sin(ang);
+                const std::size_t p = static_cast<std::size_t>(i + k), q = p + static_cast<std::size_t>(len / 2);
+                const double vr = a[q] * wr - b[q] * wi, vi = a[q] * wi + b[q] * wr;
+                a[q] = a[p] - vr; b[q] = b[p] - vi; a[p] += vr; b[p] += vi;
+            }
+    for (int i = 0; i < n; i++) { re[static_cast<std::size_t>(off + i * stride)] = a[static_cast<std::size_t>(i)]; im[static_cast<std::size_t>(off + i * stride)] = b[static_cast<std::size_t>(i)]; }
+}
+static void testStreaks() {
+    const StreakField& F = streakField();
+    const int NX = StreakField::kNx, NY = StreakField::kNy;
+    {
+        double m = 0, v = 0;
+        for (float x : F.lev[0]) { m += x; v += static_cast<double>(x) * x; }
+        m /= static_cast<double>(F.lev[0].size()); v = v / static_cast<double>(F.lev[0].size()) - m * m;
+        check(std::fabs(m) < 1e-3 && std::fabs(v - 1) < 1e-3, "streaks: the field's texels have mean " + f(m) + " and variance " + f(v) + " (0 and 1 within 1e-3; made in " + f(F.makeMs) + " ms)");
+    }
+    {
+        double sum = 0, sum2 = 0;
+        const int n = 1 << 20;
+        for (int i = 0; i < n; i++) {
+            const std::uint32_t h = gasHash(4242u, 77u, static_cast<std::uint32_t>(i));
+            const double R = std::exp(StreakField::kLnSpan * gasU01(h)), phi = 2 * kPi * gasU01(h * 747796405u + 1u), t = 1e9 * gasU01(h * 2891336453u + 7u);
+            const double x = F.factor(R, phi, t, 0);
+            sum += x; sum2 += x * x;
+        }
+        std::string lv;
+        for (int L : {2, 4, 6}) {                                          // (printed: the mean at coarser levels, the footprint's)
+            double s2 = 0;
+            for (int i = 0; i < 1 << 18; i++) {
+                const std::uint32_t h = gasHash(4243u, static_cast<std::uint32_t>(L), static_cast<std::uint32_t>(i));
+                const double R = std::exp(StreakField::kLnSpan * gasU01(h)), phi = 2 * kPi * gasU01(h * 747796405u + 1u), t = 1e9 * gasU01(h * 2891336453u + 7u);
+                s2 += F.factor(R, phi, t, 0, std::ldexp(StreakField::kLnSpan / NX, L), 0);
+            }
+            lv += " " + f(s2 / (1 << 18));
+        }
+        const double mean = sum / n, se = std::sqrt((sum2 / n - mean * mean) / n);
+        check(std::fabs(mean - 1) < 3 * se, "streaks: the mean of S over 2^20 places and times is " + f(mean) + " (1 within 3 standard errors, " + f(3 * se) + "); at levels 2, 4, 6:" + lv);
+        double sw = 0, sx = 0, sx2 = 0, sw2 = 0;
+        for (int i = 0; i < 20000; i++) {
+            const std::uint32_t h = gasHash(19u, 23u, static_cast<std::uint32_t>(i));
+            const double rr = 6 + 19 * gasU01(h * 2891336453u + 7u), w = rr * discFlux(rr, 0), life = StreakField::kLife * gasPeriod(rr, 0);
+            const double x = F.factor(rr, 2 * kPi * gasU01(h), 10 * life * (i + 0.37), 0);
+            sw += w; sx += w * x; sx2 += w * x * x; sw2 += w * w;
+        }
+        const double m = sx / sw, sew = std::sqrt((sx2 / sw - m * m) * sw2) / sw;
+        check(std::fabs(m - 1) < 3 * sew, "streaks: S weighted by the disc's light at 20000 independent places and times on 6-25 M averages " + f(m) + " (1 within 3 standard errors, " + f(3 * sew) + ")");
+    }
+    {
+        std::vector<double> re(static_cast<std::size_t>(NX) * NY), im(re.size(), 0.0);
+        for (std::size_t i = 0; i < re.size(); i++) re[i] = F.lev[0][i];
+        for (int y = 0; y < NY; y++) fftLine(re, im, NX, 1, y * NX, false);
+        for (int x = 0; x < NX; x++) fftLine(re, im, NY, NX, x, false);
+        for (std::size_t i = 0; i < re.size(); i++) { re[i] = re[i] * re[i] + im[i] * im[i]; im[i] = 0; }
+        for (int x = 0; x < NX; x++) fftLine(re, im, NY, NX, x, true);
+        for (int y = 0; y < NY; y++) fftLine(re, im, NX, 1, y * NX, true);
+        const double c0 = re[0];
+        const double dx = StreakField::kLnSpan / NX, dy = 2 * kPi / NY;
+        const auto C = [&](double X, double Y) {                           // the covariance at (ln R, phi) offsets, bilinear on the grid
+            const double gx = X / dx, gy = Y / dy, fx = std::floor(gx), fy = std::floor(gy), ax = gx - fx, ay = gy - fy;
+            const auto at = [&](int i, int j) { i = ((i % NX) + NX) % NX; j = ((j % NY) + NY) % NY; return re[static_cast<std::size_t>(j) * NX + i] / c0; };
+            const int i = static_cast<int>(fx), j = static_cast<int>(fy);
+            return (1 - ay) * ((1 - ax) * at(i, j) + ax * at(i + 1, j)) + ay * ((1 - ax) * at(i, j + 1) + ax * at(i + 1, j + 1));
+        };
+        const auto halfAlong = [&](double ang) {                           // the distance along (cos ang, sin ang) in (ln R, phi) where C falls to 1/2
+            double lo = 0, hi = 2;
+            for (int it = 0; it < 60; it++) { const double m = 0.5 * (lo + hi); if (C(m * std::cos(ang), m * std::sin(ang)) > 0.5) lo = m; else hi = m; }
+            return lo;
+        };
+        double sh = 1;                                                     // s K_1(s) = 1/2
+        { double lo = 0.1, hi = 5; for (int it = 0; it < 80; it++) { const double m = 0.5 * (lo + hi); if (m * std::cyl_bessel_k(1.0, m) > 0.5) lo = m; else hi = m; } sh = lo; }
+        const double a1 = std::atan2(std::cos(StreakField::kTilt), -std::sin(StreakField::kTilt)), a2 = a1 - kPi / 2;   // u1, u2 in (ln R, phi)
+        const double l1 = halfAlong(a1), l2 = halfAlong(a2), w1 = StreakField::kLam1 * sh, w2 = StreakField::kLam1 * StreakField::kRatio * sh;
+        double best = 0, bestAng = 0;
+        for (double ang = a1 - 0.2; ang < a1 + 0.2; ang += 0.0005) { const double d = halfAlong(ang); if (d > best) { best = d; bestAng = ang; } }
+        const double tiltDeg = (bestAng - kPi / 2) * 180 / kPi;            // from the orbit (the phi axis), positive: phi grows as ln R falls (trailing)
+        check(std::fabs(l1 / w1 - 1) < 0.05 && std::fabs(l2 / w2 - 1) < 0.05 && std::fabs(tiltDeg - 15) < 1,
+              "streaks: half-correlation lengths " + f(l1) + " along the streak and " + f(l2) + " across (inputs lambda s_h: " + f(w1) + ", " + f(w2) +
+              "; 5 %); the longest direction " + f(tiltDeg) + " degrees from the orbit, trailing (G09: 15; 1 degree)");
+        const double xr = halfAlong(0);
+        std::printf("  streaks: the full width at half correlation along ln R (dR/R) is %.4f (SKH06 section 5: delta r / r = 0.3); along phi %.4f rad (SKH06: 25 degrees = 0.436)\n",
+                    2 * xr, 2 * halfAlong(kPi / 2));
+        check(xr > 0, "streaks: the radial width measured (SKH06's open point, REPORT.md): " + f(2 * xr));
+    }
+    {
+        std::vector<double> Ls;
+        for (int i = 0; i < 400; i++) {
+            double s = 0;
+            for (double rr = 6.1; rr < 10; rr += 0.2)
+                for (int j = 0; j < 90; j++) s += discFlux(rr, 0) * rr * F.factor(rr, 2 * kPi * j / 90, 2000 + i * 8.0, 0);
+            Ls.push_back(s);
+        }
+        double m = 0, v = 0;
+        for (double x : Ls) m += x;
+        m /= static_cast<double>(Ls.size());
+        for (double x : Ls) v += (x - m) * (x - m);
+        const double rms = std::sqrt(v / static_cast<double>(Ls.size())) / m;
+        const std::vector<double> row = numbersAfter(readExtract("blackhole/arxiv/astro-ph_0606615_schnittman_krolik_hawley2006.extract.txt"), "   6-10 ", 1);
+        check(row.size() == 1 && row[0] == 43.8 && std::fabs(rms / (row[0] / 100) - 1) < 0.2, "streaks: the face-on 6-10 M ring (c " + f(kStreakC) + ") varies by " + f(100 * rms) +
+              " % rms over 3200 M against SKH06 Table 2's " + (row.empty() ? std::string("?") : f(row[0])) + " % (the plan's 20 %)");
+    }
+    {
+        double worst = 0;
+        for (int i = 0; i < 1000; i++) {
+            const std::uint32_t h = gasHash(31u, 37u, static_cast<std::uint32_t>(i));
+            const double R = 6 + 100 * gasU01(h), phi = 2 * kPi * gasU01(h * 747796405u + 1u);
+            const int k = std::clamp(static_cast<int>(std::log(R) / kStreakBinW - 0.5) + (i % 4) / 2, 0, kStreakBins - 1);
+            const double life = streakLife(k, 0), tb = life * (17 + (i % 2) * 0.5);   // a rebirth in either bin (copy 0; odd i: copy 1)
+            worst = std::max(worst, std::fabs(F.field(R, phi, tb - 1e-9, 0, 0, 0, nullptr) - F.field(R, phi, tb + 1e-9, 0, 0, 0, nullptr)));
+        }
+        check(worst < 1e-6, "streaks: no jump where a copy is reborn (" + f(worst) + ", 1e-6)");
+    }
+}
+
+// THE SURFACE (disc.h surfaceStep through the table, lab.h discPixel) against the full path in double (disc.h rayU: Dormand-Prince on Binet's equation, 1e-13),
+// the surface |z| = h(R) of DiscPhys::height (not the table): the first point of each pixel's ray inside |z| <= h(R) on the disc, found on 3000 steps of the
+// swept angle and refined by bisection, at every 4th pixel each way. Two views of the feeding preset (480 x 300): the lab's start (50 M, 10 degrees above the disc, 45 degrees) and close in
+// (20 M, 5 degrees above, 90 degrees). In pixels: the hit's R and azimuth on the disc each moved by |difference| / |gradient| (the gradient from the reference
+// at +-0.5 pixel through the table: a scale only). Limits (fixed before looking): 99 % of the disc's pixels within 0.5 pixel; at most 1 % of them seen by one and not the other (rays that
+// graze the surface without crossing the plane near it).
+static void testDiscSurface() {
+    struct Vw { double dist, aboveDeg, fov; };
+    for (const Vw& w : {Vw{50, 10, 45}, Vw{20, 5, 90}}) {
+        Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        setDistance(s, w.dist); setFov(s, w.fov);
+        s.pitch = (90 + w.aboveDeg) * kPi / 180;
+        const int W = 480, H = 300;
+        const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+        const DiscTable T(s.dist);
+        const DiscGeom g = discGeom(s);
+        const DiscPhys P = discPhys(s);
+        if (!g.height) { check(false, "surface: the feeding preset has a thickness table"); return; }
+        const Vec3 N = discAxisView(v);
+        // the reference at picture point (X, Y): ok, R, azimuth (in the ray's plane frame turned to the disc's: atan2 of the hit's position on the disc's axes)
+        struct Ref { bool ok = false; double R = 0, az = 0; };
+        const auto ref = [&](double X, double Y) {
+            Ref o;
+            const double dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
+            if (!(th <= kPi) || d <= 0) return o;
+            const double x = th - T.alphaSh(), psi = (kPi - T.alphaSh()) - x, nx = dx / d, ny = dy / d;
+            const double A = N.z, B = nx * N.x + ny * N.y;
+            const RayEnd2 e = rayEndAngle(s.dist, psi);
+            const double end = std::min(e.phiEnd, 6 * kPi) - 1e-9;
+            const int n = 1500;
+            std::vector<double> ph(static_cast<std::size_t>(n)), u(static_cast<std::size_t>(n));
+            for (int i = 0; i < n; i++) ph[static_cast<std::size_t>(i)] = end * (i + 1) / n;
+            rayU(s.dist, psi, ph.data(), n, u.data());
+            const auto inside = [&](double phi, double uu) {
+                if (!(uu > 0)) return false;
+                const double r = 1 / uu, z = r * (A * std::cos(phi) + B * std::sin(phi)), R = std::sqrt(std::max(r * r - z * z, 0.0));
+                return R >= g.rIn && R <= g.rOut && std::fabs(z) <= P.height(R);
+            };
+            for (int i = 0; i < n; i++) {
+                if (!inside(ph[static_cast<std::size_t>(i)], u[static_cast<std::size_t>(i)])) continue;
+                double lo = i ? ph[static_cast<std::size_t>(i - 1)] : 0, hi = ph[static_cast<std::size_t>(i)];
+                for (int it = 0; it < 30; it++) { const double m = 0.5 * (lo + hi); double uu; rayU(s.dist, psi, &m, 1, &uu); if (inside(m, uu)) hi = m; else lo = m; }
+                double uu;
+                rayU(s.dist, psi, &hi, 1, &uu);
+                const double r = 1 / uu, z = r * (A * std::cos(hi) + B * std::sin(hi));
+                const Vec3 pos{std::sin(hi) * nx * r, std::sin(hi) * ny * r, std::cos(hi) * r};   // (view frame)
+                Vec3 ex{1, 0, 0};                                                                 // the disc's own axes: N, e1 = x minus its N part, e2 = N x e1
+                ex = Vec3{ex.x - N.x * N.x, ex.y - N.y * N.x, ex.z - N.z * N.x};
+                const double el = std::sqrt(ex.x * ex.x + ex.y * ex.y + ex.z * ex.z);
+                ex = Vec3{ex.x / el, ex.y / el, ex.z / el};
+                const Vec3 ey{N.y * ex.z - N.z * ex.y, N.z * ex.x - N.x * ex.z, N.x * ex.y - N.y * ex.x};
+                o.ok = true; o.R = std::sqrt(std::max(r * r - z * z, 0.0));
+                o.az = std::atan2(pos.x * ey.x + pos.y * ey.y + pos.z * ey.z, pos.x * ex.x + pos.y * ex.y + pos.z * ex.z);
+                return o;
+            }
+            return o;
+        };
+        const auto tab = [&](double X, double Y) {                         // the table's surface at (X, Y), as Ref
+            Ref o;
+            const DiscPixel q = discPixelG(T, s, g, v, X, Y, false);
+            if (q.hit.order < 0) return o;
+            const double dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), nx = dx / d, ny = dy / d;
+            double u2 = 0;
+            T.lookup(d / v.K - T.alphaSh(), q.hit.psi, u2);
+            const double rr = 1 / u2;
+            const Vec3 pos{std::sin(q.hit.psi) * nx * rr, std::sin(q.hit.psi) * ny * rr, std::cos(q.hit.psi) * rr};
+            Vec3 ex{1 - N.x * N.x, -N.y * N.x, -N.z * N.x};
+            const double el = std::sqrt(ex.x * ex.x + ex.y * ex.y + ex.z * ex.z);
+            ex = Vec3{ex.x / el, ex.y / el, ex.z / el};
+            const Vec3 ey{N.y * ex.z - N.z * ex.y, N.z * ex.x - N.x * ex.z, N.x * ex.y - N.y * ex.x};
+            o.ok = true; o.R = q.hit.r;
+            o.az = std::atan2(pos.x * ey.x + pos.y * ey.y + pos.z * ey.z, pos.x * ex.x + pos.y * ex.y + pos.z * ex.z);
+            return o;
+        };
+        long disc = 0, within = 0, oneSided = 0;
+        double worst = 0;
+        std::vector<double> errs;
+        for (int j = 0; j < H; j += 4)
+            for (int i = 0; i < W; i += 4) {
+                const double X = i + 0.5, Y = j + 0.5;
+                const Ref q = tab(X, Y), r0 = ref(X, Y);
+                if (!r0.ok && !q.ok) continue;
+                disc++;
+                if (r0.ok != q.ok) { oneSided++; continue; }
+                const Ref rx0 = tab(X - 0.5, Y), rx1 = tab(X + 0.5, Y), ry0 = tab(X, Y - 0.5), ry1 = tab(X, Y + 0.5);   // (the gradient's scale only)
+                if (!(rx0.ok && rx1.ok && ry0.ok && ry1.ok)) { within++; continue; }   // (at an edge of the image: the coverage's business)
+                const double gR = std::hypot(rx1.R - rx0.R, ry1.R - ry0.R), gA = std::hypot(std::remainder(rx1.az - rx0.az, 2 * kPi), std::remainder(ry1.az - ry0.az, 2 * kPi));
+                const double e = std::max(gR > 0 ? std::fabs(q.R - r0.R) / gR : 0.0, gA > 0 ? std::fabs(std::remainder(q.az - r0.az, 2 * kPi)) / gA : 0.0);
+                errs.push_back(e);
+                worst = std::max(worst, e);
+                if (e <= 0.5) within++;
+                else if (std::getenv("PL_SURFDBG")) std::printf("SURFDBG %g %g R %g ref %g az %g ref %g gR %g gA %g e %g\n", X, Y, q.R, r0.R, q.az, r0.az, gR, gA, e);
+            }
+        std::sort(errs.begin(), errs.end());
+        const double p99 = errs.empty() ? 0 : errs[static_cast<std::size_t>(0.99 * static_cast<double>(errs.size() - 1))];
+        check(disc > 1000 && within >= 0.99 * static_cast<double>(disc - oneSided) && oneSided <= 0.01 * static_cast<double>(disc),
+              "surface (" + f(w.dist) + " M, " + f(w.aboveDeg) + " degrees above, " + f(w.fov) + " degrees): " + f(static_cast<double>(within)) + " of " + f(static_cast<double>(disc - oneSided)) +
+              " disc pixels within 0.5 pixel of the full path (99th percentile " + f(p99) + ", worst " + f(worst) + "); " + f(static_cast<double>(oneSided)) + " seen by one only (1 %)");
+    }
+}
+
 int main() {
+    if (const char* only = std::getenv("PL_BH_ONLY")) {             // (by hand: one of 0.79.0's tests)
+        if (!std::strcmp(only, "height")) testDiscHeight();
+        if (!std::strcmp(only, "streaks")) testStreaks();
+        if (!std::strcmp(only, "surface")) testDiscSurface();
+        std::printf("%d checks, %d failed\n", g_checks, g_failed);
+        return g_failed ? 1 : 0;
+    }
     testElliptic();
     testRadii();
     testLightPath();
@@ -3002,6 +3184,9 @@ int main() {
     testGlare();
     testGas();
     testGasCard();
+    testDiscHeight();
+    testStreaks();
+    testDiscSurface();
     testClosedTime();
     testTimedOnRequest();
     testAllLight();

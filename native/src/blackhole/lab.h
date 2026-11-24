@@ -77,7 +77,7 @@ struct Settings {
     // 0.72.0 (gas.h; PLAN_MOVINGGAS.md; owner's choice of 17 Nov 2026: Real and Film both): the moving gas, while the disc is drawn. gasMoving off: 0.71's still
     // disc. gasRun: Pause / play. gasRate: seconds of the far clock per second on the screen (1: real time); gasRateAuto: set so that one turn of the innermost
     // gas takes kGasAutoSeconds on the screen at the hole shown (the start; any choice of the rate ends it, a preset starts it again). gasClump, gasPattern:
-    // the clump (BL06) and the disc's patches (SKH06), both labelled models; gasClumpR: the clump's orbit (GM/c^2, at least the disc's inner edge)
+    // the clump (BL06) and the disc's streaks (0.79.0, gas.h; 0.72-0.78: SKH06 patches), both labelled models; gasClumpR: the clump's orbit (GM/c^2, at least the disc's inner edge)
     bool gasMoving = true, gasRun = true, gasRateAuto = true, gasClump = true, gasPattern = true;
     double gasRate = 1, gasClumpR = 8;
     bool operator==(const Settings& o) const;
@@ -139,7 +139,11 @@ Vec3 discAxisView(const HoleView& v);
 // One pixel of the picture through the disc's table (as the card draws it, in double): x is the pixel's angle from the shadow's edge, (dx, dy) the unit direction
 // from the middle (right, up). The hit, its observed temperature and its colour (linear sRGB in units of the Sun's surface luminance).
 struct DiscPixel { DiscHit hit; double T = 0, Tobs = 0; std::array<double, 3> rgb{0, 0, 0}; double Y = 0; };
-DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light = true);   // light false: the hit only
+DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light = true, bool plane = false);   // light false: the hit only
+// 0.79.0: the same with the disc's geometry given (discGeom(s), made once for many pixels); plane above: the crossing of the plane even where the surface is drawn
+DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, const HoleView& v, double X, double Y, bool light = true);
+// 0.79.0: the disc's thickness table (disc.h heightTable) for these settings: Real at spin 0 (disc.h heightOn); null otherwise. Kept for the last 64 discs.
+const HeightTable* discHeight(const Settings& s);
 // 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
 // true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). Sets T, Tobs, rgb and Y (the hit is left as it is).
 void discLight(const Settings& s, double r, double g, DiscPixel& o);

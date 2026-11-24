@@ -184,7 +184,7 @@ void VkBlackHole::destroy() {
     vkDeviceWaitIdle(dev_);
     writeCache();
     for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glow_[0], &glow_[1], &glareSrc_, &glareVeil_, &probe_,
-                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
+                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
     for (Tex& t : sum_) dropTex(t);
@@ -713,6 +713,9 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     i1("uDisc", disc ? 1 : 0);
     i1("uRaw", raw ? 1 : 0);
     gasUniforms(u, L);
+    const float hr[4] = {L.hgtR[0], L.hgtR[1], L.hgtR[2], hgt_.img && L.hgt ? L.hgtR[3] : 0.0f};   // 0.79.0: the surface (no table on the card: the plane)
+    u.f("uHgtR", hr, 4);
+    i1("uGasFoot", L.gasNoFoot ? 0 : 1);
     const double st = L.expStep * ppp;                               // 0.56.0: the card's exposure (spin 0)
     const bool cw = L.whiteMode == 1 && disc && !sum_.empty() && !exp;
     i1("uExp", exp ? 1 : 0);
@@ -741,7 +744,8 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     const int vw = exp ? (exp_.empty() ? 0 : exp_[0].w) : fbW, vh = exp ? (exp_.empty() ? 0 : exp_[0].h) : fbH;
     draw(cb, p, variant, {{"uTex", sky, skyS}, {"uTable", table_.view, nearest_}, {"uDU", discU_.view, nearest_}, {"uDP", discP_.view, nearest_},
                           {"uDC", discC_.view, nearest_}, {"uWhite", cw ? sum_.back().view : white_.view, nearest_},
-                          {"uDTt", discTt_.img ? discTt_.view : discU_.view, nearest_}}, 0, 0, vw, vh);
+                          {"uDTt", discTt_.img ? discTt_.view : discU_.view, nearest_}, {"uStreak", streak_.img ? streak_.view : white_.view, nearest_},
+                          {"uHgt", hgt_.img ? hgt_.view : white_.view, nearest_}}, 0, 0, vw, vh);
 }
 
 void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw, int variant) {
@@ -822,7 +826,7 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
     draw(cb, p, variant, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_},
-                          {"uWhite", cardWhite ? sum_.back().view : white_.view, nearest_}}, vx, vy, vw, vh);
+                          {"uWhite", cardWhite ? sum_.back().view : white_.view, nearest_}, {"uStreak", streak_.img ? streak_.view : white_.view, nearest_}}, vx, vy, vw, vh);
 }
 
 // 0.56.0's skyExposure: the samples into the chain's first level, 4 x 4 blocks to their largest down to one texel, read back without waiting
@@ -890,11 +894,21 @@ void VkBlackHole::gasUniforms(VkUniforms& u, const LensSky& L) {
     u.f("uGasT", L.gasT, 4);
     u.f("uGasC", L.gasC, 4);
     u.f("uGasG", L.gasG, 4);
-    u.i("uGasN", L.gasN, 4);
-    u.f("uGasBin", L.gasBin, 4, 72);
-    u.f("uGasW", &L.gasW, 1);
+    u.f("uStrkV", L.strkV, 4, 8);
+    u.f("uStrkW", L.strkW, 4, 2);
+    u.f("uStrkB", L.strkB, 4, 17);
     u.f("uGasE1", L.gasE1, 3);
     u.f("uGasE2", L.gasE2, 3);
+}
+
+// 0.79.0: the streaks' field (once: it never changes) and the thickness table (when a new one comes)
+void VkBlackHole::gasTextures(VkCommandBuffer cb, const LensSky& L) {
+    if (L.gas && L.streak && !streak_.img && L.streakW > 0 && L.streakH > 0 && L.streak->size() == static_cast<std::size_t>(L.streakW) * L.streakH)
+        upload(cb, streak_, L.streakW, L.streakH, kR32, L.streak->data(), 1, "the streaks' field");
+    if (L.hgt && !L.hgt->empty() && L.hgtVersion != hgtVer_) {
+        upload(cb, hgt_, static_cast<int>(L.hgt->size()), 1, kR32, L.hgt->data(), 1, "the disc's thickness");
+        hgtVer_ = L.hgtVersion;
+    }
 }
 
 // 0.70.0: the camera curve's uniforms (renderer2d.h LensSky::tone; render/shaders.h cardExposure, toneRGB)
@@ -1231,6 +1245,7 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
     const bool skdisc = ksky && L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
     if ((kdisc || skdisc) && L.discFVersion != kFVer_) { upload(cb, kF_, L.discFN, 1, kR32, L.discF->data(), 1, "the disc's flux"); kFVer_ = L.discFVersion; }
     if ((kdisc || skdisc) && L.colVersion != colVer_) { upload(cb, discC_, L.discC, 1, kF32, L.discCol->data(), 3, "the colours"); colVer_ = L.colVersion; }
+    gasTextures(cb, L);
     if (L.debug || L.debugDisc || (ksky && L.skyMode > 0)) return;     // (the tests' float outputs: debugPicture)
     times();
     if (fbW != lensTex_.w || fbH != lensTex_.h || !lensTex_.img) {
@@ -1296,6 +1311,7 @@ void VkBlackHole::probe(const LensSky& L, int w, int h, bool queue, std::vector<
         probeW_ = w; probeH_ = h;
     }
     if (L.discCol && L.discC >= 2 && L.colVersion != colVer_) { upload(cb, discC_, L.discC, 1, kF32, L.discCol->data(), 3, "the colours"); colVer_ = L.colVersion; }
+    gasTextures(cb, L);
     const double w0 = ptW_, h0 = ptH_;
     ptW_ = w; ptH_ = h;
     begin(cb, {&probe_}, 0, 0, 4 * w, 2 * h, true);

@@ -76,8 +76,11 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - The GPU sky pass per new picture, faster: one duplication shared by the two R_J of the same amplitude, Carlson's stop at 0.03.
 - Quality levels High and Ultra (only Basic exists).
 - Real light: the stars' own glare, colour and adaptation in the glare, a calibrated sky map (**source needed**).
-- A realistic gas disc (native/PLAN_DISC.md, after the owner's answers): D1 the physics on the CPU (thickness, streak field, Sagittarius A*'s hot flow, tests first); D2 Real feeding disc on the GPU (streaks replace the patches, thinning inner rim); D3 the hot flow for Sagittarius A* ("shown N times brighter than real"); D4 Film (soft edges, streaks, partly see-through, labelled); D5 the owner's choice of simulation data.
-- Moving gas, what is left: the CPU path for a spinning hole, a check of the clump's light curve against a published curve. (The full SKH06 pattern per pixel is replaced by PLAN_DISC.md's streaks.)
+- The realistic gas disc (native/PLAN_DISC.md section 9, the owner's order): 0.80.0 the hot flow for Sagittarius A* (D1's hot-flow parts + D3, "shown N times brighter than real"); 0.81.0 Film (D4: soft edges, streaks, partly see-through, labelled; better than disc078_film.png).
+- 0.82.0: a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every side" (the owner, 24 Nov 2026). Planned with the owner first.
+- Moving gas, what is left: the streaks and the clump on the CPU path (the fallback draws the surface but no moving gas), a check of the clump's light curve against a published curve.
+- The disc's thickness round a spinning hole: Zhu's R_z spin term (their (6), a^2 (u_t - 1) as printed) checked against Abramowicz et al. 1997 (**source needed**: not saved). Until then a spinning hole's disc is drawn in its plane.
+- The disc's surface: rays that graze it without crossing the plane near it are not drawn (0.3 % of the disc's pixels at 20 M, 5 degrees above; REPORT 0.79.0).
 - **fix**: BL06's "30 % of equipartition" is read in the prototype as beta^-1 = 0.3 in Broderick et al. 2011 (4). D1 tests it against the 1.3 mm flux (about 3 Jy) before use.
 - **source needed**: a semi-analytic model of M87*'s flow with fitted numbers (Broderick & Loeb 2009, ApJ 697, 1164, is a candidate). T_eff inside the ISCO at 0.1 L_Edd. The hot flow's structure strength (to measure from the Illinois GRMHD data, CC BY 4.0). A camera or lens spread function with tabulated values for Film's glow.
 - Next, after the moving gas: moving cameras (orbiting, falling in; **source needed** the ray equations in ingoing Kerr coordinates), the Data panel's tables, the skin. A "1979 paper" view of Luminet's figures.
@@ -87,6 +90,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look at 1.3 mm.
 
 ## Whole app
+- 0.83.0, after the camera job (the owner, 24 Nov 2026): new Black Hole benchmark scenes that move as a user does (circling, moving in and out, over the top and under); the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
 - A GPU timing of the Black Hole sky pass alone (timestamps around one pass), if needed again.
 - The Glow and Density clouds' exposure grid is read back in the frame that draws it. A grid one frame late would remove the wait.
 - The crash-safe helper: the sky's, lens's and light paths' first runs still happen in the app first. The sky's helper also makes the lens's and table pass's pipelines.
@@ -102,7 +106,6 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 
 ## Waiting for the owner
 - Camera part 3, free flight (WASD or arrows, mouse look, speed scaling with distance). Not now (23 Nov 2026).
-- The gas disc: the five questions of native/PLAN_DISC.md section 10 (version, thickness, Sagittarius A*'s colour, streaks for patches, Film's glow).
 - After the owner's 0.63.1 benchmark: the three worst frames of blackhole.film_tilt (969 ms), orbit.heaviest (20.7 ms) and atom.nucleus_zoom (19.1 ms).
 - Paused (14 Nov 2026): element jumps with every electron for the other atoms (native/PLAN_JUMPS.md).
 - "Far labels" in the Orbit Lab: the owner describes what is wrong. Photon jumps from a complex state: the owner picks an option.

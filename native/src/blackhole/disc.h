@@ -79,7 +79,34 @@ struct DiscPhys {                                   // a disc in numbers
     double flux(double r) const;                    // W/m^2, per face
     double temperature(double r) const;             // K: (F / sigma)^(1/4)
     double hottest(double* where = nullptr) const;  // the largest temperature and its radius (M)
+    // 0.79.0: the true thickness (below): h (M) at r, radiation pressure only (hRad) and with the gas's pressure (height); 0 at and inside r_ms
+    double heightRad(double r) const;
+    double height(double r, double* gasShare = nullptr) const;   // gasShare: P_gas / P_tot there
 };
+// 0.79.0, THE DISC'S TRUE THICKNESS (PLAN_DISC.md section 2). Y. Zhu, S. W. Davis, R. Narayan, A. K. Kulkarni, R. F. Penna, J. E. McClintock, MNRAS 424, 2504
+//   (2012), arXiv:1202.1530 ("Zhu") App. B, the one-zone vertical structure: (B1a) P_tot / h = rho Q h, (B1b) P_rad = a T^4 / 3 = F kappa Sigma / (4 c),
+//   (B1c) W = 2 h alpha P_tot, (B1d) F = (3/4) Omega_k R_F W, R_F = (1 - 2/r + a^2/r^2) / (1 - 3/r + 2a/r^(3/2)), (B1e) P_tot = rho k T / mu + a T^4 / 3,
+//   (B1f) Sigma = 2 h rho. Q = Omega_k^2 R_z (their (5), (7)), Omega_k = (GM/r^3)^(1/2), R_z = (u_phi^2 + a^2 (u_t - 1)) / r (their (6)).
+//   Solved here (the algebra in disc.cpp): with A = P_tot h = 2 F / (3 alpha Omega_k R_F) and h_rad = kappa F / (2 c Q):  h^2 - h_rad h - k T / (mu Q) = 0,
+//   T^4 = 3 F kappa A / (2 a c Q h^2). Radiation pressure alone: h = h_rad. Far out (F -> 3 GM Mdot / (8 pi R^3), Q -> GM / R^3) h_rad -> (3/4) (l / eta)
+//   (kappa / kappa_es) GM/c^2, with L = l L_Edd = eta Mdot c^2 and L_Edd by kKappaEs (tested).
+//   Zhu's App. B numbers: kappa = kappa_es = 0.3383 cm^2/g and mu = 0.615 m_H ("a fluid composition of 70 per cent Hydrogen, 30 per cent Helium by mass").
+//   The feeding rate stays L / L_Edd with the lab's L_Edd (kKappaEs = 0.4 cm^2/g, YN): the gas's own opacity sets the thickness.
+//   alpha = 0.1: a CHOICE (Zhu's Model B; their models span 0.03 to 0.22, Table 1). It enters only where the gas's pressure counts (far out): there h goes as
+//   alpha^(-1/10) (the gas-pressure limit below), 6 % between 0.1 and 0.055.
+//   SPIN: R_z's spin term is printed as a^2 (u_t - 1) and has not been checked against Abramowicz et al. 1997 (not saved): the thickness is drawn for a
+//   non-spinning hole only (heightOn); a spinning hole's disc stays at the plane (said in the app). m_H: the hydrogen-1 atom, 1.00782503223 u (NIST, from AME2020,
+//   as atom/atom_learn.cpp), u = 1.66053906892e-27 kg (CODATA 2022).
+constexpr double kZhuKappa = 0.03383;               // m^2/kg (0.3383 cm^2/g), Zhu App. B
+constexpr double kZhuMu = 0.615;                    // mean particle weight in m_H, Zhu App. B
+constexpr double kDiscAlpha = 0.1;                  // CHOICE, labelled (Zhu Model B)
+double zhuQ(double r);                              // Q at a = 0 for M = 1: Omega_k^2 R_z = (1 / r^3) (u_phi^2 / r), u_phi = BPT (2.13) = r / (r - 3)^(1/2)
+bool heightOn(double aSigned);                      // the thickness is modelled: a = 0 only
+// the 1-D table the card reads (h in M, kHeightN values evenly in ln r from ln r_ms to ln(1.05 x 2000), linear between them): one table per disc (feeding
+// rate and mass); the processor's reference reads the same floats
+constexpr int kHeightN = 1024;
+struct HeightTable { double ln0 = 0, dln = 1; std::vector<float> h; double at(double r) const; bool on() const { return !h.empty(); } };
+HeightTable heightTable(const DiscPhys& p);
 double afFluxCoefficient();                         // AF's [7 x 10^26 erg cm^-2 s^-1] computed: 3 L_Edd(1 M_sun) c^4 / (8 pi (G M_sun)^2), in erg cm^-2 s^-1
 
 // ---- the light ----
@@ -115,11 +142,12 @@ double firstCrossing(double A, double B);
 // the photon's g from gas at r for a ray of axial angular momentum Lz (a = 0)
 double discShift(double r, double Lz);
 
-struct DiscGeom { double rIn = 6, rOut = 20; };
+struct DiscGeom { double rIn = 6, rOut = 20; const HeightTable* height = nullptr; };   // 0.79.0: height: the surface at |z| = h (null: the plane)
 constexpr int kDiscOrders = 4;                      // crossings looked at: the direct image, the underside's, and two thin rings (the cut-off; see DiscTable)
 struct DiscHit {
     int order = -1;                                  // -1: no crossing on the disc (then ended tells where the ray went)
     double r = 0, g = 0, Lz = 0, b = 0;
+    double psi = 0, z = 0;                           // 0.79.0: the swept angle where the ray meets the disc (the crossing's, or the surface's), its height there
     bool captured = false;                           // where the ray ends if it misses the disc
 };
 // the reference for one ray: camera at rO, look at psi, A = e_r . N, B = t . N, Lz from the caller's geometry (b (t x e_r) . N)
@@ -152,6 +180,7 @@ public:
     // the same lookup the card does, in double; x = th - alpha_sh (radians)
     double phiEnd(double x) const;
     bool lookup(double x, double phi, double& u) const;   // false: phi beyond the row's Phi
+    bool lookupD(double x, double phi, double& u, double& du) const;   // 0.79.0: u and du/dphi of the same cubic (the card's surface step)
     double fillMs() const { return ms_; }
 private:
     double rO_, alpha_;
@@ -163,7 +192,18 @@ private:
     double rowValue(const std::vector<double>& v, int side, double s, int col, int ncol) const;
 };
 
-// A hit seen through the table (as the card sees it, in double)
+// A hit seen through the table (as the card sees it, in double). 0.79.0: with d.height, the disc's surface at |z| = h(R) (surfaceStep)
 DiscHit discRayTable(const DiscTable& t, double x, double A, double B, double LzOverB, const DiscGeom& d);
+// 0.79.0, THE SURFACE (spin 0; the card does the same in single precision, render/shaders.h kLensMainPart). The ray moves in a plane; at swept angle psi its
+//   point is r(psi) (cos psi e_r + sin psi t), its height above the disc's plane z = r (A cos psi + B sin psi) and its distance from the axis R = (r^2 - z^2)^(1/2).
+//   At the crossing psi_k, A cos psi + B sin psi = 0, so before it (the ray followed back from the camera reaches the surface first) |z| = r C sin(delta),
+//   delta = psi_k - psi, C = (A^2 + B^2)^(1/2). The surface |z| = h(R): delta = asin(h(R) / (r C)), solved by kSurfaceSteps fixed-point steps with
+//   r(psi) taken on the line r_k + (dr/dpsi)_k (psi - psi_k) (the table's own slope at the crossing), started from h at the crossing's radius kept on the
+//   disc (surfaceStep returns that delta; 0: no surface there); then kSurfaceExact more steps with r(psi) looked up in the table (a ray grazing the thick far
+//   disc meets it far from the crossing, where r(psi) is no line); then u (and the travel time) looked up at psi_k - delta. delta is kept below kSurfaceMax.
+//   Tested against the full path (disc.h rayU, double; tests/test_blackhole.cpp testDiscSurface) in pixels.
+constexpr int kSurfaceSteps = 4, kSurfaceExact = 2, kSurfaceOrders = 2;   // (orders: the direct and the underside's images; the thin rings beyond at the plane)
+constexpr double kSurfaceMax = 0.5;
+double surfaceStep(double rk, double drk, double C, const HeightTable& h, const DiscGeom& d);
 
 }  // namespace blackhole

@@ -3,8 +3,11 @@
 #include "blackhole/low_priority.h"
 
 #include <algorithm>
+#include <array>
+#include <list>
 #include <chrono>
 #include <future>
+#include <map>
 #include <mutex>
 #include <cmath>
 #include <cstdio>
@@ -216,7 +219,19 @@ DiscGeom discGeom(const Settings& s) {
     DiscGeom g;
     if (s.look == Look::Film) { const LookRule r = lookRule(Look::Film); g.rIn = r.rIn; g.rOut = r.rOut; return g; }   // J15 Figure 13's caption (looks.h)
     g.rIn = discInner(s.spin); g.rOut = s.outer;
+    g.height = discHeight(s);
     return g;
+}
+const HeightTable* discHeight(const Settings& s) {
+    if (s.look != Look::Real || !heightOn(s.spin)) return nullptr;
+    static std::mutex mx;
+    static std::list<std::pair<std::array<double, 2>, HeightTable>> kept;      // (the last 64 discs: a pointer stays good for many frames)
+    std::lock_guard<std::mutex> lk(mx);
+    const std::array<double, 2> key{s.feed, s.massSun};
+    for (auto& e : kept) if (e.first == key) return &e.second;
+    if (kept.size() >= 64) kept.pop_back();
+    kept.emplace_front(key, heightTable(discPhys(s)));
+    return &kept.front().second;
 }
 void discLight(const Settings& s, double r, double g, DiscPixel& o) {
     if (s.look == Look::Film) {                                         // one temperature, no shift, the film's white balance (looks.h)
@@ -238,7 +253,12 @@ void discLight(const Settings& s, double r, double g, DiscPixel& o) {
 }
 Vec3 discAxisView(const HoleView& v) { return Vec3{0, -v.sb, v.cb}; }
 
-DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light) {
+DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light, bool plane) {
+    DiscGeom g = discGeom(s);
+    if (plane) g.height = nullptr;
+    return discPixelG(t, s, g, v, X, Y, light);
+}
+DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, const HoleView& v, double X, double Y, bool light) {
     DiscPixel o;
     const double dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy);
     const double th = d / v.K;
@@ -246,7 +266,7 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
     const double x = th - t.alphaSh();
     const double nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : 0;
     const Vec3 N = discAxisView(v);
-    o.hit = discRayTable(t, x, N.z, nx * N.x + ny * N.y, ny * N.x - nx * N.y, discGeom(s));
+    o.hit = discRayTable(t, x, N.z, nx * N.x + ny * N.y, ny * N.x - nx * N.y, g);
     if (o.hit.order < 0 || !light) return o;
     discLight(s, o.hit.r, o.hit.g, o);
     return o;
@@ -261,11 +281,12 @@ DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, doub
     const int nJob = static_cast<int>((rows.size() + 15) / 16);
     std::vector<DiscLook> part(static_cast<std::size_t>(nJob));
     std::vector<std::vector<double>> ys(static_cast<std::size_t>(nJob));
+    const DiscGeom g = discGeom(s);
     parallelFor(nJob, [&](int k) {
         DiscLook& P = part[static_cast<std::size_t>(k)];
         for (std::size_t j = static_cast<std::size_t>(k) * 16; j < std::min(rows.size(), static_cast<std::size_t>(k + 1) * 16); j++)
             for (double X = step / 2.0; X < W; X += step) {
-                const DiscPixel q = discPixel(t, s, v, X, rows[j]);
+                const DiscPixel q = discPixelG(t, s, g, v, X, rows[j]);
                 if (q.hit.order < 0) continue;
                 P.any = true;
                 P.brightY = std::max(P.brightY, q.Y);

@@ -47,6 +47,7 @@ SCENES = {
     "molecule.density": "Molecule Lab: C6H6 (12 atoms)", "molecule.vib_density": "Molecule Lab: H2O (3 atoms), zoom x1.60, vibration mode 1",
     "molecule.spacefill_vib": "Molecule Lab: C6H6 (12 atoms), zoom x4.00, vibration mode 1", "blackhole.film_tilt": "distance 74.1 GM/c², field of view 30", "blackhole.extreme": "Black Hole Lab: distance 50.0", "blackhole.all_light": "Black Hole Lab: distance 20.0",
     "blackhole.moving_gas": "Black Hole Lab: distance 10.0",   # 0.72.0
+    "blackhole.disc_streaks": "Black Hole Lab: distance 2.2",  # 0.79.0
     "orbit.alphacen": "Orbit Lab, Alpha Centauri: zoom",       # 0.73.0
     "orbit.flyby": "Orbit Lab: zoom 4.1",                      # 0.75.0
     "orbit.comet_tails": "Orbit Lab: zoom 1.00",               # 0.78.0: the zoom that puts Hale-Bopp's farthest grain at 0.3 of the picture's smaller side

@@ -406,7 +406,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 const double v = blackhole::sliderToGasRate(t), q = std::pow(10.0, std::floor(std::log10(v)) - 1);   // two significant digits
                 blackhole::setGasRate(s, std::round(v / q) * q);
             }
-            if (ImGui::IsItemHovered()) ui::SetTooltip("How fast the film runs: %s (More settings: real time, the clump, the patches)", rateText(blackhole::gasRateOf(s)).c_str());
+            if (ImGui::IsItemHovered()) ui::SetTooltip("How fast the film runs: %s (More settings: real time, the clump, the streaks)", rateText(blackhole::gasRateOf(s)).c_str());
             if (!s.gasMoving) ImGui::EndDisabled();
             p.y += ch + static_cast<float>(m.s4); p.gap = static_cast<float>(m.s4);
         }
@@ -503,13 +503,22 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 pCaption(p, "The model does not set an outer edge. The default, 2000 GM/c² (a thousand Schwarzschild radii, about 0.01 parsec for 100 million Suns), is where such discs "
                             "are believed to end: farther out the disc's own gravity breaks it up (Goodman 2003). The same physics all the way out: the disc fades by itself as it cools "
                             "outward; most of its light comes from inside 30 GM/c² (Luminet 1979). The inner edge is the innermost stable orbit, " + sig(r.rIn, 2) + " GM/c²: inside it the gas falls in and gives no light here.");
+                if (blackhole::heightOn(s.spin)) {                          // 0.79.0: the true thickness (disc.h; Zhu et al. 2012 App. B)
+                    const blackhole::DiscPhys dp = blackhole::discPhys(s);
+                    double hr = 0, at = 0;
+                    for (double q = r.rIn * 1.001; q < std::min(200.0, s.outer); q *= 1.01) { const double t = dp.height(q) / q; if (t > hr) { hr = t; at = q; } }
+                    pStat(p, "Thickness", "at most " + sig(100 * hr, 2) + " % of the radius (at " + sig(at, 3) + " GM/c²)  ·  " + sig(dp.height(std::min(2000.0, s.outer)), 2) + " GM/c² at the outer edge");
+                    pCaption(p, "The disc is drawn at its true thickness: its surface sits at the height h where the pressure of its light and gas holds it up against the hole's pull "
+                                "(Zhu et al. 2012, one zone in height). It thins to nothing at the innermost stable orbit, where the gas stops making heat. Limits: one zone in height, "
+                                "the surface drawn opaque at h, no darkening towards its edge, no light from inside the innermost orbit.");
+                } else pCaption(p, "Round a spinning hole the disc is drawn in its plane (no thickness): the thickness's spin term is not yet checked against its source.");
             }
             if (s.disc || film) {                                           // 0.72.0: the moving gas (blackhole/gas.h; PLAN_MOVINGGAS.md)
                 pHeading(p, "Moving gas");
                 pCaption(p, "Real: each ring of gas turns at its true speed (more than half the speed of light near the hole), the clocks (far away, on the clump, yours), "
                             "the bending of the light, its shifts of colour and brightness, the time the light takes to reach you (each part of the picture shows the gas as it was "
                             "when its light left: the second image under the hole is older than the first), and the shearing of the gas into trailing spirals.");
-                pCaption(p, "A model: where the patches and the clump are, their size, brightness and lifetime. No telescope has seen the face of such a disc.");
+                pCaption(p, "A model: where each streak and the clump are, and how strong. No telescope has seen the face of such a disc.");
                 const double rate = blackhole::gasRateOf(s), turn = blackhole::gasPeriod(blackhole::discGeom(blackhole::shown(s)).rIn, blackhole::shown(s).spin) * blackhole::massTimeSeconds(blackhole::shown(s).massSun);
                 pStat(p, "Rate", rateText(rate) + (s.gasRateAuto ? " (automatic)" : ""));
                 pStat(p, "Innermost turn", spanText(turn) + " far away  ·  " + spanText(turn / rate) + " on the screen");
@@ -527,11 +536,12 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                                 "(33 to 65 minutes), Wielgus et al. (2022) a loop of 74 minutes. It keeps its shape, as in Broderick and Loeb's model: real gas would shear it into an arc.");
                 }
                 real::markCheck("blackhole", "gaspattern");
-                pCheck(p, "blackhole.gas.pattern", "Bright and dark patches (model)", &s.gasPattern);
+                pCheck(p, "blackhole.gas.pattern", "Streaks (model)", &s.gasPattern);
                 if (s.gasPattern)
-                    pCaption(p, "Patches as in a computer simulation of a magnetised disc (Schnittman, Krolik and Hawley 2006): 25° by 0.3 of the radius when born, living 0.3 of an orbit, "
-                                "each piece carried round at its own radius's speed, so they stretch into spirals. Their strength is set so that the ring from 6 to 10 GM/c² flickers "
-                                "by the simulation's 43.8 % (its Table 2); the disc's total light is unchanged.");
+                    pCaption(p, "Long thin streaks as in computer simulations of a magnetised disc. Real (from the simulations): each streak's tilt, 15° from the orbit and "
+                                "trailing, and its size, 25° along by 0.18 of that across (Guan et al. 2009; Schnittman, Krolik and Hawley 2006). Each ring carries them round at "
+                                "its own speed, so they wind into spirals, and they are renewed every 0.3 of an orbit. A model: where each streak is (drawn at random), and their "
+                                "strength, set so that the ring from 6 to 10 GM/c² flickers by the simulation's 43.8 % (Schnittman et al., Table 2). The disc's total light is unchanged.");
                 if (film) pCaption(p, "Added by the lab: the film's own disc texture is not published and James et al. 2015 does not say how it moved.");
                 pHeading(p, "Exposure");
                 int ex = s.expAuto ? 0 : 1;

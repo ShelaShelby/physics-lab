@@ -103,8 +103,9 @@ and glow. He wants the most realistic option. Pictures: native/docs/blackhole/di
   homogeneous there), Lee & Gammie's spectrum, major axis 15 degrees trailing (Guan), major length 25 degrees x R (SKH06's patch size), minor 0.18 x the
   major (Guan y256a). Time: f advected at Omega(R) and renewed: two or three copies of one field texture at different offsets, each faded in and out over
   SKH06's life 0.3 T_orb, so the winding never runs away. c calibrated so the face-on 6-10 M ring varies by SKH06's 43.8 % rms (as gas.h c was).
-  **Open**: SKH06's radial patch size (0.3 R) against Guan's aspect ratio (minor 0.18 of major): the prototype uses Guan's (streaks); the build job measures
-  the radial width of its field against SKH06 section 5 and says which it keeps. The clump (BL06 (5), GRAVITY's flares) stays as today, labelled.
+  **Settled (0.79.0)**: SKH06's radial patch size (0.3 R) against Guan's aspect ratio (minor 0.18 of major): the field's full width at half correlation along
+  ln R measures 0.197 (tests/test_blackhole.cpp testStreaks), against SKH06's 0.3. Guan's is kept: it comes from converged shearing-box runs (resolution up to
+  256 cells per scale height, their Table 2), SKH06's from one global run whose patches are brightness features at a coarser grid; the owner chose streaks. The clump (BL06 (5), GRAVITY's flares) stays as today, labelled.
 - **Hot flows**: the same kind of field in 3-D (Lee & Gammie's (9)), strength **source needed**: measured from one snapshot of the public GRMHD data
   (Dhruv et al. 2025, Illinois v3 library: 10 MAD/SANE runs, spins -0.94 to 0.94, 288x128x128, 30,000 t_g; "Licensed under the Creative Commons Attribution
   4.0 International License" on thz.astro.illinois.edu, saved 24 Nov 2026). Until then the hot flow is drawn smooth (disc078_real_sgra.png).
@@ -173,16 +174,19 @@ and glow. He wants the most realistic option. Pictures: native/docs/blackhole/di
 - Dhruv et al. 2025, ApJS 277, 16, arXiv:2411.12647, and the Illinois data pages (CC BY 4.0).
 - Abramowicz & Fragile 2013 (saved; (97)-(99)); James et al. 2015 (saved; App. A.6); Talvala, Adams, Horowitz & Levoy 2007 (ACM TOG 26(3)); AMD's RX 9060 XT page.
 
-## 9. Build steps (each its own job; tests first)
-| Step | The user sees | Tests | Risk |
+## 9. Build steps (the owner's order of 24 Nov 2026, DECISIONS.md; each its own job; tests first)
+| Version | Step | The user sees | State |
 |---|---|---|---|
-| D1. Physics on the processor (0.79.0) | nothing new on screen: disc.h h(r) and the surface search, gas.h's streak field (replacing the patches' reference), hot.h (the RIAF, emissivities, transfer, the I(x, chi) table), tools/discproto as a test | section 7 rows 1-7 | BL06's 30 % reading (the 1.3 mm test decides) |
-| D2. Real feeding disc on the card | streaks in place of patches, the thinning inner rim, the surface; guide text; Hard scene blackhole.disc_streaks | GPU against CPU | the streak field's moving copies |
-| D3. Hot flow for Sagittarius A* | the preset shows its real gas (smooth), readout "N times brighter than real", the colour range in the guide; disc one click away as now; Hard scene blackhole.hot_flow; response line | GPU against CPU; spectrum tests | table refill time on the processor for spin > 0 |
-| D4. Film | soft edges, streaks, partly see-through, labelled; Hard scene blackhole.film_soft | GPU against CPU; Film numbers unchanged (J15) | none new |
-| D5. (owner's choice) hot-flow structure from the Illinois data, M87*'s model | structure in the hot flow; M87*'s flow | strength measured from the data | download size, the data's coordinates |
+| 0.79.0 | D1's thin-disc parts + D2: the thickness and the surface (disc.h), the streak field (gas.h, replacing the patches), on the card from the start | streaks in place of patches (Real and Film), the true thickness and the thinning inner edge (Real, spin 0), guide text; Hard scene blackhole.disc_streaks; response line response.blackhole_streaks | **done** (REPORT 0.79.0) |
+| 0.80.0 | D1's hot-flow parts + D3: hot.h (the RIAF, emissivities, transfer, the I(x, chi) table), the 1.3 mm test of BL06's 30 % reading first | Sagittarius A*'s hot flow (smooth), "N times brighter than real", the colour range in the guide; Hard scene blackhole.hot_flow; response line | next |
+| 0.81.0 | D4: Film | soft edges, streaks, partly see-through, labelled; Film better than disc078_film.png; Hard scene blackhole.film_soft | |
+| 0.82.0 | the camera round the black hole (as the Orbit Lab's round a planet) | planned with the owner first | |
+D5 (the Illinois data for the hot flow's structure, M87*'s model) is not chosen (24 Nov 2026).
+0.79.0's findings: the thickness uses Zhu's own opacity and particle weight (0.3383 cm^2/g, 0.615 m_H) with the lab's L_Edd (0.4 cm^2/g), so h is 0.846 of
+section 2's numbers (largest h/R 0.0150); the gas's pressure is in (Zhu (B1e)), half the total from 567 M at 10^8 Suns (alpha 0.1, a labelled choice), so far
+out h grows (5.85 M at 2000 M against 1.01 M from radiation alone). Section 4's open point is settled below. The streaks' strength c = 1.3 (SKH06's 43.8 %).
 
-## 10. Questions for the owner
+## 10. Questions for the owner (answered 24 Nov 2026: DECISIONS.md, Black Hole Lab)
 1. The recommended version (section 0), or Alternative A (real simulation data for the hot flows) or B (streaks and edges only)? *Recommended: the recommended version.*
 2. At the lab's feeding rate the true disc is under 2 % thick and still looks flat from most views. Keep the true thickness (recommended), or start the
    feeding preset at 0.3 L_Edd (the model's top, 3 times thicker and hotter)?

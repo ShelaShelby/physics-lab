@@ -61,9 +61,9 @@ const std::vector<Row>& table() {
         // 0.77.0 (outside review): was "calculated exactly for a hole that does not spin". Since 0.55.9 a spinning hole's rays are closed forms too (blackhole/spin_sky.h kSpinFineFill, kerr_closed.h)
         {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera held there would see (beside a spinning hole, one carried round with the turning space). Every light path is "
                                      "calculated exactly from Einstein's equations, by closed formulas for a hole that spins or not, on a fine table of rays the picture is read from."}},
-        // 0.77.0 (outside review): the moving gas's clump and patches are models (their place, size, strength and start are chosen, not measured): best left off
+        // 0.77.0 (outside review): the moving gas's clump and patches (0.79.0: streaks) are models (their place, size, strength and start are chosen, not measured): best left off
         {"blackhole", {"gasclump", "off", "a model: its orbit, size, brightness and start are chosen, not measured. No telescope has seen the face of such a disc."}},
-        {"blackhole", {"gaspattern", "off", "a model from a computer simulation: where the patches are, their size, strength and life are chosen, not measured."}},
+        {"blackhole", {"gaspattern", "off", "a model from computer simulations: where the streaks are and their strength are chosen, not measured."}},
         {"blackhole", {"look", "Real", "the disc as the standard thin-disc model gives it, with the colour and brightness shifts of the gas's speed and gravity; Film copies the film's stated choices, made for the story, not for accuracy."}},   // 0.55.3
         {"blackhole", {"sky", "Our sky", "a real black hole has a sky of stars behind it; ours, seen from Earth, is the only whole sky we have a map of."}},
         {"blackhole", {"skybeside", "True brightness", "the stars at their measured brightness on the disc's own scale: beside a bright disc they are far too faint to show, as they would be."}},   // 0.55.4

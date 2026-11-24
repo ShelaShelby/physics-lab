@@ -585,6 +585,9 @@ uniform float uGasTau;
 uniform vec3 uGasE1;
 uniform vec3 uGasE2;
 uniform sampler2D uDTt;
+uniform int uGasFoot;                                 // 0.79.0: 0 (the tests' picture): the streaks read with no footprint
+uniform sampler2D uHgt;                               // 0.79.0: the disc's thickness (blackhole/disc.h HeightTable): h (M) at ln r = uHgtR.x + i uHgtR.y, uHgtR.z values;
+uniform vec4 uHgtR;                                   // uHgtR.w 1: the surface at |z| = h drawn (disc.h discRayTable's steps), 0: the plane
 float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
 float bendAt(float xpx) {
     float t = (log(xpx) - uT.x) / uT.y;
@@ -601,11 +604,50 @@ vec2 mapUV(vec3 v) {
 }
 vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
 int stencil(float q, int n, out vec4 w) { q = clamp(q, 0.0, float(n - 1)); int i = clamp(int(q), 1, n - 3); w = cubicW(q - float(i)); return i - 1; }
+vec4 cubicD(float u) { return vec4(-(3.0 * u * u - 6.0 * u + 2.0) / 6.0, (3.0 * u * u - 4.0 * u - 1.0) / 2.0, -(3.0 * u * u - 2.0 * u - 2.0) / 2.0, (3.0 * u * u - 1.0) / 6.0); }
 float dU(int row, int j) { return texelFetch(uDU, ivec2(j, row), 0).r; }
 vec4 dT4(int row, int j) { return vec4(texelFetch(uDTt, ivec2(j, row), 0).r, texelFetch(uDTt, ivec2(j + 1, row), 0).r, texelFetch(uDTt, ivec2(j + 2, row), 0).r, texelFetch(uDTt, ivec2(j + 3, row), 0).r); }
 float dP(int k) { return texelFetch(uDP, ivec2(k, 0), 0).r; }
 vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
 vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+// 0.79.0: u at swept angle phi on the pixel's four rows (row0, weights wr) whose ray ends at P (DiscTable::lookup); its slope du/dphi (lookupD); the travel time
+float uLook(int row0, vec4 wr, float phi, float P) {
+    vec4 wc;
+    int j0 = stencil(phi / P * float(uDN.y - 1), uDN.y, wc);
+    float u = 0.0;
+    for (int a = 0; a < 4; a++) u += wr[a] * dot(wc, vec4(dU(row0 + a, j0), dU(row0 + a, j0 + 1), dU(row0 + a, j0 + 2), dU(row0 + a, j0 + 3)));
+    return u;
+}
+float uLookD(int row0, vec4 wr, float phi, float P, out float du) {
+    float q = clamp(phi / P * float(uDN.y - 1), 0.0, float(uDN.y - 1));
+    vec4 wc;
+    int j0 = stencil(q, uDN.y, wc);
+    vec4 dc = cubicD(q - float(j0 + 1));
+    float u = 0.0, d = 0.0;
+    for (int a = 0; a < 4; a++) {
+        vec4 v = vec4(dU(row0 + a, j0), dU(row0 + a, j0 + 1), dU(row0 + a, j0 + 2), dU(row0 + a, j0 + 3));
+        u += wr[a] * dot(wc, v); d += wr[a] * dot(dc, v);
+    }
+    du = d * float(uDN.y - 1) / P;
+    return u;
+}
+float tLook(int row0, vec4 wr, float phi, float P) {
+    vec4 wc;
+    int j0 = stencil(phi / P * float(uDN.y - 1), uDN.y, wc);
+    float t = 0.0;
+    for (int a = 0; a < 4; a++) t += wr[a] * dot(wc, dT4(row0 + a, j0));
+    return t;
+}
+float hgtAt(float r) {                                // disc.h HeightTable::at
+    if (!(r > 0.0)) return 0.0;
+    float q = (log(r) - uHgtR.x) / uHgtR.y;
+    if (q <= 0.0) return 0.0;
+    int n = int(uHgtR.z);
+    if (q >= float(n - 1)) return texelFetch(uHgt, ivec2(n - 1, 0), 0).r;
+    int i = int(q);
+    float a = texelFetch(uHgt, ivec2(i, 0), 0).r, b = texelFetch(uHgt, ivec2(i + 1, 0), 0).r;
+    return a + (q - float(i)) * (b - a);
+}
 uniform float uAll;                                   // 0.58.0: 0 the eye's light; > 0 All light, 1 / T_sun (blackhole/disc.h allLightLinear)
 vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (times s) of a black body at T scaled so its luminance is (T / T_sun)^4 (times s);
     float y = dot(c, vec3(0.2126, 0.7152, 0.0722)), q = T * uAll;   // called only when uAll > 0 (the eye's picture keeps 0.57's operations)
@@ -667,20 +709,37 @@ void main() {
     if (phi0 <= 0.0) phi0 += PI;
     float rk[4];
     vec4 tk = vec4(-1.0), pk = vec4(0.0);
+    float Cn = length(vec2(A, B));                       // 0.79.0: |z| = r Cn sin(delta) a swept angle delta before a crossing (disc.h surfaceStep)
     for (int k = 0; k < 4; k++) {
-        float phi = phi0 + float(k) * PI, rr = 1e9;
+        float phi = phi0 + float(k) * PI, rr = 1e9, psi = phi;
         if (phi <= P && th <= PI) {
-            vec4 wc;
-            int j0 = stencil(phi / P * float(uDN.y - 1), uDN.y, wc);
-            float u = 0.0, tq = 0.0;
-            for (int a = 0; a < 4; a++) {
-                u += wr[a] * dot(wc, vec4(dU(row0 + a, j0), dU(row0 + a, j0 + 1), dU(row0 + a, j0 + 2), dU(row0 + a, j0 + 3)));
-                if (uGas == 1) tq += wr[a] * dot(wc, dT4(row0 + a, j0));
+            float du = 0.0;
+            float u = uLookD(row0, wr, phi, P, du);
+            bool ok = true;
+            if (uHgtR.w > 0.5 && k < 2 && u > 0.0 && Cn > 0.0) {   // the surface (orders 0 and 1: the thin rings beyond stay at the plane)
+                float rk0 = 1.0 / u, drk = -du / (u * u), sMax = sin(0.5);
+                float delta = asin(min(hgtAt(clamp(rk0, uDR.z, uDR.w)) / (rk0 * Cn), sMax));
+                for (int it = 0; it < 4; it++) {
+                    float rl = rk0 - drk * delta, zl = rl * Cn * sin(delta), Rl = sqrt(max(rl * rl - zl * zl, 0.0));
+                    delta = asin(min(hgtAt(Rl) / (max(rl, 1e-9) * Cn), sMax));
+                }
+                for (int it = 0; it < 2; it++) {
+                    if (!(delta > 0.0) || !ok) break;
+                    float u2 = uLook(row0, wr, phi - delta, P);
+                    if (!(u2 > 0.0)) { ok = false; break; }
+                    float rl = 1.0 / u2, zl = rl * Cn * sin(delta), Rl = sqrt(max(rl * rl - zl * zl, 0.0));
+                    delta = asin(min(hgtAt(Rl) / (rl * Cn), sMax));
+                }
+                if (ok && delta > 0.0) {
+                    float u2 = uLook(row0, wr, phi - delta, P);
+                    if (!(u2 > 0.0)) ok = false;
+                    else { float rl = 1.0 / u2, zl = rl * Cn * sin(delta); u = 1.0 / sqrt(max(rl * rl - zl * zl, 1e-30)); psi = phi - delta; }
+                }
             }
-            if (u > 0.0) rr = 1.0 / u;
-            vec3 nk = vec3(sin(phi) * dn, cos(phi));
+            if (ok && u > 0.0) rr = 1.0 / u;
+            vec3 nk = vec3(sin(psi) * dn, cos(psi));
             pk[k] = atan(dot(nk, uGasE2), dot(nk, uGasE1));
-            tk[k] = uGas == 1 ? tq : -1.0;
+            tk[k] = uGas == 1 ? tLook(row0, wr, psi, P) : -1.0;
         }
         rk[k] = rr;
     }
@@ -718,9 +777,9 @@ void main() {
         float rc = clamp(rk[k], uDR.z, uDR.w);           // (a pixel that only partly covers the disc: its colour at the nearest radius on it)
         float g = sqrt(1.0 - 3.0 / rc) / (1.0 - pow(rc, -1.5) * b * LzB), gf = 1.0;
         if (uGas == 1 && tk[k] >= 0.0) {
-            bool fz = uDebug == 3;                        // (the tests' probe: no footprint, as gas.cpp's factor)
+            bool fz = uDebug == 3 || uGasFoot == 0;       // (the tests' probe and picture: no footprint, as gas.cpp's factor)
             vec2 gl = gasLight(rc, pk[k], uGasTau - tk[k], fz ? 0.0 : 0.3 * fw[k] / rk[k], fz ? 0.0 : fph[k]);
-            if (fz) { fragColor = vec4(pk[k], tk[k], gl.x, gl.y); return; }
+            if (uDebug == 3) { fragColor = vec4(pk[k], tk[k], gl.x, gl.y); return; }
             gf = gl.x * (1.0 + uGasT.w * gl.y);
             if (isnan(gf) || isinf(gf)) gf = 1.0;
         }
@@ -777,6 +836,7 @@ uniform int uRaw;
 const float PI = 3.14159265358979;
 vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
 int stencil(float q, int n, out vec4 w) { q = clamp(q, 0.0, float(n - 1)); int i = clamp(int(q), 1, n - 3); w = cubicW(q - float(i)); return i - 1; }
+vec4 cubicD(float u) { return vec4(-(3.0 * u * u - 6.0 * u + 2.0) / 6.0, (3.0 * u * u - 4.0 * u - 1.0) / 2.0, -(3.0 * u * u - 2.0 * u - 2.0) / 2.0, (3.0 * u * u - 1.0) / 6.0); }
 float edgeAt(float chi) {
     int n = uKN.z;
     float q = chi / (2.0 * PI) * float(n);
@@ -2303,86 +2363,81 @@ SkyRay traceRay(vec3 look) {
 )";
 
 static const char* const kGasPart = R"(
-// 0.72.0, the moving gas (blackhole/gas.h; the same steps as gas.cpp GasPattern::sumAt, factorAt and Clump::density, in single precision): gasLight(r, phi,
-// te, fe, fp) = (the pattern's factor, the clump's n) at a crossing at radius r and azimuth phi (Boyer-Lindquist) whose light left at te (far time since the
-// epoch E, M; the processor keeps E in double: no precision lost as the film runs), fe, fp the pixel's footprint (sigma) in ln r and phi. The pattern's bins
-// from uGasN.x on (uGasN.y of them), each (f, K div 65536, K mod 65536) with E / T_life = K + f; the slot's number K + k wraps in 32 bits as gas.cpp's uint32.
-// The hash is gas.cpp's gasHash (32-bit unsigned products wrap the same in GLSL and C++).
-uniform vec4 uGasT;                                   // (where the fade ends (lifetimes; the slots: its whole part + 1), c, 1 / norm, the clump's A (0: no clump))
+// 0.79.0, the moving gas (blackhole/gas.h; the same steps as gas.cpp StreakField::field, factor and Clump::density, in single precision): gasLight(r, phi, te,
+// fe, fp) = (the streaks' factor S, the clump's n) at a point of the disc at radius r and azimuth phi (Boyer-Lindquist) whose light left at te (far time since
+// the epoch E, M; the processor keeps E in double), fe, fp the pixel's footprint (sigma) in ln r and phi. The streaks: the field's atlas uStreak (level 0 at
+// (0, 0), 512 x 1024; level L at (512, 1024 - 2048 >> L)), read by hand (texelFetch: the processor's bilinear, not the sampler's few bits); the clock bins'
+// E / T_life = K + f in uStrkB (f, K div 65536, K mod 65536); the variance of the bilinear mix from the texel covariances (uStrkV: c00, cx, cy, cd per level;
+// uStrkW: the covariance with the next level). The hash is gas.cpp's gasHash (32-bit unsigned products wrap the same in GLSL and C++).
+uniform vec4 uGasT;                                   // (unused, c, 1: the streaks on, the clump's A (0: no clump))
 uniform vec4 uGasC;                                   // the clump: (r_c, phi0 + Omega_c E mod 2 pi, Omega_c, 1 / (2 R_S^2))
-uniform vec4 uGasG;                                   // (g_rr, g_phph + u_phi^2 at r_c, the spin a, the pattern's rIn)
-uniform ivec4 uGasN;                                  // (the first bin, the bins, 1: the pattern on, the phi cells (at most 28))
-uniform vec4 uGasBin[72];
-uniform float uGasW;                                  // the patches' reach in phi (sigmas; gas.h GasPattern::cutPhi)
+uniform vec4 uGasG;                                   // (g_rr, g_phph + u_phi^2 at r_c, the spin a, unused)
+uniform vec4 uStrkV[8];
+uniform vec4 uStrkW[2];
+uniform vec4 uStrkB[17];
+uniform sampler2D uStreak;
 uint gasHash(uint a, uint b, uint c) {
     uint h = (a * 0x9E3779B1u) ^ ((b + 0x7F4A7C15u) * 0x85EBCA77u) ^ ((c + 0x165667B1u) * 0xC2B2AE3Du);
     h ^= h >> 15u; h *= 0x2C1B3C6Du; h ^= h >> 12u; h *= 0x297A2D39u; h ^= h >> 15u;
     return h;
 }
+float strkTexel(int L, int i, int j) {
+    int w = 512 >> L, h = 1024 >> L;
+    i -= w * int(floor(float(i) / float(w)));
+    j -= h * int(floor(float(j) / float(h)));
+    ivec2 o = L == 0 ? ivec2(0, 0) : ivec2(512, 1024 - (2048 >> L));
+    return texelFetch(uStreak, o + ivec2(i, j), 0).r;
+}
+float strkSample(int L, float X, float Y, out float v) {
+    float x = fract(X) * float(512 >> L) - 0.5, y = fract(Y) * float(1024 >> L) - 0.5;
+    float fx = floor(x), fy = floor(y), ax = x - fx, ay = y - fy;
+    int i = int(fx), j = int(fy);
+    vec4 c = uStrkV[L];
+    float Ax = (1.0 - ax) * (1.0 - ax) + ax * ax, Bx = 2.0 * ax * (1.0 - ax), Ay = (1.0 - ay) * (1.0 - ay) + ay * ay, By = 2.0 * ay * (1.0 - ay);
+    v = Ax * Ay * c.x + Bx * Ay * c.y + Ax * By * c.z + 0.5 * Bx * By * c.w;
+    return (1.0 - ay) * ((1.0 - ax) * strkTexel(L, i, j) + ax * strkTexel(L, i + 1, j)) + ay * ((1.0 - ax) * strkTexel(L, i, j + 1) + ax * strkTexel(L, i + 1, j + 1));
+}
+float strkCov(int L) { vec4 q = uStrkW[L / 4]; int m = L - 4 * (L / 4); return m == 0 ? q.x : (m == 1 ? q.y : (m == 2 ? q.z : q.w)); }
+float strkField(float R, float phi, float te, float fe, float fp, out float s2) {
+    float lod = min(log2(max(max(fe * 64.0, fp * 162.97466), 1.0)), 7.0);   // (512 / 8 texels per unit of ln R, 1024 / 2 pi per radian)
+    int L = min(int(lod), 6);
+    float w = min(lod - float(L), 1.0), a = uGasG.z, om = 1.0 / (R * sqrt(R) + a), X0 = log(R) / 8.0, cv = strkCov(L);
+    float q = clamp(log(R) / 0.5 - 0.5, 0.0, 16.0);
+    int k0 = min(int(q), 15);
+    float th = 0.5 * PI * (q - float(k0)), f = 0.0, sv = 0.0;
+    for (int b = 0; b < 2; b++) {
+        int k = k0 + b;
+        float wb = b == 0 ? cos(th) : sin(th), Rk = exp((float(k) + 0.5) * 0.5), life = 0.3 * 2.0 * PI * (Rk * sqrt(Rk) + a);
+        vec4 B = uStrkB[k];
+        uint K = uint(B.y) * 65536u + uint(B.z);
+        for (int j = 0; j < 2; j++) {
+            float v = B.x + te / life + 0.5 * float(j), nn = floor(v), u = v - nn, wt = wb * sin(PI * u);
+            uint h = gasHash(K + uint(int(nn)), uint(2 * k + j + 7), 0x51u);
+            float X = X0 + float(h & 0xFFFFFFu) / 16777216.0, Y = (phi - om * u * life) / (2.0 * PI) + float((h * 747796405u + 1u) & 0xFFFFFFu) / 16777216.0;
+            float e0 = 0.0, e1 = 0.0;
+            float v0 = strkSample(L, X, Y, e0), v1 = 0.0;
+            if (w > 0.0) v1 = strkSample(L + 1, X, Y, e1);
+            f += wt * ((1.0 - w) * v0 + w * v1);
+            sv += wt * wt * ((1.0 - w) * (1.0 - w) * e0 + w * w * e1 + 2.0 * w * (1.0 - w) * cv);
+        }
+    }
+    s2 = sv;
+    return f;
+}
 vec2 gasLight(float r, float phi, float te, float fe, float fp) {
-    float ga = uGasG.z, n = 0.0;
+    float n = 0.0;
     if (uGasT.w > 0.0) {
         float dr = r - uGasC.x, dq = phi - uGasC.y - uGasC.z * te;
         dq -= 2.0 * PI * floor(dq / (2.0 * PI) + 0.5);
         n = exp(-(uGasG.x * dr * dr + uGasG.y * dq * dq) * uGasC.w);
     }
-    float S = 0.0, V = 0.0;
-    if (uGasN.z == 1) {
-        int nCells = uGasN.w, nSlots = int(uGasT.x) + 1;
-        float fEnd = uGasT.x;
-        float eta = log(r), de = 0.13, dp = 2.0 * PI / float(nCells), se = 0.26 / 2.3548, sp = 25.0 * PI / 180.0 / 2.3548, w = uGasW * sp;
-        float se2 = se * se, sp2 = sp * sp, fe2 = fe * fe, fp2 = fp * fp;
-        float om = 1.0 / (r * sqrt(r) + ga), shr = 1.5 * r * sqrt(r) * om * om;
-        int ie = int(floor(eta / de));
-        for (int dj = -2; dj <= 2; dj++) {
-            int je = ie + dj, ib = je - uGasN.x;
-            if (ib < 0 || ib >= uGasN.y) continue;
-            float rb = exp((float(je) + 0.5) * de), rl = max(rb, uGasG.w);
-            float life = 0.3 * 2.0 * PI * (rl * sqrt(rl) + ga), omb = 1.0 / (rb * sqrt(rb) + ga);
-            vec4 B = uGasBin[ib];
-            float xs = B.x + te / life, k0 = floor(xs), del = life * (om - omb);
-            uint kb = uint(B.y) * 65536u + uint(B.z);
-            for (int sl = 0; sl < 9; sl++) {
-                if (sl >= nSlots) break;
-                float kd = k0 - float(sl), xm = xs - kd, c0 = phi - om * life * xm;
-                c0 -= 2.0 * PI * floor(c0 / (2.0 * PI) + 0.5);
-                int j0 = int(floor((c0 + min(0.0, del) - w) / dp));
-                int nc = min(int(floor((c0 + max(0.0, del) + w) / dp)) - j0 + 1, nCells);
-                uint kk = kb + uint(int(kd)) + 100000u;
-                for (int i = 0; i < 28; i++) {
-                    if (i >= nc) break;
-                    int jp = j0 + i;
-                    jp -= nCells * int(floor(float(jp) / float(nCells)));
-                    uint h = gasHash(uint(je + 1000), kk, uint(jp));
-                    float u1 = float(h & 0xFFFFFFu) / 16777216.0, x = xm - u1;
-                    if (x <= 0.0 || x >= fEnd) continue;
-                    float dE = eta - (float(je) + float((h * 747796405u + 1u) & 0xFFFFFFu) / 16777216.0) * de;
-                    if (abs(dE) >= 0.26) continue;
-                    float psi = (float(jp) + float((h * 2891336453u + 7u) & 0xFFFFFFu) / 16777216.0) * dp;
-                    float dP = c0 + u1 * del - psi;
-                    dP -= 2.0 * PI * floor(dP / (2.0 * PI) + 0.5);
-                    if (abs(dP) >= w) continue;
-                    float fq = x / fEnd, f2 = fq * fq, f4 = f2 * f2, fw = 1.0 - f4 * f4;
-                    float env = x * exp(1.0 - x) * fw * fw;
-                    float qe = dE / 0.26, qp = dP / w;
-                    qe *= qe; qp *= qp;
-                    float te4 = 1.0 - qe * qe, tp4 = 1.0 - qp * qp, tp = te4 * te4 * tp4 * tp4;
-                    float Sh = shr * life * x, yy = dP - Sh * dE, g = 0.0, g2 = 0.0;
-                    for (int m = 0; m < 2; m++) {             // the covariance h Sigma (h = 1: the patch, 1/2: its square) blurred by the footprint's
-                        float hh = m == 0 ? 1.0 : 0.5;
-                        float c11 = hh * se2 + fe2, c12 = -hh * Sh * se2, c22 = hh * (Sh * Sh * se2 + sp2) + fp2;
-                        float det = c11 * c22 - c12 * c12;
-                        float vq = sqrt(hh * hh * se2 * sp2 / det) * exp(-0.5 * (c22 * dE * dE - 2.0 * c12 * dE * yy + c11 * yy * yy) / det);
-                        if (m == 0) g = tp * vq; else g2 = tp * tp * vq;
-                    }
-                    S += ((h >> 31u) != 0u ? 1.0 : -1.0) * env * g;
-                    V += env * env * max(g2 - g * g, 0.0);
-                }
-            }
-        }
+    float S = 1.0;
+    if (uGasT.z > 0.5) {
+        float s2 = 1.0, cg = uGasT.y;
+        float f = strkField(r, phi, te, fe, fp, s2);
+        S = exp(cg * f - 0.5 * cg * cg * s2);
     }
-    float cg = uGasT.y;
-    return vec2(uGasN.z == 1 ? exp(cg * S + 0.5 * cg * cg * V) * uGasT.z : 1.0, n);
+    return vec2(S, n);
 }
 )";
 

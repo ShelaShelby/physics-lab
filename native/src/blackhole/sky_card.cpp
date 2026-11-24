@@ -47,18 +47,17 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c) {
     L.allInvTsun = 1 / sunTeff();
     L.toneLw = kSkyToneLw;                                                 // 0.70.0: the camera curve's check (skyToneCompare)
     GasCard k;                                                             // 0.72.0: the moving gas at kSkyGasT (skyCompare: uMode 5)
-    const GasPattern p = skyGasPattern(c);
     const Clump cl = skyGasClump(c);
-    gasCard(&p, &cl, kSkyGasT, k);
+    gasCard(true, c.a, &cl, kSkyGasT, k);                                  // 0.79.0: the streaks (gas.h) in place of 0.72's patches
     L.gas = true;
-    std::copy(k.T, k.T + 4, L.gasT); std::copy(k.C, k.C + 4, L.gasC); std::copy(k.G, k.G + 4, L.gasG); std::copy(k.N, k.N + 4, L.gasN);
-    std::copy(k.bin, k.bin + 4 * kGasCardBins, L.gasBin);
-    L.gasTau = k.tau; L.gasCam = 0; L.gasW = k.cutPhi;
+    std::copy(k.T, k.T + 4, L.gasT); std::copy(k.C, k.C + 4, L.gasC); std::copy(k.G, k.G + 4, L.gasG);
+    std::copy(k.V, k.V + 32, L.strkV); std::copy(k.W, k.W + 8, L.strkW); std::copy(k.B, k.B + 4 * kStreakBins, L.strkB);
+    { static int w = 0, h = 0; static const std::vector<float> atlas = streakField().atlas(w, h); L.streak = &atlas; L.streakW = w; L.streakH = h; }
+    L.gasTau = k.tau; L.gasCam = 0;
     L.timeR[0] = static_cast<float>(0.8 * c.rIn); L.timeR[1] = static_cast<float>(1.25 * c.rOut);
     return L;
 }
 
-GasPattern skyGasPattern(const SkyCase& c) { GasPattern p = GasPattern::reduced(); p.a = c.a; p.rIn = c.rIn; p.rOut = c.rOut; return p; }
 Clump skyGasClump(const SkyCase& c) { Clump k; k.a = c.a; k.rc = std::clamp(8.0, c.rIn, c.rOut); k.init(); return k; }
 
 const std::vector<float>& cardColourTable(int& n, double& log0, double& dlog) {
@@ -269,10 +268,9 @@ SkyCompare skyCompare(const SkyCase& c, const SkyRef& R, const std::vector<float
                         if (dump) std::printf("SKYTIMEBAD %s i=%d j=%d dphi=%.3g dt=%.3g phi=%.6g t=%.6g gphi=%.6g gt=%.6g k=%d b=%.6g q=%.6g sub=%d\n", c.name, i, j, dphi, dt, e.phi[ro], e.t[ro], p5[0], p5[1], ro, e.b, e.q, e.radial); }
                 }
                 if (p5[1] >= 0) {
-                    const GasPattern gp = skyGasPattern(c);
                     const Clump cl = skyGasClump(c);
                     const double rc = std::clamp(static_cast<double>(p2[1]), c.rIn, c.rOut), te = kSkyGasT - static_cast<double>(p5[1]);
-                    const double f = gp.factor(rc, p5[0], te), n = cl.density(rc, p5[0], te);
+                    const double f = streakField().factor(rc, p5[0], te, c.a), n = cl.density(rc, p5[0], te);   // (0.79.0: the streaks)
                     const double df = std::fabs(p5[2] - f) / f, dn = std::fabs(p5[3] - n);
                     m.gasPx++;
                     m.gas = std::max(m.gas, std::max(df, dn));

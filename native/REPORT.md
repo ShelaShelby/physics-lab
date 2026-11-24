@@ -1,23 +1,24 @@
-# 0.78.1: research: a realistic gas disc for the Black Hole Lab (plan and pictures, no change to what the app does)
+# 0.79.0: the feeding black hole's disc: streaks, true thickness, a thinning inner edge (Real; CPU reference and GPU)
 
 ## What changed
-- native/PLAN_DISC.md: the plan. Section 0 for the owner, one recommended version and two alternatives, the physics with sources, tests, GPU plan, build steps D1-D5, five questions.
-- Findings: at 0.1 L_Edd the feeding disc is at most 1.8 % of its radius thick (h = kappa F / (2 c Q), Zhu et al. 2012 App. B; their Fig. 3 shows about 2 %). Sagittarius A*'s hot flow (BL06 model) is about 1/560 of the Sun's surface brightness in visible light, near white, a thin ring round the shadow.
-- tools/discproto (new CMake target, not a test): CPU double, the lab's KerrBL paths. Three pictures in docs/blackhole (disc078_*.png with .txt): today beside proposed at the same view and exposure.
-- 24 new source files in the sources repo (commit 13f6d55), 24 lines in data/SOURCES.md. DECISIONS (the owner's words of 24 Nov), ROADMAP, PLAN_BLACKHOLE, PLAN_MOVINGGAS, data/blackhole/README.txt. Changelog entry, VERSION 0.78.1.
+- Read: CLAUDE.md, REPORT.md, ROADMAP.md (Black Hole Lab), PLAN_DISC.md (all), disc078_real_feeding.txt; by grep and ranges: discproto.cpp, disc.h, gas.h, gas.cpp, lab.h, lab.cpp, tone.h, blackhole_view.cpp, shaders.h (kLensFS, kKerrSkyFS, kGasPart), vk_blackhole.*, test_blackhole.cpp, blackhole_picture.cpp, bench_scenes.cpp, benchmark.cpp waitDefs; Zhu, Guan, Lee & Gammie, SKH06 in the sources repo.
+- Thickness (disc.h DiscPhys::height, Zhu et al. 2012 App. B (B1a)-(B1f) with the gas's pressure). Zhu's kappa 0.3383 cm^2/g and mu 0.615 with the lab's L_Edd: h is 0.846 of PLAN_DISC's numbers (largest h/R 0.0150). Gas pressure is half the total from 567 M (alpha 0.1, labelled). Spin > 0 stays flat: the R_z spin term is not checked (ROADMAP).
+- Surface: the crossing plus a step back to |z| = h(R) on the lens table (4 straight-line steps, 2 table steps), orders 0-1, in kLensFS and in discRayTable. The disc thins to nothing at r_ms.
+- Streaks (gas.h StreakField) replace the patches in Real and Film: a Lee & Gammie field (15 degrees trailing, 25 degrees by 0.18), rank-Gaussian, 8 mip levels, exact variance between texels. Two renewed copies per clock bin of 0.5 in ln R, c = 1.3. Made at start-up on a worker (0.55 s); response line response.blackhole_streaks. Hard scene blackhole.disc_streaks.
+- The gas epoch is now 64 M (was 1024): float rounding of the streaks' clock reached 1.3e-3 of S at spin 0.99. Guide, About (Zhu, Guan, Lee & Gammie), DECISIONS, ROADMAP, PLAN_DISC section 9.
+- Look (discproto real079, each panel at its own exposure, docs/blackhole/disc079_*): not paler (saturation 0.358 against 0.363), slightly flatter (ln Y spread 1.47 against 1.71): the thin streaks average within a pixel. Feasibility: the CPU reference takes 0.7 s more for 2560 x 1369 on 4 threads. Estimate about 70 texel reads and 600 operations a crossing, about 2-3 % of the card's peak: over PLAN_DISC's 1 % (stated before the GPU work).
 
 ## Tests run
-- check.sh job: quick 18 of 18 passed, ui_smoke passed. check_sources.py on the sources checkout: ok (689 manifest lines, 42 extracts).
-- discproto checks: Sagittarius A*'s model gives 0.195 mJy at 2.2 um at Earth (GRAVITY 2020: median 1.1 +- 0.3, 5 % percentile 0.28). Optical depth at 550 nm at most 5e-13. Thermal light at 550 nm at most 8e-12 of the power-law light.
-- Measured on the build machine: 444 integrator steps and 0.127 ms a ray, 77 ns an emissivity sample (one core, double).
+- blackhole_physics: 1018 checks, 0 failed. New: thickness (far limit 1e-3, r_ms, M scaling, Zhu Fig. 3 reading 0.0150 vs 0.02, (B1) residual 4e-16, gas closed form 1.0001); streaks (variance 1, mean 0.9965 +- 0.006, lengths 0.554 and 0.095 vs 0.549 and 0.0995, tilt 15.09, ring 43.2 % vs 43.8 %); surface vs full path (99.8 % and 100 % within 0.5 px, 0.3 % one-sided).
+- check_blackhole precision: 80 checks, 0 failed; the card's surface r within 1.9e-5 (0 over 3e-4), factor 5.6e-5. sky: 43 checks, 0 failed; spin 0.99 factor 6.9e-5; picture "streaks" 1 of 216,898 pixels over 8 levels.
+- check.sh job: quick 18 of 18 passed, ui_smoke passed (first run: app_settings failed twice: the new scene's name over 90 characters, and the plan's 318 s limit; both fixed, below). check_sources.py: ok (689 lines, 42 extracts).
 
 ## Not done
-- No app code (a research job). No M87* picture: no fitted semi-analytic model of its flow was found (source needed, ROADMAP).
-- No GPU prototype: the cost estimate uses the CPU measurement and operation counts, labelled estimates in PLAN_DISC.md section 6.
-- Hot-flow structure not drawn: its strength is not sourced. The Illinois GRMHD data (CC BY 4.0) could give it: step D5.
-- Film's glow: no camera or lens spread function with tabulated values was found (Talvala et al. 2007 gives plots only). Source needed.
-- Doubtful value: Abramowicz & Fragile 2013 (99) prints the inner region's H = [1e5 cm] (mdot) with no power of m, while (97) and (98) carry m. The textbook form scales with M. The lab does not use (99).
-- BL06's "30 % of equipartition" is read through Broderick et al. 2011 (4) as beta^-1 = 0.3. D1 tests it first against the 1.3 mm flux (about 3 Jy).
+- Streaks and clump on the CPU fallback (it draws the surface only), grazing rays that miss the plane near the surface, the spinning hole's thickness: ROADMAP.
+- Not timed on a GPU: the card here is Mesa's CPU Vulkan. The owner's benchmark decides.
 
 ## References changed on purpose
-- None. No test changed.
+- Patch tests removed with the patches (testGas part 5, testGasCard parts 1-2). Clump phase limit kept (2e-5), its float bound now smaller.
+- Two new tests corrected before they first passed: the tilt's sign (my formula), and the mean of S limit 5e-3 is now 3 standard errors (its own sampling error was 2e-3).
+- Surface: tries used 2 of 3 (the first, straight-line steps only, failed close in).
+- test_app: the benchmark's planned time limit 318 s -> 330 s (one Hard scene and one wait added on purpose: 328.6 s); Hard 37 -> 38, All 53 -> 54.
