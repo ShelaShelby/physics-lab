@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.80.1", "Test fix, nothing changes in the app",
+     "Nothing changes in how the app works. The automatic test that compares the Atom Lab's Classic dots drawn by the graphics card with the processor's "
+     "had failed on every full run since 0.75: it took the two pictures at the same time on the clock, so the slower run was caught at another zoom. It "
+     "now takes them at the same frame, and all five scenes match."},
     {"0.80.0", "Sagittarius A*'s hot gas: the physics checked; nothing new on screen yet",
      "No change to what the app shows: Sagittarius A* keeps today's picture. Behind it, the lab can now work out the light of Sagittarius A*'s real gas, a hot, "
      "see-through flow, from a published model fitted to its radio spectrum, and it checks that light against two measurements: its flux at 1.3 mm "

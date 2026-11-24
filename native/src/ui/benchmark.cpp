@@ -1442,9 +1442,15 @@ void benchmarkGpuEnd(AppState& app) {
     static double shotAt[2] = {-1, -1};
     static const bool shotRead = [] { if (const char* v = SDL_getenv("PL_BENCH_SHOT")) std::sscanf(v, "%lf,%lf", &shotAt[0], &shotAt[1]); return true; }();
     (void)shotRead;
+    // 0.80.1: PL_BENCH_SHOT_FRAME="n" (the checks that compare two runs, check_atom_chip.py classic): the picture saved at the scene's n-th frame instead.
+    // A scene that moves by its frame count (the side view's zoom, the Slice's cut: atom_bench.cpp benchFrame) is then at the same place in both runs;
+    // by the clock, a slower run (the CPU's) was caught some frames earlier (ROADMAP fix of 0.75.2: the scale bar 319 px against 350)
+    static const int shotFrame = SDL_getenv("PL_BENCH_SHOT_FRAME") ? std::atoi(SDL_getenv("PL_BENCH_SHOT_FRAME")) : 0;
     const bool scenesNow = b.stage == BenchState::Stage::Running && b.run && b.phase == 0;
     const int shotK = !scenesNow || b.shotFor != b.run->scene() ? 0 : b.shotK;
-    if (scenesNow && shotK < 2 && shotAt[shotK] >= 0 && b.run->measuring() && b.run->sceneElapsedS() >= shotAt[shotK] && b.run->scene() < int(b.list.size())) {
+    const bool shotDue = shotFrame > 0 ? shotK == 0 && b.sceneFrame >= shotFrame && b.run->sceneToSetUp() < 0
+                                       : shotK < 2 && shotAt[shotK] >= 0 && b.run->measuring() && b.run->sceneElapsedS() >= shotAt[shotK];
+    if (scenesNow && shotDue && b.run->scene() < int(b.list.size())) {
         b.shotFor = b.run->scene(); b.shotK = shotK + 1;
         const ImGuiIO& io = ImGui::GetIO();
         const int W = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f), H = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);

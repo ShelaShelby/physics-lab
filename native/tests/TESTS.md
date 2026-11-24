@@ -14,7 +14,7 @@ Rules for new checks are in CLAUDE.md (Build and test). Git keeps every deleted 
 | Part | Seconds | Group | Test | Reason |
 |---|---|---|---|---|
 | check_shell.py:smoke | new | KEEP | ui_smoke | the app starts, each lab draws a frame that is not empty with zero validation errors, the app ends cleanly |
-| check_atom_chip.py:classicside, classicsideglow, classicslice, classicsliceglow | 150 each | KEEP | ui_atom* | GPU vs CPU: the other four Classic scenes (split from classic) |
+| check_atom_chip.py:classicside, classicsideglow, classicslice, classicsliceglow | 150 each | KEEP | ui_atom* | GPU vs CPU: the other four Classic scenes (split from classic); 0.80.1: the picture taken at the scene's 30th frame (by the clock, the slower CPU run was caught at another zoom) and the two runs side by side: 43-77 s each on the build machine |
 | check_molecule.py:cardpic, cardpiclight | 172, 86 | KEEP | ui_molecule* | GPU vs CPU: the Density cloud's pictures (split from card) |
 | check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision); 0.79.0: the streaks' factor at spin 0.99, and toneCompare's case "streaks" (the disc's surface, streaks and clump, at most 1 % of pixels over 8 levels) |
 | check_blackhole.py:precisioncard | 74 | KEEP | ui_blackhole_sky | GPU vs CPU: the card's light paths against the double-precision reference (split from precision) |

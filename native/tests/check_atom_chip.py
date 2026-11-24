@@ -8,6 +8,7 @@
 # References (nothing here is an earlier output of ours): the standard periodic table's places (H in column 1, He in 18, Fe in row 4 column 8, B in row 2 column 13; the lanthanides and
 # actinides in two rows below), the spec's words ("1 proton", "0 neutrons"), the element names written in the famous list's own labels, and the app's own old setParam rule that a new element
 # gets its usual isotope (the unit test in atom_tests holds the textbook mass numbers). Twelve elements across the table are clicked in the real app (0.76.0; git keeps the run of all 118).
+import threading
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, prefetch, Bmp
@@ -49,13 +50,18 @@ def classic_part(binary, work, scene):
             fails += 1
             print("FAIL", what)
     B = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": scene,
-         "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
+         "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT_FRAME": "30"}   # (0.80.1: by frame, not by the clock: ROADMAP fix)
     runs = {}
-    for tag, extra in (("card", {}), ("cpu", {"PL_CLASSIC_CARDFAIL": "1"})):
+    def one(tag, extra):
         d = os.path.join(work, "classic_" + tag); os.makedirs(d, exist_ok=True)
         for f in os.listdir(d):
             if f.endswith(".bmp"): os.remove(os.path.join(d, f))
         runs[tag] = run_app(binary, d, "classic_" + tag, dict(B, **extra), frames=100000, size="1280x800", timeout=900)
+    # 0.80.1: the two runs side by side (the picture is taken at a frame, so the load of one does not move the other's; classicsideglow took 300 s on
+    # GitHub one after the other, the part limit)
+    ts = [threading.Thread(target=one, args=a) for a in (("card", {}), ("cpu", {"PL_CLASSIC_CARDFAIL": "1"}))]
+    for t in ts: t.start()
+    for t in ts: t.join()
     def paths(out):
         rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
         return [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
