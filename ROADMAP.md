@@ -77,6 +77,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Real light: the stars' own glare, colour and adaptation in the glare, a calibrated sky map (**source needed**).
 - The realistic gas disc (native/PLAN_DISC.md section 9, the owner's order): 0.81.0 Film (D4: soft edges, streaks, partly see-through, labelled; better than disc078_film.png). Sagittarius A*'s hot flow waits (the **source needed** line below).
 - 0.82.0: a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every side" (the owner, 24 Nov 2026). Planned with the owner first.
+- After 0.83.0 (the owner, 24 Nov 2026): a research job for Sagittarius A*'s hot flow: the missing source (BL06's definition, or another fitted model), tested against the 1.3 mm and 2.2 um checks; drawn only if both pass.
 - Moving gas, what is left: the streaks and the clump on the CPU path (the fallback draws the surface but no moving gas), a check of the clump's light curve against a published curve.
 - The disc's thickness round a spinning hole: Zhu's R_z spin term (their (6), a^2 (u_t - 1) as printed) checked against Abramowicz et al. 1997 (**source needed**: not saved). Until then a spinning hole's disc is drawn in its plane.
 - The disc's surface: rays that graze it without crossing the plane near it are not drawn (0.3 % of the disc's pixels at 20 M, 5 degrees above; REPORT 0.79.0).

@@ -98,6 +98,9 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   side". Planned with the owner before it is built (0.82.0; ROADMAP, Black Hole Lab).
 - A benchmark job after the camera (24 Nov 2026): 0.83.0, after the camera job (0.82.0). New Black Hole scenes that move as a user does (circling, moving in and
   out, over the top and under), and the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
+- Sagittarius A*'s hot flow (24 Nov 2026): 0.80.0 ships the tested physics with nothing drawn (BL06's model passes neither reading's two checks). After
+  0.81.0 Film, 0.82.0 the camera and 0.83.0 the benchmark, a research job: find the missing definition (or another published, fitted model of Sagittarius
+  A*'s flow) and test it against the 1.3 mm and 2.2 um checks. It is drawn only if a model passes both.
 - No lower resolution while moving (17 Nov 2026): the picture stays sharp while the user drags. A lower resolution only on a card whose whole picture takes
   over 16.7 ms (fewer than 60 sharp pictures a second); Settings, Performance then says so, with the switch "Lower resolution while moving" (Auto / Off).
 - Something must happen in the lab (17 Nov 2026): moving gas comes before flying the camera. Wishes: true speeds, a bright clump circling the hole, a time
