@@ -90,6 +90,11 @@ and glow. He wants the most realistic option. Pictures: native/docs/blackhole/di
 - **M87***: **source needed**: a published semi-analytic model of M87*'s flow with numbers fitted to its spectrum (Broderick & Loeb 2009, ApJ 697, 1164, is a
   candidate to fetch and read). Until then the preset keeps "no disc" with today's sentence, or Alternative A's simulation data.
 
+- **0.80.0, the check done (REPORT 0.80.0; DECISIONS 24 Nov 2026)**: BL06 as printed passes the 1.3 mm check (3 Jy +- 30 %) and GRAVITY's 2.2 um range under
+  no sourced reading (lengths in M or r_S, 0.3 of the energy or of the field), so nothing is drawn. The visible brightness above (1/560 of the Sun's surface)
+  and the prototype's 2.2 um flux rest on the unchecked reading; Pandya (27) as printed is 0.563 of the true absorption (hot.cpp). The GPU table (section 6),
+  the Hard scene and the guide text wait for a model that passes both checks (ROADMAP).
+
 ## 4. Fine structure (replaces gas.h's patches)
 - **What simulations show**: shearing-box MRI turbulence (Guan et al. 2009, zero and net azimuthal field): two-point correlation functions are tilted
   ellipses, trailing; the magnetic field's major axis about 15 degrees from the azimuth (Table 2, converged runs y128a-y256b: 15-17 degrees), density and
@@ -178,8 +183,8 @@ and glow. He wants the most realistic option. Pictures: native/docs/blackhole/di
 | Version | Step | The user sees | State |
 |---|---|---|---|
 | 0.79.0 | D1's thin-disc parts + D2: the thickness and the surface (disc.h), the streak field (gas.h, replacing the patches), on the card from the start | streaks in place of patches (Real and Film), the true thickness and the thinning inner edge (Real, spin 0), guide text; Hard scene blackhole.disc_streaks; response line response.blackhole_streaks | **done** (REPORT 0.79.0) |
-| 0.80.0 | D1's hot-flow parts + D3: hot.h (the RIAF, emissivities, transfer, the I(x, chi) table), the 1.3 mm test of BL06's 30 % reading first | Sagittarius A*'s hot flow (smooth), "N times brighter than real", the colour range in the guide; Hard scene blackhole.hot_flow; response line | next |
-| 0.81.0 | D4: Film | soft edges, streaks, partly see-through, labelled; Film better than disc078_film.png; Hard scene blackhole.film_soft | |
+| 0.80.0 | hot-flow physics, tested; nothing drawn: hot.h (the RIAF, emissivities, transfer, colours), the 1.3 mm and 2.2 um checks of every sourced reading | no change: Sagittarius A* keeps today's picture | **done** (REPORT 0.80.0) |
+| 0.81.0 | D4: Film | soft edges, streaks, partly see-through, labelled; Film better than disc078_film.png; Hard scene blackhole.film_soft | next |
 | 0.82.0 | the camera round the black hole (as the Orbit Lab's round a planet) | planned with the owner first | |
 D5 (the Illinois data for the hot flow's structure, M87*'s model) is not chosen (24 Nov 2026).
 0.79.0's findings: the thickness uses Zhu's own opacity and particle weight (0.3383 cm^2/g, 0.615 m_H) with the lab's L_Edd (0.4 cm^2/g), so h is 0.846 of

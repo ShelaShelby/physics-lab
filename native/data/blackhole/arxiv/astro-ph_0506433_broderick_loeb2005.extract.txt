@@ -1,0 +1,14 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/astro-ph_0506433_broderick_loeb2005.txt.gz
+# Reference: A. E. Broderick, A. Loeb, "Imaging bright spots in the accretion flow near the black hole horizon of Sgr A*", Mon. Not. R. Astron. Soc. 363, 353 (2005), arXiv:astro-ph/0506433v1 (the original here is the pdftotext -layout text of the PDF, gzip -9)
+# URL: https://arxiv.org/pdf/astro-ph/0506433
+# Date read: 2026-11-24
+# sha256 of the original: 5ccbfcd6d59f31a8e712a63da00135ae6519272ea5765edb0e8367ecbbffcc64
+# Place in the original: the caption of Figure 7 (the mass and distance the authors used for Sgr A*)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/blackhole/hot.h kBl06MassSun, kBl06DistPc; tests/test_blackhole.cpp testHotSpectrum.
+#--- begin Figure 7's caption, the mass and distance
+is shown by the dotted circle. Axes are labelled in units of M . For a mass of 4 × 106 M⊙ and distance 8 kpc, appropriate for Sgr A*, the
+scale M corresponds to 5 µas.
+#--- end

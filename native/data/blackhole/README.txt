@@ -20,6 +20,12 @@ paper) through its extract tone/reinhard2002_uucs-02-01.extract.txt (section 3.1
 (2411.12647); glare/ Talvala et al. 2007; web/ the Illinois simulation data pages (CC BY 4.0) and AMD's RX 9060 XT page. Each is one line of native/data/SOURCES.md.
 No test reads them yet (no extract): tools/discproto names them in its comments.
 
+[0.80.0] Sagittarius A*'s hot flow (src/blackhole/hot.h; nothing drawn). New extracts in arxiv/: Broderick & Loeb 2006 (astro-ph/0509237: Table 1, sect. 2.2),
+Broderick & Loeb 2005 (astro-ph/0506433: Fig. 7's mass and distance), Broderick et al. 2011 (1011.2770: the 1.3 mm flux and its variation), GRAVITY 2020
+(2004.07185: Table 1, the slopes). Newly saved in the private repo: Yuan, Quataert & Narayan 2003 (astro-ph/0304125) and Broderick & Loeb 2005a
+(astro-ph/0508386). Pandya et al. 2016 (24)-(27) were read on the PDF's page images (pages 10 and 12); YQN Fig. 2 and BL06 Fig. 1 were read on page images
+as plot readings (REPORT 0.80.0).
+
 Sources for the Black Hole Lab (0.54.2 research job, 15 Nov 2026; the plan is native/PLAN_BLACKHOLE.md)
 =======================================================================================================
 Nothing here is used by the app yet. Every file was fetched on 2026-11-15 (UTC) and is kept as received, except where "text" is said:

@@ -1,0 +1,19 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1011.2770_broderick2011.txt.gz
+# Reference: A. E. Broderick, V. L. Fish, S. S. Doeleman, A. Loeb, "Evidence for Low Black Hole Spin and Physically Motivated Accretion Models from Millimeter-VLBI Observations of Sagittarius A*", ApJ 735, 110 (2011), arXiv:1011.2770v1 (the original here is the pdftotext -layout text of the PDF, gzip -9)
+# URL: https://arxiv.org/pdf/1011.2770
+# Date read: 2026-11-24
+# sha256 of the original: 088b734d301ecec92e3e6253e46b24c195127754b3df337eb4281a957f572ff0
+# Place in the original: section 2 (the typical 1.3 mm flux), section 3.1 (the flux's variation)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/blackhole/hot.h (the 1.3 mm check); tests/test_blackhole.cpp testHotSpectrum.
+#--- begin section 2, the typical 1.3 mm flux
+hole silhouette.                                                             et al. 2008). This flux is anomalously low in comparison to the
+   Since that time a number of groups have analyzed the 2007                 typical 1.3 mm flux of ∼ 3 Jy, and was taken as evidence for
+mm-VLBI data using various physically motivated accretion                    Sgr A* appearing in a quiescent state. This interpretation is
+#--- end
+#--- begin section 3.1, the variation of the flux
+rameters, we employ the polarization fraction for thermal syn-                  During the mm-VLBI observations Sgr A*’s flux varied by
+chrotron as derived in Petrosian & McTiernan (1983). In doing                roughly 30%. We model this as a variable accretion rate,
+#--- end

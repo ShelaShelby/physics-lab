@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.80.0", "Sagittarius A*'s hot gas: the physics checked; nothing new on screen yet",
+     "No change to what the app shows: Sagittarius A* keeps today's picture. Behind it, the lab can now work out the light of Sagittarius A*'s real gas, a hot, "
+     "see-through flow, from a published model fitted to its radio spectrum, and it checks that light against two measurements: its flux at 1.3 mm "
+     "(about 3 Jy) and in the near infrared at 2.2 \xC2\xB5m (GRAVITY 2020). The model as printed passes only one of the two in every reading its sources allow, "
+     "so the flow is not drawn: the lab does not show a brightness the measurements do not back. What is missing is written down, and the flow will be drawn "
+     "once a source settles it."},
     {"0.79.0", "The feeding black hole's disc: streaks and its true thickness",
      "In the Black Hole Lab the round bright and dark patches of the moving gas are gone. In their place the disc is streaked, as computer simulations of "
      "magnetised discs show: long thin filaments tilted 15\xC2\xB0 from the orbit and trailing, carried round at each ring's own speed so they wind into spirals, "

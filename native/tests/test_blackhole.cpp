@@ -29,6 +29,7 @@
 #include "blackhole/disc.h"
 #include "blackhole/elliptic.h"
 #include "blackhole/gas.h"
+#include "blackhole/hot.h"
 #include "blackhole/geodesic.h"
 #include "blackhole/kerr.h"
 #include "blackhole/kerr_closed.h"
@@ -3135,11 +3136,192 @@ static void testDiscSurface() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.80.0: Sagittarius A*'s hot flow (blackhole/hot.h). Physics only: nothing is drawn (the checks in testHotSpectrum decide that).
+static void testHotModel() {
+    namespace H = blackhole::hot;
+    const std::string bl = readExtract("blackhole/arxiv/astro-ph_0509237_broderick_loeb2006.extract.txt");
+    const std::string bl05 = readExtract("blackhole/arxiv/astro-ph_0506433_broderick_loeb2005.extract.txt");
+    check(!bl.empty() && !bl05.empty(), "hot flow: the extracts of BL06 and Broderick & Loeb 2005 can be read");
+    // BL06 Table 1, row by row (the extract's text: "3 × 107" is 3 x 10^7 with the exponent lost)
+    struct Row { double a; const char* text; };
+    const Row rows[3] = {{0, "0       3 \xc3\x97 107      1.7 \xc3\x97 1011     8 \xc3\x97 104       \xe2\x88\x92" "2.9"},
+                         {0.5, "0.5      3 \xc3\x97 107      1.4 \xc3\x97 1011     5 \xc3\x97 104       \xe2\x88\x92" "2.8"},
+                         {0.998, "0.998     1 \xc3\x97 107      1.5 \xc3\x97 1011     1 \xc3\x97 105       \xe2\x88\x92" "2.8"}};
+    const double want[3][4] = {{3e7, 1.7e11, 8e4, -2.9}, {3e7, 1.4e11, 5e4, -2.8}, {1e7, 1.5e11, 1e5, -2.8}};
+    for (int k = 0; k < 3; k++) {
+        H::Model m;
+        const bool ok = H::modelFor(rows[k].a, m);
+        check(ok && bl.find(rows[k].text) != std::string::npos && m.n0 == want[k][0] && m.T0 == want[k][1] && m.n0nth == want[k][2] && m.pnth == want[k][3] && m.unit == 1,
+              "hot flow: BL06 Table 1 row a = " + f(rows[k].a));
+        check(std::fabs(m.rIsco - innermostStable(rows[k].a, true)) < 1e-3, "hot flow: BL06's ISCO for a = " + f(rows[k].a) + " = BPT (2.21): " + f(m.rIsco));
+    }
+    H::Model none;
+    check(!H::modelFor(0.3, none) && !H::modelFor(0.9, none), "hot flow: no model at spins Table 1 does not list");
+    check(bl.find("index of 1.25 and a minimum Lorentz factor of 100") != std::string::npos && H::kSpectralIndex == 1.25 && H::kGammaMin == 100 && H::kP == 3.5,
+          "hot flow: spectral index 1.25 (p = 3.5), gamma_min 100 (BL06 sect. 2.2)");
+    check(bl.find("fixed fraction (30%)") != std::string::npos && H::kEquipShare == 0.3, "hot flow: 30 % of equipartition (BL06 sect. 2.2)");
+    check(bl.find("4.233M and 1.237M") != std::string::npos, "hot flow: the ISCO radii in BL06's text");
+    check(bl05.find("4 \xc3\x97 106 M\xe2\x8a\x99 and distance 8 kpc") != std::string::npos && H::kBl06MassSun == 4e6 && H::kBl06DistPc == 8000,
+          "hot flow: BL06's mass and distance (Broderick & Loeb 2005 Fig. 7)");
+    // the field: Broderick et al. 2011 (4), B^2 / 8 pi = beta^-1 n m_p c^2 r_S / (12 r), typed here from CODATA 2018 (m_p 1.67262192369e-24 g, c exact)
+    H::Model m0;
+    H::modelFor(0, m0);
+    const double n6 = 3e7 * std::pow(6.0, -1.1), beq = std::sqrt(8 * kPi * n6 * 1.67262192369e-24 * 2.99792458e10 * 2.99792458e10 * 2 / (12 * 6));
+    const H::Plasma pe = H::plasma(m0, 6, kPi / 2, H::BReading::Energy), pf = H::plasma(m0, 6, kPi / 2, H::BReading::Field);
+    check(std::fabs(pe.ne - n6) < 1e-12 * n6 && std::fabs(pe.Te - 1.7e11 * std::pow(6.0, -0.84)) < 1e-3, "hot flow: n_e and T_e at the ISCO (BL06 (4))");
+    check(std::fabs(pe.B - std::sqrt(0.3) * beq) < 1e-12 * beq && std::fabs(pf.B - 0.3 * beq) < 1e-12 * beq,
+          "hot flow: B at the ISCO: " + f(pe.B) + " G (0.3 of the energy), " + f(pf.B) + " G (0.3 of the field)");
+    // BL06 (6) writes the cooling time with B / 30 G: both readings are on that scale (within a factor 2); the energy reading is the closer (36 G)
+    check(std::fabs(std::log(pe.B / 30)) < std::log(2.0) && std::fabs(std::log(pf.B / 30)) < std::log(2.0) && std::fabs(std::log(pe.B / 30)) < std::fabs(std::log(pf.B / 30)),
+          "hot flow: BL06 (6)'s 30 G scale: energy reading " + f(pe.B / 30) + " of it, field reading " + f(pf.B / 30));
+    // the profiles: Gaussian in z with width rho, power laws in rho and r, lengths in M (unit 1) or r_S (unit 2)
+    const H::Plasma q = H::plasma(m0, 20, kPi / 4, H::BReading::Energy);
+    const double R = 20 / std::sqrt(2.0), ex = std::exp(-0.5);
+    check(std::fabs(q.ne - 3e7 * std::pow(R, -1.1) * ex) < 1e-12 * q.ne && std::fabs(q.nnth - 8e4 * std::pow(R, -2.9) * ex) < 1e-12 * q.nnth,
+          "hot flow: n_e and n_nth at r 20, 45 degrees off the plane (exp(-z^2/2rho^2) = e^-1/2)");
+    H::Model ms = m0;
+    ms.unit = 2;
+    const H::Plasma qs = H::plasma(ms, 20, kPi / 4, H::BReading::Energy);
+    check(std::fabs(qs.ne / q.ne - std::pow(2.0, 1.1)) < 1e-12 && std::fabs(qs.Te / q.Te - std::pow(2.0, 0.84)) < 1e-12, "hot flow: lengths in r_S = 2M (Broderick et al. 2011)");
+}
+
+static void testHotEmissivity() {
+    namespace H = blackhole::hot;
+    // (26) and (27) against the direct integral of the one-electron spectrum (Rybicki & Lightman (6.17c), (6.18), (6.50)), far above gamma_min^2 nu_c
+    double worstJ = 0, worstA = 0, printed = 0;
+    for (double B : {3.0, 40.0})
+        for (double sn : {0.3, 0.9})
+            for (double X : {1e7, 1e9}) {
+                const double nu = X * H::cE * B / (2 * kPi * H::cMe * H::cC) * sn;
+                worstJ = std::max(worstJ, std::fabs(H::jPower(1, B, nu, sn) / H::jPowerIntegral(1, B, nu, sn) - 1));
+                worstA = std::max(worstA, std::fabs(H::aPower(1, B, nu, sn) / H::aPowerIntegral(1, B, nu, sn) - 1));
+                // (27) as printed: 3^(p/2) and Gamma((3p+12)/12)
+                const double p = H::kP, nuc = H::cE * B / (2 * kPi * H::cMe * H::cC);
+                const double ap = H::cE * H::cE / (nu * H::cMe * H::cC) * std::pow(3.0, p / 2) * (p - 1) / (4 * std::pow(H::kGammaMin, 1 - p)) *
+                                  std::tgamma((3 * p + 12) / 12) * std::tgamma((3 * p + 22) / 12) * std::pow(nu / (nuc * sn), -(p + 2) / 2);
+                printed = ap / H::aPowerIntegral(1, B, nu, sn);
+            }
+    check(worstJ < 1e-4, "hot flow: Pandya (26) = the direct integral (far above gamma_min): worst " + f(worstJ));
+    check(worstA < 1e-4, "hot flow: (27) with 3^((p+1)/2), Gamma((3p+2)/12) = the direct integral: worst " + f(worstA));
+    check(std::fabs(printed - std::tgamma((3 * H::kP + 12) / 12) / std::tgamma((3 * H::kP + 2) / 12) / std::sqrt(3.0)) < 1e-4,
+          "hot flow: (27) as printed is 3^-1/2 Gamma((3p+12)/12) / Gamma((3p+2)/12) = " + f(printed) + " of it (REPORT 0.80.0)");
+    // slopes: j ~ nu^-(p-1)/2 B^(p+1)/2, alpha ~ nu^-(p+4)/2 B^(p+2)/2 ((26), (27))
+    const double nu = 5e14, B = 20, sn = 0.7;
+    const double sj = std::log(H::jPower(1, B, 2 * nu, sn) / H::jPower(1, B, nu, sn)) / std::log(2.0);
+    const double sa = std::log(H::aPower(1, B, 2 * nu, sn) / H::aPower(1, B, nu, sn)) / std::log(2.0);
+    const double bj = std::log(H::jPower(1, 2 * B, nu, sn) / H::jPower(1, B, nu, sn)) / std::log(2.0);
+    const double ba = std::log(H::aPower(1, 2 * B, nu, sn) / H::aPower(1, B, nu, sn)) / std::log(2.0);
+    check(std::fabs(sj + (H::kP - 1) / 2) < 1e-12 && std::fabs(bj - (H::kP + 1) / 2) < 1e-12, "hot flow: j ~ nu^-(p-1)/2 B^(p+1)/2: " + f(sj) + ", " + f(bj));
+    check(std::fabs(sa + (H::kP + 4) / 2) < 1e-12 && std::fabs(ba - (H::kP + 2) / 2) < 1e-12, "hot flow: alpha ~ nu^-1 (nu)^-(p+2)/2 B^(p+2)/2: " + f(sa) + ", " + f(ba));
+    // the cut at gamma_min: the reference's j and alpha reach (26), (27) far above nu_c gamma_min^2 and fall far below it (1.3 mm is near it)
+    const double nuc1 = H::cE * 1.0 / (2 * kPi * H::cMe * H::cC);
+    check(std::fabs(H::jPowerCut(1, 1, 1e8 * nuc1, 1) / H::jPower(1, 1, 1e8 * nuc1, 1) - 1) < 1e-4 && std::fabs(H::aPowerCut(1, 1, 1e8 * nuc1, 1) / H::aPower(1, 1, 1e8 * nuc1, 1) - 1) < 1e-4,
+          "hot flow: the cut power law = (26), (27) at nu = 1e8 nu_c");
+    check(H::jPowerCut(1, 1, 100 * nuc1, 1) < 1e-2 * H::jPower(1, 1, 100 * nuc1, 1), "hot flow: the cut power law is under 1 % of (26) at nu = 100 nu_c (gamma about 8 < 100)");
+    // thermal: Kirchhoff (Pandya (25)), j = alpha B_nu(T) for every sample
+    double worstK = 0;
+    for (double T : {3e9, 3e10, 1e11})
+        for (double nuT : {1e10, 2.3e11, 1.4e14}) {
+            const double j = H::jThermal(1e6, T, 30, nuT, 0.8), a = H::aThermal(1e6, T, 30, nuT, 0.8);
+            if (j > 0) worstK = std::max(worstK, std::fabs(a * H::planckNu(nuT, T) / j - 1));
+        }
+    check(worstK < 1e-13, "hot flow: thermal alpha B_nu = j (Kirchhoff, Pandya (25)): " + f(worstK));
+}
+
+static void testHotTransfer() {
+    namespace H = blackhole::hot;
+    // a flat-space slab, g = 1, in 1000 steps: no absorption: I = j L; with absorption: I = (j / alpha)(1 - exp(-alpha L)); thick thermal: B_nu(T)
+    const double L = 3e14, j = 2.5e-21, a = 4e-15;
+    double I = 0, tau = 0;
+    for (int k = 0; k < 1000; k++) H::addLight(1, j, 0, L / 1000, I, tau);
+    check(std::fabs(I - j * L) < 1e-12 * j * L, "hot flow transfer: thin slab I = j L");
+    I = 0; tau = 0;
+    for (int k = 0; k < 1000; k++) H::addLight(1, j, a, L / 1000, I, tau);
+    check(std::fabs(I - j / a * -std::expm1(-a * L)) < 1e-12 * I && std::fabs(tau - a * L) < 1e-12 * a * L, "hot flow transfer: absorbing slab I = (j/alpha)(1 - e^-tau)");
+    // I / nu^3 is invariant: a thick thermal slab moving with shift g, its light at nu_obs: g^3 B_nu(nu_obs / g, T) = B_nu(nu_obs, g T) (Planck's law)
+    for (double g : {0.4, 1.0, 1.7}) {
+        const double T = 2e10, nuO = 2.3e11, nuG = nuO / g;
+        const double jt = H::jThermal(1e7, T, 50, nuG, 0.9), at = H::aThermal(1e7, T, 50, nuG, 0.9);
+        double Ig = 0, tg = 0;
+        for (int k = 0; k < 200; k++) H::addLight(g, jt, at, 100 / at * g / 200, Ig, tg);   // tau = 100
+        const double Bp = H::planckNu(nuO, g * T);
+        check(std::fabs(Ig / Bp - 1) < 1e-12, "hot flow transfer: thick slab at shift " + f(g) + " gives B_nu(g T) (I/nu^3 invariant): " + f(Ig / Bp - 1));
+    }
+    // far from the hole the gas's g is special relativity's Doppler factor 1 / (gamma (1 - v n_phi)) and the field's angle its aberration
+    double worstG = 0, worstC = 0;
+    const double r = 1e8, v = std::pow(r, -0.5), gam = 1 / std::sqrt(1 - v * v);
+    for (double ang : {0.3, 1.2, 2.0, 2.9}) {
+        const double nr = std::cos(ang), nph = std::sin(ang);                                     // the light's direction (radial, along the motion)
+        const H::Shift sh = H::shift0(r, kPi / 2, nr / std::sqrt(1 - 2 / r), r * nph);            // p_r = n_r / (1 - 2/r)^(1/2) (unit energy, static frame), Lz = r n_phi
+        const double gSR = 1 / (gam * (1 - v * nph)), cSR = (nph - v) / (1 - v * nph);
+        worstG = std::max(worstG, std::fabs((sh.g - gSR) / (gSR - 1)));
+        worstC = std::max(worstC, std::fabs(sh.sinB - std::sqrt(1 - cSR * cSR)) / std::fabs(v));
+    }
+    check(worstG < 1e-3, "hot flow transfer: g -> the Doppler factor far away (r 1e8, v 1e-4): worst share of g - 1 " + f(worstG));
+    check(worstC < 1e-3, "hot flow transfer: the field's angle -> special relativity's aberration far away: worst share of v " + f(worstC));
+    // the far flux is converged in its grid (the spectrum test's grid against twice as fine)
+    H::Model m;
+    H::modelFor(0, m);
+    for (double nu : {H::kNu13mm, H::kNu22um}) {
+        const double F1 = H::farFluxJy(m, H::kBl06MassSun, H::kBl06DistPc, nu, 45, H::BReading::Energy, {}, 240, 24, 40, 0.01);
+        const double F2 = H::farFluxJy(m, H::kBl06MassSun, H::kBl06DistPc, nu, 45, H::BReading::Energy, {}, 480, 48, 60, 0.005);
+        check(std::fabs(F1 / F2 - 1) < 0.005, "hot flow transfer: the far flux's grid (the spectrum test's against twice as fine) at " + f(nu) + " Hz: " + f(F1) + " against " + f(F2) + " Jy");
+    }
+}
+
+static void testHotSpectrum() {
+    namespace H = blackhole::hot;
+    const std::string br = readExtract("blackhole/arxiv/1011.2770_broderick2011.extract.txt");
+    const std::string gr = readExtract("blackhole/arxiv/2004.07185_gravity2020.extract.txt");
+    check(br.find("typical 1.3 mm flux of \xe2\x88\xbc 3 Jy") != std::string::npos && H::k13mmJy == 3, "hot flow: 1.3 mm about 3 Jy (Broderick et al. 2011 sect. 2)");
+    check(br.find("flux varied by") != std::string::npos && br.find("roughly 30%.") != std::string::npos && H::k13mmShare == 0.3, "hot flow: varied by about 30 % (sect. 3.1)");
+    const auto pc = numbersAfter(gr, "2017, 2018 & 2019 average", 10);
+    check(pc.size() == 10 && pc[0] == H::k22LowMJy && pc[8] == H::k22HighMJy, "hot flow: GRAVITY 2020 Table 1: 5 % 0.28 mJy, 95 % 6.9 mJy");
+    check(gr.find("dereddened") != std::string::npos, "hot flow: GRAVITY's fluxes are dereddened (the model has no dust)");
+    // the readings: lengths in M (BL06 as printed) or r_S (Broderick et al. 2011, Yuan et al. 2003 Fig. 2), 0.3 of the energy or of the field
+    struct Try { double unit; H::BReading rd; const char* name; double f13, f22; };   // f13 (Jy), f22 (mJy): REPORT 0.80.0's numbers
+    const Try tries[4] = {{1, H::BReading::Energy, "M, energy", 4.54, 0.155}, {1, H::BReading::Field, "M, field", 2.13, 0.040},
+                          {2, H::BReading::Energy, "r_S, energy", 19.8, 2.77}, {2, H::BReading::Field, "r_S, field", 13.4, 0.70}};
+    bool any = false;
+    for (const Try& t : tries) {
+        H::Model m;
+        H::modelFor(0, m);
+        m.unit = t.unit;
+        const double f13 = H::farFluxJy(m, H::kBl06MassSun, H::kBl06DistPc, H::kNu13mm, 45, t.rd, {}, 240, 24, 40, 0.01);
+        const double f22 = 1e3 * H::farFluxJy(m, H::kBl06MassSun, H::kBl06DistPc, H::kNu22um, 45, t.rd, {}, 240, 24, 40, 0.01);
+        const bool p13 = std::fabs(f13 / H::k13mmJy - 1) <= H::k13mmShare, p22 = f22 >= H::k22LowMJy && f22 <= H::k22HighMJy;
+        any = any || (p13 && p22);
+        std::printf("  hot flow, lengths in %s: 1.3 mm %.4g Jy (%s), 2.2 um %.4g mJy (%s)\n", t.name, f13, p13 ? "passes" : "fails", f22, p22 ? "passes" : "fails");
+        check(std::fabs(f13 / t.f13 - 1) < 0.02 && std::fabs(f22 / t.f22 - 1) < 0.02,
+              std::string("hot flow: the reading ") + t.name + " gives REPORT 0.80.0's numbers: " + f(f13) + " Jy, " + f(f22) + " mJy");
+    }
+    // the gate: the flow is drawn only when a sourced reading passes both measurements (0.80.0: none does)
+    check(H::kDrawn == any, std::string("hot flow: drawn (") + (H::kDrawn ? "yes" : "no") + ") only if a reading passes both the 1.3 mm and the 2.2 um checks");
+}
+
+static void testHotColour() {
+    namespace H = blackhole::hot;
+    // PLAN_DISC section 3 (0.78.1, CIE 1931): I_nu ~ nu^-alpha; GRAVITY 2020 sect. 5 item 4: nu F_nu ~ nu^0.5 in flares (alpha 0.5), ~nu^-2 quiet (alpha 3);
+    // the model's alpha 1.25 (BL06)
+    const std::string gr = readExtract("blackhole/arxiv/2004.07185_gravity2020.extract.txt");
+    check(gr.find("\xce\xb1\xce\xbd" "F\xce\xbd \xe2\x88\xbc 0.5") != std::string::npos && gr.find("\xce\xb1\xce\xbd" "F\xce\xbd \xe2\x88\xbc \xe2\x88\x92" "2") != std::string::npos,
+          "hot flow colour: GRAVITY's slopes 0.5 (flares) and -2 (quiet)");
+    const double al[3] = {0.5, 1.25, 3}, xy[3][2] = {{0.2945, 0.2985}, {0.3135, 0.3165}, {0.3605, 0.3532}};
+    for (int k = 0; k < 3; k++) {
+        double x, y;
+        H::powerLawColour(al[k], x, y);
+        check(std::fabs(x - xy[k][0]) < 6e-5 && std::fabs(y - xy[k][1]) < 6e-5,
+              "hot flow colour: alpha " + f(al[k]) + ": x " + f(x) + " y " + f(y) + " (PLAN_DISC section 3: " + f(xy[k][0]) + ", " + f(xy[k][1]) + ")");
+    }
+}
+
 int main() {
     if (const char* only = std::getenv("PL_BH_ONLY")) {             // (by hand: one of 0.79.0's tests)
         if (!std::strcmp(only, "height")) testDiscHeight();
         if (!std::strcmp(only, "streaks")) testStreaks();
         if (!std::strcmp(only, "surface")) testDiscSurface();
+        if (!std::strcmp(only, "hot")) { testHotModel(); testHotEmissivity(); testHotTransfer(); testHotSpectrum(); testHotColour(); }
         std::printf("%d checks, %d failed\n", g_checks, g_failed);
         return g_failed ? 1 : 0;
     }
@@ -3187,6 +3369,11 @@ int main() {
     testDiscHeight();
     testStreaks();
     testDiscSurface();
+    testHotModel();
+    testHotEmissivity();
+    testHotTransfer();
+    testHotSpectrum();
+    testHotColour();
     testClosedTime();
     testTimedOnRequest();
     testAllLight();

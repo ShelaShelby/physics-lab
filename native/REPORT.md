@@ -1,24 +1,21 @@
-# 0.79.0: the feeding black hole's disc: streaks, true thickness, a thinning inner edge (Real; CPU reference and GPU)
+# 0.80.0: Sagittarius A*'s hot flow: the physics tested, nothing drawn (the owner's decision, 24 Nov 2026)
 
 ## What changed
-- Read: CLAUDE.md, REPORT.md, ROADMAP.md (Black Hole Lab), PLAN_DISC.md (all), disc078_real_feeding.txt; by grep and ranges: discproto.cpp, disc.h, gas.h, gas.cpp, lab.h, lab.cpp, tone.h, blackhole_view.cpp, shaders.h (kLensFS, kKerrSkyFS, kGasPart), vk_blackhole.*, test_blackhole.cpp, blackhole_picture.cpp, bench_scenes.cpp, benchmark.cpp waitDefs; Zhu, Guan, Lee & Gammie, SKH06 in the sources repo.
-- Thickness (disc.h DiscPhys::height, Zhu et al. 2012 App. B (B1a)-(B1f) with the gas's pressure). Zhu's kappa 0.3383 cm^2/g and mu 0.615 with the lab's L_Edd: h is 0.846 of PLAN_DISC's numbers (largest h/R 0.0150). Gas pressure is half the total from 567 M (alpha 0.1, labelled). Spin > 0 stays flat: the R_z spin term is not checked (ROADMAP).
-- Surface: the crossing plus a step back to |z| = h(R) on the lens table (4 straight-line steps, 2 table steps), orders 0-1, in kLensFS and in discRayTable. The disc thins to nothing at r_ms.
-- Streaks (gas.h StreakField) replace the patches in Real and Film: a Lee & Gammie field (15 degrees trailing, 25 degrees by 0.18), rank-Gaussian, 8 mip levels, exact variance between texels. Two renewed copies per clock bin of 0.5 in ln R, c = 1.3. Made at start-up on a worker (0.55 s); response line response.blackhole_streaks. Hard scene blackhole.disc_streaks.
-- The gas epoch is now 64 M (was 1024): float rounding of the streaks' clock reached 1.3e-3 of S at spin 0.99. Guide, About (Zhu, Guan, Lee & Gammie), DECISIONS, ROADMAP, PLAN_DISC section 9.
-- Look (discproto real079, each panel at its own exposure, docs/blackhole/disc079_*): not paler (saturation 0.358 against 0.363), slightly flatter (ln Y spread 1.47 against 1.71): the thin streaks average within a pixel. Feasibility: the CPU reference takes 0.7 s more for 2560 x 1369 on 4 threads. Estimate about 70 texel reads and 600 operations a crossing, about 2-3 % of the card's peak: over PLAN_DISC's 1 % (stated before the GPU work).
+- Read: CLAUDE.md, REPORT.md, ROADMAP.md (Black Hole Lab), PLAN_DISC.md 0, 3, 6, 7, 9, disc078_real_sgra.txt, DECISIONS.md (Black Hole Lab); by grep and ranges: discproto.cpp (sgra), disc.h, disc.cpp, lab.h, lab.cpp, presets.h, schwarzschild.h, geodesic.h, vk_blackhole.h, test_blackhole.cpp. BL06, BL05, BL05a, Broderick et al. 2011, Pandya et al. 2016 (pages 10, 12), GRAVITY 2020, Yuan, Quataert & Narayan 2003 (YQN; new, with BL05a, in the sources repo).
+- 0.79.0's full run (45397594642) failed only ui_atom_classic2: the known check_atom_chip classic parts (ROADMAP Atom Lab fix). Nothing else to fix.
+- src/blackhole/hot.h: BL06's flow (Table 1), Pandya (24)-(27), the gas's motion and field angle, the transfer (I/nu^3 invariant) along spin-0 rays, the far flux, the colours.
+- Found: Pandya (27) as printed (3^(p/2), Gamma((3p+12)/12)) is 0.563 of the direct integral. The code uses 3^((p+1)/2), Gamma((3p+2)/12) (Rybicki & Lightman's form), and discproto too. (24) prints K_2(1/Theta_2); Theta_e is used. At 1.3 mm (26) is 8 times too high (gamma near gamma_min), so the reference uses the integral with the cut.
+- The 1.3 mm check (3 Jy +- 30 %, Broderick et al. 2011) and the 2.2 um check (0.28-6.9 mJy, GRAVITY 2020), BL06's mass, distance, 45 degrees. Lengths in M: 0.3 of the energy 4.54 Jy, 0.155 mJy; 0.3 of the field 2.13 Jy, 0.040 mJy. Lengths in r_S (Broderick 2011; YQN Fig. 2's profiles fit this unit, plot reading): 19.8 Jy, 2.77 mJy; 13.4 Jy, 0.70 mJy. No reading passes both. The owner chose: draw nothing (DECISIONS).
+- The missing source: BL06 Fig. 1 (plot reading) shows about 4.5 Jy at 230 GHz, as the energy reading gives, but about 3 mJy at 10^5 GHz, 20 times ours. YQN gives the field as a share of the energy (the energy reading) and a power law that would lower, not raise, the near infrared. BL05a adds nothing. Not closed.
 
 ## Tests run
-- blackhole_physics: 1018 checks, 0 failed. New: thickness (far limit 1e-3, r_ms, M scaling, Zhu Fig. 3 reading 0.0150 vs 0.02, (B1) residual 4e-16, gas closed form 1.0001); streaks (variance 1, mean 0.9965 +- 0.006, lengths 0.554 and 0.095 vs 0.549 and 0.0995, tilt 15.09, ring 43.2 % vs 43.8 %); surface vs full path (99.8 % and 100 % within 0.5 px, 0.3 % one-sided).
-- check_blackhole precision: 80 checks, 0 failed; the card's surface r within 1.9e-5 (0 over 3e-4), factor 5.6e-5. sky: 43 checks, 0 failed; spin 0.99 factor 6.9e-5; picture "streaks" 1 of 216,898 pixels over 8 levels.
-- check.sh job: quick 18 of 18 passed, ui_smoke passed (first run: app_settings failed twice: the new scene's name over 90 characters, and the plan's 318 s limit; both fixed, below). check_sources.py: ok (689 lines, 42 extracts).
+- blackhole_physics: passed (88.8 s). New, 47 checks, 0 failed: Table 1 and the text against the extracts, ISCO radii against BPT, B 36.3 G and 19.9 G against Broderick (4) and BL06's 30 G scale; (26), (27) against the integral (3e-6), slopes, the cut, Kirchhoff (1e-16); slab I = j L, (j/a)(1 - e^-tau), thick slab B_nu(gT) at three shifts (I/nu^3), Doppler and aberration far away (4e-4); flux grid converged (0.07 %); the four readings and the gate (drawn only if one passes both); colours at alpha 0.5, 1.25, 3 within 6e-5 of PLAN_DISC section 3.
+- The new tests fail on the old build: it has no hot.h, so they do not compile.
+- check.sh job: quick 18 of 18 passed, ui_smoke passed. check_sources.py: ok (695 lines, 46 extracts).
 
 ## Not done
-- Streaks and clump on the CPU fallback (it draws the surface only), grazing rays that miss the plane near the surface, the spinning hole's thickness: ROADMAP.
-- Not timed on a GPU: the card here is Mesa's CPU Vulkan. The owner's benchmark decides.
+- Everything drawn: the GPU table, the Hard scene blackhole.hot_flow, its response line, the readout, the guide and About text. They wait for a model that passes both checks (owner, 24 Nov). So no feasibility timing, no GPU against CPU test, no UI part run by hand (no UI changed).
+- Spin 0.5 and 0.998, M87*'s model: ROADMAP.
 
 ## References changed on purpose
-- Patch tests removed with the patches (testGas part 5, testGasCard parts 1-2). Clump phase limit kept (2e-5), its float bound now smaller.
-- Two new tests corrected before they first passed: the tilt's sign (my formula), and the mean of S limit 5e-3 is now 3 standard errors (its own sampling error was 2e-3).
-- Surface: tries used 2 of 3 (the first, straight-line steps only, failed close in).
-- test_app: the benchmark's planned time limit 318 s -> 330 s (one Hard scene and one wait added on purpose: 328.6 s); Hard 37 -> 38, All 53 -> 54.
+- None. No existing test changed.

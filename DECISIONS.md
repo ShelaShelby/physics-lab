@@ -90,6 +90,10 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   disc078_film.png (labelled as the lab's own). D5 (the Illinois simulation data, M87*'s model) is not chosen.
   The order: 0.79.0 the Real feeding disc (D1's thin-disc parts and D2: streaks, true thickness, the thinning inner edge); 0.80.0 the hot flow for
   Sagittarius A* (D1's hot-flow parts and D3); 0.81.0 Film (D4); 0.82.0 the camera (planned with the owner first).
+- Sagittarius A*'s hot flow (24 Nov 2026, during 0.80.0): BL06 as printed passes the 1.3 mm and the 2.2 um checks under no sourced reading. The owner: stop
+  drawing. Ship only the tested physics, no change on screen; do not loosen or drop either check, and draw nothing that fails them. First look for the missing
+  definition in Yuan, Quataert & Narayan 2003 and Broderick & Loeb 2005; a reading that then passes both waits for a later job. The GPU table, the scene
+  blackhole.hot_flow and the guide text wait for a model that passes both (REPORT 0.80.0, ROADMAP).
 - The camera after the disc (24 Nov 2026): a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every
   side". Planned with the owner before it is built (0.82.0; ROADMAP, Black Hole Lab).
 - A benchmark job after the camera (24 Nov 2026): 0.83.0, after the camera job (0.82.0). New Black Hole scenes that move as a user does (circling, moving in and

@@ -1,0 +1,34 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/astro-ph_0509237_broderick_loeb2006.txt.gz
+# Reference: A. E. Broderick, A. Loeb, "Imaging optically-thin hot spots near the black hole horizon of Sgr A* at radio and near-infrared wavelengths", Mon. Not. R. Astron. Soc. 367, 905 (2006), arXiv:astro-ph/0509237v2 (the original here is the pdftotext -layout text of the PDF, gzip -9)
+# URL: https://arxiv.org/pdf/astro-ph/0509237
+# Date read: 2026-11-24
+# sha256 of the original: f2ece5ae9e4ea28b0cc752a87e0f17240a421b3f8cc56224bb8eb0e96ecafed0
+# Place in the original: Table 1 (the flow's constants) and section 2.2 (the electrons, the field, the ISCO radii); the page's two columns are interleaved in the text
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/blackhole/hot.h (modelFor, kSpectralIndex, kGammaMin, kEquipShare); tests/test_blackhole.cpp testHotModel.
+#--- begin Table 1
+                                                                          a (M )   n0e (cm−3 )    Te0 (K)     n0nth (cm−3 )   pnth
+additional plans to use the Phase Referenced Imaging and
+Astrometry (PRIMA) instrument, currently under construc-                    0       3 × 107      1.7 × 1011     8 × 104       −2.9
+tion, at the Very Large Telescope (VLT) to obtain sub-milli-               0.5      3 × 107      1.4 × 1011     5 × 104       −2.8
+arcsecond astrometry of these flares (Paumard et al. 2005).               0.998     1 × 107      1.5 × 1011     1 × 105       −2.8
+#--- end
+#--- begin section 2.2, the electrons and the field
+                                                                    1. In all models, the non-thermal electrons have a spectral
+                                                          (1)
+                                                                    index of 1.25 and a minimum Lorentz factor of 100. The
+where the partial differentiation is taken holding the covari-
+                                                                    magnetic field strength is set to be a fixed fraction (30%)
+ant components of the wave four-vector, kµ , constant. The
+                                                                    of equipartition relative to the protons. As suggested by re-
+function f (r) is arbitrary (corresponding to the freedom in-
+                                                                    cent general-relativistic magnetohydrodynamic simulations,
+herent in the affine parameterization, λ) and chosen to be
+                                                                    the field is taken to be toroidal (De Villiers et al. 2003). The
+#--- end
+#--- begin section 2.2, the ISCO radii
+                                                                    accreting gas is assumed to be in free fall inside of the ISCO
+                                                                    (6M , 4.233M and 1.237M for a = 0, 0.5 and 0.998, respec-
+#--- end

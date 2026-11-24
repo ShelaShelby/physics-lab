@@ -216,7 +216,8 @@ double jPower(double nn, double B, double nu, double sth) {
 }
 double aPower(double nn, double B, double nu, double sth) {
     const double nuc = cE * B / (2 * kPi * cMe * cC), p = kP;
-    return nn * cE * cE / (nu * cMe * cC) * std::pow(3.0, (p + 1) / 2) * (p - 1) / (4 * std::pow(kGmin, 1 - p)) * std::tgamma((3 * p + 12) / 12) *
+    // 0.80.0: Gamma((3p+2)/12), not (27)'s printed Gamma((3p+12)/12) (src/blackhole/hot.cpp aPower, tested against the direct integral)
+    return nn * cE * cE / (nu * cMe * cC) * std::pow(3.0, (p + 1) / 2) * (p - 1) / (4 * std::pow(kGmin, 1 - p)) * std::tgamma((3 * p + 2) / 12) *
            std::tgamma((3 * p + 22) / 12) * std::pow(nu / (nuc * sth), -(p + 2) / 2);
 }
 

@@ -1,0 +1,27 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/2004.07185_gravity2020.txt.gz
+# Reference: GRAVITY Collaboration (R. Abuter et al.), "The flux distribution of Sgr A*", A&A 638, A2 (2020), arXiv:2004.07185v2 (the original here is the pdftotext -layout text of the PDF, gzip -9)
+# URL: https://arxiv.org/pdf/2004.07185
+# Date read: 2026-11-24
+# sha256 of the original: d900bae318dcb5819c9480ed2e126b8d151d495c257f6a86a149e7cc0a54171e
+# Place in the original: Table 1 (the 2.2 um percentiles, dereddened), section 2 (the extinction used), section 5 item 4 (the slopes)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/blackhole/hot.h (the 2.2 um check, the colour range); tests/test_blackhole.cpp testHotSpectrum, testHotColour.
+#--- begin Table 1, the columns
+                       Percentiles [mJy]: 2017                       5%                 14 %            50%          86%            95%
+#--- end
+#--- begin Table 1, the average of 2017, 2018 and 2019
+                     2017, 2018 & 2019 average                  0.28 ± 0.07            0.4 ± 0.1     1.1 ± 0.3     3.4 ± 1.7     6.9 ± 3.8
+#--- end
+#--- begin section 2, dereddened
+    We report the flux density at 2.2 µm. To obtain absolute,             changes with time, the flux ratio is modulated by this movement.
+dereddened fluxes, we use the extinction coefficient AK s =               We correct for this modulation by multiplying the flux ratio by
+2.43 ± 0.07 from Schödel et al. (2010) and Fritz et al. (2011).           the response function. To account for positioning errors of the
+#--- end
+#--- begin section 5 item 4, the slopes
+4. The spectral index of the flares changes with observed                     5. The flux distribution is well described by composite distribu-
+   brightness. For flares, the spectral index is ανFν ∼ 0.5, but                 tion functions, such as the tailed lognormal parameterization
+   this value decreases to ανFν ∼ −2 during the quiescent phase                  proposed by Dodds-Eden et al. (2010).
+   (Gillessen et al. 2006).                                                   6. GRAVITY is the first instrument that allows the study of the
+#--- end
