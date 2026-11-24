@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <complex>
 #include <optional>
 #include <string>
 #include <array>
@@ -77,7 +78,10 @@ struct Vec3d { double x = 0, y = 0, z = 0; };
 // 0.49.2: a photon is a wave train as long as its jump: an emitted one leaves the atom DURING the jump (front at the jump's start, tail at its end), an absorbed one is taken in during it
 // (its front arrives when the jump starts, its tail when it ends). t: its age, s; dur: the flight between the atom and the picture's edge; jdur: the jump's length (0: Reduced motion);
 // landed: an absorbed photon's front has reached the atom (its jump has begun). It is gone when its tail leaves the picture (emit) or reaches the atom (absorb): t = dur + jdur.
-struct Photon { std::string kind; int from, to; double E, lam; std::string name, col; double ang, t, dur, jdur; bool landed; };
+struct Photon { std::string kind; int from, to; double E, lam; std::string name, col; double ang, t, dur, jdur; bool landed;
+                // 0.78.0: the one-electron cloud views: the direction drawn from the jump's dipole pattern (atom/photon_pattern.h), in the lab's 3D frame (z the quantisation
+                // axis), and the dipole's unit vector u for the pattern's outline. has3d false (the Orbit view, the many-electron atoms: no m known): ang, in the picture's plane.
+                bool has3d = false; double dir[3] = {0, 0, 1}; std::complex<double> u[3] = {0, 0, 0}; };
 // 0.49.3: how = what drives the jump: kJumpPlace ("Put the outer electron in", no light: a plain cross-fade to help the eye), kJumpEmit, kJumpAbsorb (one photon: the exact shares, AtomLab::jumpShareTo)
 enum { kJumpPlace = 0, kJumpEmit = 1, kJumpAbsorb = 2 };
 struct Transition { int from, to; double t, dur; int how = kJumpPlace; };
@@ -142,6 +146,7 @@ struct AtomState {
     std::optional<Photon> photon;        // a photon on its way (0.49.2: also while its jump runs)
     std::vector<SeenLine> lines;         // spectral lines seen so far
     bool autoPhotons = false;
+    bool photonLobe = false;             // 0.78.0: draw the emission pattern's outline (the dipole lobe) of the photon on its way (one-electron cloud views)
     double wait = 0.3, boost = 0;
     std::string last, msg;
     ChartViewState chartView;            // the chart of nuclides: tilt, zoom, pan (kept across init(); not saved)

@@ -226,6 +226,15 @@ bool Renderer2D::rocksGpu(const RockSet& set, const RockFrame& f, double size, C
     return true;
 }
 
+bool Renderer2D::grainsGpu(int slot, int count, const RockFrame& f, double size, Color c) {
+    if (!rocks_ || !rocks_->ok() || !rocks_->grainsOk() || slot < 0 || count <= 0) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::RocksGpu; sg.first = 0; sg.count = count; sg.size = static_cast<float>(size); sg.c = c; sg.slot = slot; sg.rf = f; sg.grains = true;
+    segments_.push_back(sg);
+    return true;
+}
+
 void Renderer2D::blobs(const Blob* b, int count, bool additive) { blobsPalette(b, count, additive, PhasePalette()); }
 
 void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const PhasePalette& pal) {

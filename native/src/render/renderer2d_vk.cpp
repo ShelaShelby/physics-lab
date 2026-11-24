@@ -111,7 +111,7 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     bool grids = false;
     for (std::size_t i = 0; i < n; i++) {
         const Segment& sg = segments_[i];
-        if (sg.kind == Kind::RocksGpu) vkRocks_[i] = rocks_ && rocks_->dispatch(sg.slot, sg.rf) ? 1 : 0;
+        if (sg.kind == Kind::RocksGpu) vkRocks_[i] = rocks_ && (sg.grains ? rocks_->grainDispatch(sg.slot, sg.rf) : rocks_->dispatch(sg.slot, sg.rf)) ? 1 : 0;   // (0.78.0: or a comet's grains)
         else if (sg.kind == Kind::CloudGpu && vkGlow_) {
             const CloudGpuDraw& d = clouds_[std::size_t(sg.slot)];
             const VkBuffer jump = d.grpBuf ? vkJumpGroups(atomCard_) : VK_NULL_HANDLE;

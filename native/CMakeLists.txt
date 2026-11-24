@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.77.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.78.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -41,6 +41,7 @@ endif()
 add_library(orbit_core STATIC
   src/orbit/solar_data.cpp
   src/orbit/kepler.cpp
+  src/orbit/comet_tail.cpp
   src/orbit/alphacen.cpp
   src/orbit/saturn_profile.cpp
   src/orbit/ring_bands.cpp
@@ -82,6 +83,7 @@ add_custom_command(
   COMMENT "Embedding the GRASP2018 clouds")
 add_library(atom_core STATIC
   src/atom/atom_core.cpp
+  src/atom/photon_pattern.cpp
   src/atom/atom_sim.cpp
   src/atom/atom_learn.cpp
   src/atom/atom_tools.cpp
@@ -410,7 +412,7 @@ if(PL_BUILD_APP)
                       # 0.61.0 (Vulkan step 3): the card programs, the same way (compute shaders: their loose uniforms in a block at set 0 binding 7; their
                       # storage buffers keep the bindings of their text)
                       "cloud_vert:kCloudVS" "moldot_vert:kMolDotVS" "cgrid_vert:kCloudGridVS" "mgrid_vert:kMolGridVS" "grid_frag:kCloudGridFS"
-                      "groups_comp:kGroupsCS" "outdens_comp:kOutlineDensityCS" "outlevel_comp:kOutlineLevelCS" "rocks_comp:kRocksCS" "slice_comp:kSliceDotsCS"
+                      "groups_comp:kGroupsCS" "outdens_comp:kOutlineDensityCS" "outlevel_comp:kOutlineLevelCS" "rocks_comp:kRocksCS" "grains_comp:kGrainsCS" "slice_comp:kSliceDotsCS"
                       "jump_comp:kJumpShowCS" "moldots_comp:kMolDotsCS"
                       # 0.62.0 (Vulkan step 4): the Black Hole Lab's, the same way (kKerrSkyFS from its parts, as render/kerr_sky.cpp; the light paths' compute
                       # shader in double precision: shaderFloat64)
@@ -480,6 +482,7 @@ if(PL_BUILD_APP)
     src/blackhole/spin_card.cpp
     src/blackhole/sky_card.cpp
     src/orbit/belt_layer.cpp
+    src/orbit/tail_layer.cpp
     src/orbit/orbit_view.cpp
     src/orbit/orbit_lines.cpp
     src/orbit/lines_check.cpp
@@ -537,7 +540,7 @@ if(PL_BUILD_APP)
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
   if(PL_VK_TESTS)                                      # vk_compare_tests: the GPU programs against the CPU
     add_executable(vk_compare_tests tests/vk_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/renderer2d_vk.cpp src/render/kerr_compute.cpp
-                   src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp src/orbit/ring_check.cpp src/atom/classic_check.cpp
+                   src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp src/orbit/tail_layer.cpp src/orbit/ring_check.cpp src/atom/classic_check.cpp
                    src/atom/nucdens_check.cpp src/orbit/orbit_lines.cpp src/orbit/lines_check.cpp src/render/vk_lines.cpp src/molecule/surface_check.cpp src/render/vk_surface.cpp
                    src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp
                    ${PL_VK_SHADER_HEADERS})

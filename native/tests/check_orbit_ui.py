@@ -182,7 +182,9 @@ def part_rings(binary, work):
     # and the Path says why. Then the two pictures (card, processor) of the same moment differ in under 2 % of the pixels by more than 8 levels.
     import re
     BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "orbit.saturn",
-             "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
+             "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "0.7", "PL_BENCH_SHOT": "0.5"}
+    # (0.78.0: 0.7 s counted, the picture at 0.5 s; was 2.0 s and 1.5 s. The CPU run draws about 5 frames a second on the build machine's software GPU,
+    # so the part took 243-300 s on GitHub, at the 5-minute limit. The checks are the same: the start-up check, both Paths, and one moment in both runs.)
     runs = {}
     for tag, extra in (("card", {}), ("cpu", {"PL_RINGS_CARDFAIL": "1"})):
         d = os.path.join(work, "rings_" + tag); os.makedirs(d, exist_ok=True)

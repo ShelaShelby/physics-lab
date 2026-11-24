@@ -49,6 +49,7 @@ SCENES = {
     "blackhole.moving_gas": "Black Hole Lab: distance 10.0",   # 0.72.0
     "orbit.alphacen": "Orbit Lab, Alpha Centauri: zoom",       # 0.73.0
     "orbit.flyby": "Orbit Lab: zoom 4.1",                      # 0.75.0
+    "orbit.comet_tails": "Orbit Lab: zoom 1.00",               # 0.78.0: the zoom that puts Hale-Bopp's farthest grain at 0.3 of the picture's smaller side
     "ui.guide_scroll": "Learn guide 0:3", "ui.data_plot": "Data panel over the", "ui.settings_open": "the belts' rocks",
 }
 

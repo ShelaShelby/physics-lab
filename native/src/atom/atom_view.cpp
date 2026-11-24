@@ -1,4 +1,5 @@
 #include "atom_view.h"
+#include "photon_pattern.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -1167,7 +1168,18 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     if (s.photon) {   // 0.49.2: the photon is a wave train as long as its jump: it streams out of the atom while an emit jump runs, and into it while an absorb jump runs
         const Photon& ph = *s.photon;
         const bool emit = ph.kind == "emit";
-        const double dx = std::cos(ph.ang), dy = std::sin(ph.ang), nx = -dy, ny = dx;
+        // 0.78.0: a photon of the one-electron cloud views has a 3D direction from its jump's dipole pattern (atom/photon_pattern.h), seen from the camera here:
+        // its path on screen is the projected direction, shortened by the projection (fs: 1 across the view, small towards or away from the viewer; at least
+        // 0.05 so the train stays visible). Otherwise (no m known) the angle in the picture's plane, as before.
+        double dx = std::cos(ph.ang), dy = std::sin(ph.ang), fs = 1;
+        if (ph.has3d) {
+            double X = 0, Y = 0, D = 0;
+            proj(ph.dir[0], ph.dir[1], ph.dir[2], X, Y, D);
+            const double L = std::hypot(X, Y);
+            if (L > 1e-9) { dx = X / L; dy = -Y / L; }
+            fs = std::max(0.05, L);
+        }
+        const double nx = -dy, ny = dx;
         const double Rr = std::min((w / 2 - 30) / std::max(0.01, std::fabs(dx)), (h / 2 - 30) / std::max(0.01, std::fabs(dy)));   // to the picture's edge
         const double v = Rr / std::max(1e-6, ph.dur);                      // screen speed, px/s (slowed down: the real light crosses an atom in about 1e-18 s)
         const double len = std::max(60.0, v * ph.jdur);                    // the train's length on screen: its jump's length (Reduced motion: a short packet)
@@ -1191,16 +1203,37 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 Pen pen{R, pa[0], withA(pc, pa[1])};
                 for (double r = lo; r <= hi + 1e-9; r += 1.5) {
                     const double off = 8 * env(r) * std::sin(2 * kPi * (r - (emit ? 1 : -1) * v * ph.t) / (lamPx * 2.5));   // crests move with the train
-                    pen.to(cx + dx * r + nx * off, cy + dy * r + ny * off);
+                    pen.to(cx + dx * r * fs + nx * off, cy + dy * r * fs + ny * off);
                 }
             }
+        }
+        if (ph.has3d && s.photonLobe) {   // 0.78.0: the emission pattern's outline: the surface r(n) = (1 - |n . u|^2) R seen from the camera, 12 meridians about z and
+            // 3 circles of latitude (the GPU draws the lines; a few hundred points a frame). R: a quarter of the picture's smaller side.
+            const double RL = 0.25 * std::min(w, h);
+            const Color lc = withA(pc, 0.6);
+            const auto at = [&](double th, double phv, double& sx, double& sy) {
+                const double n[3] = {std::sin(th) * std::cos(phv), std::sin(th) * std::sin(phv), std::cos(th)};
+                const double r = dipolePattern(ph.u, n) * (8 * kPi / 3) * RL;   // (the pattern over its top 3 / (8 pi): 1 at most)
+                double X = 0, Y = 0, D = 0;
+                proj(n[0] * r, n[1] * r, n[2] * r, X, Y, D);
+                sx = cx + X; sy = cy - Y;
+            };
+            for (int k = 0; k < 12; k++) {
+                Pen pen{R, 1.2, lc};
+                for (int i = 0; i <= 48; i++) { double sx, sy; at(kPi * i / 48, 2 * kPi * k / 12, sx, sy); pen.to(sx, sy); }
+            }
+            for (const double th : {kPi / 4, kPi / 2, 3 * kPi / 4}) {
+                Pen pen{R, 1.2, lc};
+                for (int i = 0; i <= 96; i++) { double sx, sy; at(th, 2 * kPi * i / 96, sx, sy); pen.to(sx, sy); }
+            }
+            T.draw("emission pattern (electric dipole)", cx + RL * 0.75, cy - RL * 0.9, 11, css.muted);
         }
         const double atAtom = env(0.0);                                    // how much of the train is passing the nucleus now: the atom glows in the photon's colour
         if (atAtom > 0.01) R.ring(cx, cy, 14 + 6 * atAtom, 3, withA(pc, 0.55 * atAtom));
         const std::string tag = bandTag(ph.lam);
         const std::string ptxt = (ph.name.empty() ? "" : ph.name + "  ·  ") + fmtLam(ph.lam) + tag + (tag.empty() ? "" : ", invisible to the eye") + "  ·  " + fmtEV(ph.E) + "  ·  wave not to scale";   // (0.22: drawn grey)
         // the label past the train's outer end (not across the wave): left-aligned when the train points right, right-aligned when it points left, kept on the picture
-        const double far = hi > lo ? hi : std::clamp(front, 0.0, Rr), ex = cx + dx * far, ey = cy + dy * far;
+        const double far = (hi > lo ? hi : std::clamp(front, 0.0, Rr)) * fs, ex = cx + dx * far, ey = cy + dy * far;
         const double tw = T.width(ptxt, 12), right = dx >= 0 ? 1 : 0;
         const double lx = ex + (dx >= 0 ? 10 : -10), ly = ey + (dy >= 0 ? 18 : -10);
         T.draw(ptxt, right > 0 ? std::max(8.0, std::min(w - tw - 8, lx)) : std::max(tw + 8, std::min(w - 8, lx)), std::max(96.0, std::min(h - 40, ly)), 12, css.fg, right > 0 ? 0 : 1);
@@ -1225,6 +1258,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             else {
                 const double e = 1 - std::pow(1 - u, 3), Rr = e * 0.42 * std::min(w, h);
                 R.ring(cx, cy, 6 + 60 * e, 2, withA(hexColor("#f0c040"), std::max(0.0, 1 - u * 1.4)));   // flash
+                // 0.78.0 (outside review): the flash and the flying particles are a drawing (their directions, speeds and sizes are not calculated): said beside them
+                T.draw("decay: a drawing, directions and speeds not to scale", cx - 0.5 * T.width("decay: a drawing, directions and speeds not to scale", 11), cy + 0.42 * std::min(w, h) + 18, 11,
+                       withA(css.muted, std::min(1.0, 2 * (1 - u))));
                 for (const FlyingShot& sh : s.decFx->shots) {
                     const double x = cx + std::cos(sh.a) * Rr, y = cy + std::sin(sh.a) * Rr, al = std::min(1.0, 2 * (1 - u));
                     const Color col = withA(hexColor(sh.q.col.c_str()), al);

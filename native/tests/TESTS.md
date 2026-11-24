@@ -63,7 +63,7 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_5q.py:lit | 239 | DELETE | - | lit buttons in 11 themes: theme repeats |
 | check_5l.py:legend | 232 | DELETE | - | the legend at two sizes: pixel layout |
 | check_5h.py:centre | 230 | DELETE | - | the Atom picture's centre at three sizes: pixel layout |
-| check_orbit_ui.py:rings | 213 | KEEP | ui_orbit_card | GPU vs CPU: Saturn's rings on the card against the processor |
+| check_orbit_ui.py:rings | 213 (0.78.0: 30 alone on the build machine, was 68; 0.7 s counted, was 2.0) | KEEP | ui_orbit_card | GPU vs CPU: Saturn's rings on the card against the processor |
 | check_orbit_ui.py:facts | 201 | DELETE | - | the fact line's timing and places: layout |
 | check_5p.py:picker | 199 | DELETE | - | the picker's place: pixel layout |
 | check_5k.py:contents | 191 | DELETE | - | the Contents list three times in a row: one old fixed bug |

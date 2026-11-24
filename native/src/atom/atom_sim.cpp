@@ -1,4 +1,5 @@
 #include "atom_sim.h"
+#include "photon_pattern.h"
 #include "quark_tomo.h"
 #include "radii.h"
 #include "dirac.h"
@@ -10,6 +11,8 @@
 #include "zeeman.h"
 
 #include <algorithm>
+#include <cstring>
+#include <random>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -1249,7 +1252,16 @@ void AtomLab::startJump(const std::string& kind, int to) {   // emit: the jump a
         dText = diracStateText(c.n, c.l, j2) + " → " + diracStateText(o.n, o.l, jp) + (js.size() > 1 ? " (" + numText(100 * (jp == js[0] ? w[0] : w.back()) / tot, 3) + " % of this shell's line strength)" : "");
     }
     const std::string col = lamColorCss(info.lam);
-    const Photon ph{kind, from, to, info.E, info.lam, info.name, col, random() * kPi * 2, 0, 1.6, jumpDuration(kJumpEmit), false};
+    Photon ph{kind, from, to, info.E, info.lam, info.name, col, random() * kPi * 2, 0, 1.6, jumpDuration(kJumpEmit), false};
+    if (p.view != "Orbit" && dipoleUnit(kind == "emit" ? stateId() : to, kind == "emit" ? to : stateId(), ph.u)) {   // 0.78.0: the dipole pattern (the Orbit view knows no m)
+        // (an absorbed photon comes in from a direction drawn the same way: the pattern is the same both ways). Its own generator, seeded from the angle already
+        // drawn, so the lab's random sequence (recorded by the tests) is the one it was before 0.78.0.
+        std::uint64_t seed = 0;
+        std::memcpy(&seed, &ph.ang, sizeof seed);
+        std::mt19937_64 gen(seed);
+        drawDipoleDirection(ph.u, [&gen] { return double(gen() >> 11) * (1.0 / 9007199254740992.0); }, ph.dir);
+        ph.has3d = true;
+    }
     s.photon = ph;                                               // 0.49.2: an emitted photon leaves during its jump, which starts now
     if (std::none_of(s.lines.begin(), s.lines.end(), [&](const SeenLine& L) { return std::fabs(L.lam - info.lam) < 0.05; }))
         s.lines.push_back({info.lam, col});

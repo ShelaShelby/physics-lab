@@ -199,14 +199,14 @@ static void gpuRocksPictures(render::Renderer2D& R, const std::string& dir) {
             bool readPositions(int, std::vector<float>&) override { return false; }
             int uploads() const override { return 0; }
         };
-        // more sets than the GPU holds (16): the layer cannot send them all, so the CPU draws that frame; the next normal frame is on the GPU again
+        // more sets than the GPU holds (32; 0.78.0, on purpose: was 16, the comets' grains take a slot each): the layer cannot send them all, so the CPU draws that frame; the next normal frame is on the GPU again
         {
             orbit::SolarSystem many = sys;
             many.belts.clear();
-            for (int i = 0; i < 17; i++) { orbit::BeltGroup g = sys.belts[0]; g.serial = 70000 + std::uint64_t(i); many.belts.push_back(g); }
+            for (int i = 0; i < 33; i++) { orbit::BeltGroup g = sys.belts[0]; g.serial = 70000 + std::uint64_t(i); many.belts.push_back(g); }
             orbit::BeltLayer ml;
             draw1(R, 1040, 713, Color{0, 0, 0, 1}, [&] { ml.draw(R, many, cam, -1, pink, true); });
-            check("rocks logic: 17 sets of rocks do not fit in the 16 slots: that frame is drawn by the CPU", ml.lastPath() == orbit::BeltLayer::Path::Cpu);
+            check("rocks logic: 33 sets of rocks do not fit in the 32 slots: that frame is drawn by the CPU", ml.lastPath() == orbit::BeltLayer::Path::Cpu);
             draw1(R, 1040, 713, Color{0, 0, 0, 1}, [&] { ml.draw(R, sys, cam, -1, pink, true); });
             check("rocks logic: the next frame with the normal belts is on the GPU again (the other sets were let go)", ml.lastPath() == orbit::BeltLayer::Path::Gpu);
         }

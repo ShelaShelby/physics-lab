@@ -148,7 +148,7 @@ std::vector<LegendEntry> legendEntries(const AppState& app) {
     if (!planets.empty()) v.push_back({LegendEntry::Line, {planets[2 % planets.size()]}, app.set.orbits ? "A planet's orbit (its whole path) and its tail, in its colour" : "A planet's tail, in its colour"});
     if (app.set.dwarfs) v.push_back({LegendEntry::Dots, dwarfs, "Dwarf planets: their own colours"});
     if (app.set.moons) v.push_back({LegendEntry::Disc, {orbit::marks::kMoon}, "A moon"});
-    if (app.set.comets) v.push_back({LegendEntry::Dots, {"#ffffff", hex(orbit::marks::kIonTail), hex(orbit::marks::kDustTail)}, "A comet: a bright head, a blue gas tail, a yellow dust tail (tails drawn for show, not to scale)"});
+    if (app.set.comets) v.push_back({LegendEntry::Dots, {"#ffffff", hex(orbit::marks::kIonTail), hex(orbit::marks::kDustTail)}, "A comet: a bright head, a blue gas tail along the solar wind, yellow dust grains on their calculated orbits (the shape is calculated, the brightness is a model)"});
     if (app.set.belts) {
         std::vector<std::string> cols;
         for (const orbit::BeltGroup& b : app.sys.belts) cols.push_back(b.color);

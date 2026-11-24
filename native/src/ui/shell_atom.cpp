@@ -662,6 +662,8 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             if (button("atom.absorb", ImVec2(o.x + half + m.s8, o.y), ImVec2(half, static_cast<float>(m.control)), displayable("↑ Absorb photon"))) L.absorb();
             p.y += m.control + m.s4;
             if (pButton(p, "atom.auto", displayable(L.autoText()), Face::Secondary, L.s.autoPhotons)) L.toggleAuto();
+            if (!L.manyOn() && !orbit && pButton(p, "atom.lobe", displayable(L.s.photonLobe ? "Emission pattern: shown" : "Emission pattern: hidden"), Face::Secondary, L.s.photonLobe))   // 0.78.0
+                L.s.photonLobe = !L.s.photonLobe;
             notesFold(p, "jump", {ui::atomNote(L.levelOn() ? "jumpLevel" : L.manyOn() ? (P.mrel != "Non-relativistic" && atom::graspHas(P.Z) ? "jumpValenceRel" : "jumpValence") : orbit ? "jumpOrbit" : "jumpCloud")});   // 0.49.2: the relativistic note; the many-electron notes also in Orbit
             if (L.levelOn()) notesFold(p, "levels", levelListNotes(P.Z));    // 0.47.3 (D2): every other measured level
         }

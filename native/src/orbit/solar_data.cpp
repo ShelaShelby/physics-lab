@@ -81,32 +81,32 @@ const MoonData kMoons[] = {
 // Swift-Tuttle 26. SBDB gives no diameter for NEOWISE: its 5 km is kept (it only sets the dot's size and a card line) and the card says "rough: JPL gives no size".
 const CometData kComets[] = {
     // Halley: JPL Small-Body Database, orbit_id 75 (solution date 2025-11-21 15:57:34), epoch JD 2439875.5 = 1968-01-20 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
-    {"Halley", "#8ecbff", 0.5748638313743413, 0.9679359956953211, 162.1905300439129, 59.09894720612437, 112.2414314637764, 2446469.9736161465, 27728.04608790421, 11, 1,
+    {"Halley", "#8ecbff", 0.5748638313743413, 0.9679359956953211, 162.1905300439129, 59.09894720612437, 112.2414314637764, 2446469.9736161465, 27728.04608790421, 11,
      "Halley’s Comet",
      // 0.39.3: the real perihelion was 9 Feb 1986 (JPL news "Return of Halley's Comet", 9 Jan 1985: "perihelion will occur on Feb. 9, 1986"); the 1968 record's
      // two-body tp above is 8 Feb 1986 11:22 TDB, which the card's "Last closest approach" shows. Next perihelion 28 July 2061 17:17 TDB: JPL Horizons, orbit solution JPL#75
      // (osculating elements at 2061-07-28, Tp = JD 2474034.220; data/jpl/horizons-halley-2061.txt, read 2026-11-11; 0.39.3 had taken the date from Wikipedia).
      "Seen from Earth about every 76 years: closest to the Sun on 9 Feb 1986 (JPL), next due 28 July 2061 (JPL’s prediction); this lab’s simple orbit puts these on 8 Feb 1986 and in January 2062. It goes round backwards"},
     // Hale–Bopp: JPL Small-Body Database, orbit_id 226 (solution date 2022-08-01 01:56:46), epoch JD 2459837.5 = 2022-09-15 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
-    {"Hale–Bopp", "#b4a0ff", 0.890537663547794, 0.9949810027633206, 89.28759424740302, 282.7334213961641, 130.4146670659176, 2450537.134907144, 863279.5034870314, 60, 1.7,
+    {"Hale–Bopp", "#b4a0ff", 0.890537663547794, 0.9949810027633206, 89.28759424740302, 282.7334213961641, 130.4146670659176, 2450537.134907144, 863279.5034870314, 60,
      "Comet Hale–Bopp",
      // 0.39.3: real perihelion 1 Apr 1997 03:19 UT (NASA NSSDC "Comet Hale-Bopp" page, D. R. Williams); the 2022 record's two-body tp above is 29 Mar 1997, which the card shows
      "Bright enough to see with the naked eye for 18 months in 1996–97, closest to the Sun on 1 Apr 1997 (NASA; this lab’s simple orbit, fixed in 2022, puts it on 29 Mar). It will be back in about 2,400 years"},
     // NEOWISE: JPL Small-Body Database, orbit_id 31 (solution date 2024-07-30 14:57:24), epoch JD 2459036.5 = 2020-07-06 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
-    {"NEOWISE", "#7fe0c8", 0.2946512493809196, 0.9991780262531292, 128.9375027594809, 61.01042818536988, 37.2786584481257, 2459034.1788980444, 2478985.217997125, 5, 1,
+    {"NEOWISE", "#7fe0c8", 0.2946512493809196, 0.9991780262531292, 128.9375027594809, 61.01042818536988, 37.2786584481257, 2459034.1788980444, 2478985.217997125, 5,
      "Comet NEOWISE (C/2020 F3)",
      "Put on a show in the evening sky of July 2020. It will not be back for about 6,800 years", true},
     // Encke: JPL Small-Body Database, orbit_id K273/20 (solution date 2026-10-01 15:11:48), epoch JD 2460147.5 = 2023-07-22 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
-    {"Encke", "#ffd28a", 0.3395910296522707, 0.8469532425568865, 11.33709697552753, 334.0240655739339, 187.2820411908973, 2460240.026674769, 1207.248132847095, 4.8, 0.35,
+    {"Encke", "#ffd28a", 0.3395910296522707, 0.8469532425568865, 11.33709697552753, 334.0240655739339, 187.2820411908973, 2460240.026674769, 1207.248132847095, 4.8,
      "Comet Encke (2P)",
      "The shortest trip of any fairly bright comet: 3.3 years. Its dust makes the Taurid meteor showers"},
     // 67P: JPL orbit solution K284/1 (the same solution as SBDB's current record, whose epoch is 2015-Oct-22), osculating at epoch JD 2459520.5 = 2021-11-02 00:00 TDB (the 2021 perihelion) from Horizons ELEMENTS (EC QR IN OM W Tp PR).
     // SBDB's epoch-2015 elements as a fixed orbit are 1.37 AU off Horizons in Nov 2021 and 0.15 AU in Jan 2026; these are 0.011 AU off in Jan 2026 (tools/make_comet_ref.py). One solution, one epoch.
-    {"67P", "#ff9fb0", 1.210612534256783, 0.6497050988505667, 3.871684817044239, 36.33532737405282, 22.1315389981404, 2459520.562505543, 2346.688539238651, 3.4, 0.3,
+    {"67P", "#ff9fb0", 1.210612534256783, 0.6497050988505667, 3.871684817044239, 36.33532737405282, 22.1315389981404, 2459520.562505543, 2346.688539238651, 3.4,
      "Comet 67P/Churyumov–Gerasimenko",
      "In 2014 the Rosetta spacecraft went into orbit around it and the Philae lander touched down on it. Shaped like a rubber duck"},
     // Swift–Tuttle: JPL Small-Body Database, orbit_id 32 (solution date 2001-10-09 15:34:49), epoch JD 2450000.5 = 1995-10-10 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
-    {"Swift–Tuttle", "#d0e88a", 0.959516155068868, 0.963225755046038, 113.453816997171, 139.3811920815948, 152.9821676305871, 2448968.499784556, 48681.19346262312, 26, 0.9,
+    {"Swift–Tuttle", "#d0e88a", 0.959516155068868, 0.963225755046038, 113.453816997171, 139.3811920815948, 152.9821676305871, 2448968.499784556, 48681.19346262312, 26,
      "Comet Swift–Tuttle",
      // Last perihelion 12 Dec 1992 07:47 TDB, next 12 July 2126 09:44 TDB: JPL Horizons, orbit solution JPL#32 (osculating Tp = JD 2448968.824 and 2497757.905;
      // data/jpl/horizons-swift-tuttle-1992-2126.txt, read 2026-11-11; 0.39.3 had taken them from Wikipedia); the 1995 record's tp and period above give 11 Dec 1992 and March 2126

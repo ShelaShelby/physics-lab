@@ -83,6 +83,10 @@ std::vector<LearnSection> lookSections(const AtomParams& p, const std::string& l
         "\n<p class=\"lrnP\">The <b>electron</b> has a negative charge (−1), exactly as big as a proton’s charge but the opposite sign. That is why an atom with as many electrons as protons has no charge overall. An electron is also very light: a proton weighs about 1,836 times more.</p>"
         "\n<p class=\"lrnP\">Opposite charges attract, so the nucleus pulls on the electron and keeps it around. But the electron can only have certain amounts of energy, called <b>energy levels</b> (n = 1, 2, 3 …). Level n = 1 is the lowest, so the electron cannot sink any further.</p>"
         "\n<p class=\"lrnP\">Give an electron the right amount of energy, for example from a particle of light (a <b>photon</b>), and it jumps up a level. When it drops back down it gives that energy out as light. You can try this in the Photons card.</p>"
+        "\n<p class=\"lrnP\">Which way does the photon go? Not just anywhere: the jump makes the electron's charge swing like a tiny antenna (a <b>dipole</b>), and an antenna sends most light out sideways and none along its own line. "
+        "For a jump that keeps the electron's m (Δm = 0, such as 2p z → 1s) the charge swings along the z axis, so the light goes out as sin²θ about z and never straight up or down. "
+        "For a jump that changes m by one (Δm = ±1) the charge goes round in a circle, and the light goes out as (1 + cos²θ)/2: most along z. In the Cloud views each photon's direction is drawn from its jump's pattern, "
+        "and “Emission pattern” in the Photons card shows its shape (J. D. Jackson, Classical Electrodynamics, 3rd ed., sect. 9.2). Limits: the dipole (E1) part only, one electron, and the light's polarisation is not shown.</p>"
         "\n<p class=\"lrnP lrnMuted\">As far as anyone has measured, an electron has no size at all. It is a point.</p>"});
     // 0.39.1: since 0.39 the lab can draw every electron (Electrons: All); this section said it draws only one
     D.push_back({"one", "☝ One electron, or all of them?",

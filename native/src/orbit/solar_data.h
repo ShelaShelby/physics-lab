@@ -73,7 +73,7 @@ struct CometData {
     double perihelionJD;        // Julian day of a perihelion passage
     double periodDays;          // orbital period, days
     double nucleusKm;           // nucleus size, km
-    double tail;                // tail length scale (drawing only, no source: the tails are labelled "drawn for show"), AU
+    // (0.78.0: the "tail" length scale, a drawing number with no source, is gone: the tails are calculated, orbit/comet_tail.h)
     const char* title;
     const char* note;
     bool nucleusRough = false;  // the nucleus size has no named source (JPL SBDB gives none): the card says so (0.10.5 stage 5)

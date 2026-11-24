@@ -23,6 +23,7 @@
 #include "r2d_outdens_comp.h"
 #include "r2d_outlevel_comp.h"
 #include "r2d_rocks_comp.h"
+#include "r2d_grains_comp.h"
 #include "r2d_slice_comp.h"
 #include "r2d_ringprobe_comp.h"
 #include "r2d_classic_comp.h"
@@ -62,7 +63,7 @@ std::string vkCardId(const char* name, std::initializer_list<const char*> texts)
 std::string vkCardVersion(const std::string& name) {
     if (name == "groups") return vkCardId("groups", {kGroupsCS});
     if (name == "outline") return vkCardId("outline", {kOutlineDensityCS, kOutlineLevelCS});
-    if (name == "rocks") return vkCardId("rocks", {kRocksCS});
+    if (name == "rocks") return vkCardId("rocks", {kRocksCS, kGrainsCS});   // (0.78.0: and the comets' grains)
     if (name == "cloud") return vkCardId("cloud", {kCloudVS, kCloudGridVS, kCloudGridFS, kBlobFS});
     if (name == "slice") return "vulkan " + sliceShaderId();
     if (name == "jump") return "vulkan " + jumpShaderId();
@@ -1042,18 +1043,69 @@ IOutlineCompute* makeVkOutlineCompute(VkCards& c, std::string& why) {
 class VkRockCompute : public IRockCompute {
 public:
     explicit VkRockCompute(VkCards& c) : c_(c) {}
-    ~VkRockCompute() override { for (int i = 0; i < kSlotsR; i++) freeSlot(i); c_.dropBuffer(read_); c_.dropKernel(k_); }
+    ~VkRockCompute() override { for (int i = 0; i < kSlotsR; i++) freeSlot(i); c_.dropBuffer(read_); c_.dropKernel(k_); c_.dropKernel(g_); }
     bool make(std::string& why) { return c_.makeKernel(k_r2d_rocks_comp, sizeof k_r2d_rocks_comp, k_, why); }
+    bool makeGrains(std::string& why) { return c_.makeKernel(k_r2d_grains_comp, sizeof k_r2d_grains_comp, g_, why); }   // 0.78.0
     bool ok() const override { return k_.pipe != VK_NULL_HANDLE && c_.ok(); }
     void keepOnly(const std::vector<std::uint64_t>& live) override {
-        for (int i = 0; i < kSlotsR; i++) if (slots_[i].used && std::find(live.begin(), live.end(), slots_[i].serial) == live.end()) freeSlot(i);
+        for (int i = 0; i < kSlotsR; i++) if (slots_[i].used && !slots_[i].grains && std::find(live.begin(), live.end(), slots_[i].serial) == live.end()) freeSlot(i);
     }
+    // ---- 0.78.0: the comets' dust grains (kGrainsCS): one slot a comet, its ring rewritten in parts ----
+    bool grainsOk() const override { return ok() && grainsOn && g_.pipe != VK_NULL_HANDLE; }
+    void keepOnlyGrains(const std::vector<std::uint64_t>& live) override {
+        for (int i = 0; i < kSlotsR; i++) if (slots_[i].used && slots_[i].grains && std::find(live.begin(), live.end(), slots_[i].serial) == live.end()) freeSlot(i);
+    }
+    int grainSlot(std::uint64_t id, int count, bool& fresh) override {
+        fresh = false;
+        if (!grainsOk() || count <= 0) return -1;
+        int freeAt = -1;
+        for (int i = 0; i < kSlotsR; i++) {
+            if (!slots_[i].used) { if (freeAt < 0) freeAt = i; continue; }
+            if (slots_[i].grains && slots_[i].serial == id && slots_[i].count == count) return i;
+        }
+        if (freeAt < 0) return -1;
+        Slot& sl = slots_[freeAt];
+        const VkBufferUsageFlags in = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        if (!c_.makeBuffer(VkDeviceSize(count) * kGrainStride * 4u, in, false, sl.el, "the grains' starts") ||
+            !c_.makeBuffer(VkDeviceSize(count) * 8u, in, false, sl.nn, "the grains' release times") ||
+            !c_.makeBuffer(VkDeviceSize(count) * 8u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false, sl.pos, "the grains' places")) {
+            sl.used = true; freeSlot(freeAt); return -1;
+        }
+        sl.used = true; sl.grains = true; sl.serial = id; sl.count = count;
+        fresh = true;
+        uploads_++;
+        return freeAt;
+    }
+    bool grainWrite(int slot, int first, int n, const float* el, const double* t0) override {
+        if (!grainsOk() || slot < 0 || slot >= kSlotsR || !slots_[slot].used || !slots_[slot].grains || first < 0 || n <= 0 || first + n > slots_[slot].count) return false;
+        const Slot& sl = slots_[slot];
+        c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToTransfer);   // (the last dispatch's reads of these grains come before the copy: write after read)
+        c_.copyIn(el, static_cast<std::size_t>(n) * kGrainStride * 4u, sl.el, VkDeviceSize(first) * kGrainStride * 4u);
+        c_.copyIn(t0, static_cast<std::size_t>(n) * 8u, sl.nn, VkDeviceSize(first) * 8u);
+        c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute);
+        return true;
+    }
+    bool grainDispatch(int slot, const RockFrame& f) override {
+        if (!grainsOk() || slot < 0 || slot >= kSlotsR || !slots_[slot].used || !slots_[slot].grains || (counting && !c_.firstUseTurn(use))) return false;
+        const Slot& sl = slots_[slot];
+        const float tHi = static_cast<float>(f.t), tLo = static_cast<float>(f.t - static_cast<double>(tHi));   // t = tHi + tLo exactly
+        const int d3 = f.d3 ? 1 : 0;
+        const float tt[2] = {tHi, tLo};
+        const double bc[4] = {f.bc[0], f.bc[1], f.bc[2], f.zNear}, cam[4] = {f.ca, f.sa, f.cb, f.sb}, view[4] = {f.px, f.sx, f.sy, f.d}, off[4] = {f.cd, f.lx, f.ly, f.F};
+        g_.u.i("uCount", &sl.count, 1); g_.u.i("uD3", &d3, 1); g_.u.f("uT", tt, 2);
+        g_.u.d("uBc", bc, 4); g_.u.d("uCam", cam, 4); g_.u.d("uView", view, 4); g_.u.d("uOff", off, 4);
+        if (!c_.dispatch(g_, {&sl.el, &sl.nn, &sl.pos}, static_cast<std::uint32_t>((sl.count + 63) / 64))) return false;
+        c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToVertex);
+        if (counting) c_.firstUse(use);
+        return true;
+    }
+    bool grainsOn = false;
     int slotFor(const RockSet& s) override {
         if (!ok() || s.count <= 0 || !s.el) return -1;
         int freeAt = -1;
         for (int i = 0; i < kSlotsR; i++) {
             if (!slots_[i].used) { if (freeAt < 0) freeAt = i; continue; }
-            if (slots_[i].serial == s.serial && slots_[i].count == s.count && slots_[i].isStatic == s.isStatic) return i;   // already on the card
+            if (!slots_[i].grains && slots_[i].serial == s.serial && slots_[i].count == s.count && slots_[i].isStatic == s.isStatic) return i;   // already on the card
         }
         if (freeAt < 0) return -1;
         Slot& sl = slots_[freeAt];
@@ -1108,11 +1160,11 @@ public:
     VkCards::FirstUse use;
     bool counting = true;
 private:
-    static constexpr int kSlotsR = 16;
-    struct Slot { bool used = false; std::uint64_t serial = 0; int count = 0; bool isStatic = false; VkCards::Buf el, nn, pos; };
+    static constexpr int kSlotsR = 32;   // (0.78.0: was 16; the comets' grains take one slot a comet)
+    struct Slot { bool used = false; std::uint64_t serial = 0; int count = 0; bool isStatic = false; bool grains = false; VkCards::Buf el, nn, pos; };
     void freeSlot(int i) { if (!slots_[i].used) return; c_.dropBuffer(slots_[i].el); c_.dropBuffer(slots_[i].nn); c_.dropBuffer(slots_[i].pos); slots_[i] = Slot(); }
     VkCards& c_;
-    VkCards::Kernel k_;
+    VkCards::Kernel k_, g_;
     Slot slots_[kSlotsR];
     VkCards::Buf read_;
     int uploads_ = 0;
@@ -1161,6 +1213,37 @@ IRockCompute* makeVkRockCompute(VkCards& c, std::string& why) {
     r->keepOnly({});
     if (!(e <= 1e-3)) { delete r; return S.fail(small, std::string("wrong: ") + t), nullptr; }
     G.end(small, t);
+    // 0.78.0: the comets' grains (kGrainsCS), the same program object and guard. A failure here leaves the rocks on the card and the grains on the CPU.
+    // Two grains, the camera as above: one on a circle of 1 AU (mu = the Sun's GM in AU^3/day^2, released at day 0, now a quarter turn later) lands at
+    // (400, 300 - 149.5978707); one with mu < 0 (no grain) lands off the picture (-1e9).
+    const std::string gpipe = "the comets' grains' pipeline", gsmall = "the comets' grains' first small run";
+    G.begin(gpipe);
+    if (forcedFail("grains")) G.end(gpipe, "not made: made to fail on purpose (PL_VK_CARDFAIL=grains); the comets' grains are placed by the CPU");
+    else if (!r->makeGrains(w)) G.end(gpipe, "not made: kGrainsCS on Vulkan: " + w + "; the comets' grains are placed by the CPU");
+    else {
+        G.end(gpipe, "kGrainsCS as SPIR-V (double precision: shaderFloat64), " + std::to_string(sizeof k_r2d_grains_comp) + " bytes");
+        G.begin(gsmall);
+        r->grainsOn = true;
+        const double mu = 1.32712440041279419e20 * 86400.0 * 86400.0 / (1.495978707e11 * 1.495978707e11 * 1.495978707e11);   // units::kGMSun in AU^3/day^2
+        const float gel[2 * kGrainStride] = {1.f, 0.f, 0.f, 0.f, static_cast<float>(std::sqrt(mu)), 0.f, static_cast<float>(mu), 0.f,
+                                             1.f, 0.f, 0.f, 0.f, 0.f, 0.f, -1.f, 0.f};
+        const double gt0[2] = {0.0, 0.0};
+        RockFrame gf = f;
+        gf.t = 1.5707963267948966 / std::sqrt(mu);                         // a quarter turn, days
+        bool fresh = false;
+        const int gs = r->grainSlot(7, 2, fresh);
+        std::vector<float> c;
+        if (gs < 0 || !fresh || !r->grainWrite(gs, 0, 2, gel, gt0) || !r->grainDispatch(gs, gf) || !r->readPositions(gs, c) || c.size() != 4) {
+            r->grainsOn = false; G.end(gsmall, "failed: the run could not be made or read back; the comets' grains are placed by the CPU");
+        } else {
+            const double ge = std::max(std::abs(c[0] - 400.0), std::abs(c[1] - (300.0 - 149.5978707)));
+            char gtx[220];
+            std::snprintf(gtx, sizeof gtx, "(%.4f, %.4f) and (%.3g, %.3g), want (400, 150.4021) and off the picture: the largest difference %.2g point (limit 0.01)", static_cast<double>(c[0]), static_cast<double>(c[1]), static_cast<double>(c[2]), static_cast<double>(c[3]), ge);
+            if (!(ge <= 0.01) || !(c[2] < -1e8f)) { r->grainsOn = false; G.end(gsmall, std::string("failed, wrong: ") + gtx + "; the comets' grains are placed by the CPU"); }
+            else G.end(gsmall, gtx);
+        }
+        r->keepOnlyGrains({});
+    }
     r->counting = true;
     r->use.guard = &G;
     r->use.step = "the rocks' first full use";

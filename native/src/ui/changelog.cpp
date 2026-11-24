@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.78.0", "Comet tails worked out, and the photon's real direction",
+     "The comets' tails are now calculated instead of drawn for show. The dust tail is thousands of dust grains, each let go by the comet at a past moment and then "
+     "moving on its own orbit round a Sun whose pull is weakened by the push of sunlight (Finson and Probstein 1968); the gas tail points along the solar wind, about "
+     "400 km/s, as the moving comet meets it. The tails' shape is calculated, their brightness is a simple model, and the legend and the card say so. In the Atom Lab "
+     "a photon now leaves in the direction pattern of its jump: a jump that keeps m sends no light along the z axis, and \"Emission pattern\" draws the pattern's shape. "
+     "A radioactive decay's flash is labelled as a drawing. Saturn's rings still scatter light the same way in every direction: no table of measured brightness against "
+     "viewing angle could be found and saved."},
     {"0.77.0", "Planets as bright as measured, Earth's clouds, and fixes from a physics review",
      "An outside physics professor reviewed the app. Every planet and moon with a map is now as bright as measured: fully lit, its ball reflects its measured share "
      "of sunlight (Mallama and others 2017 for the planets, NASA's fact sheets for the moons). The Learn guide says the limits: a matte ball, no extra brightening "

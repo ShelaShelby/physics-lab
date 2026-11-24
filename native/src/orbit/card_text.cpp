@@ -72,7 +72,12 @@ static void cometCard(const SolarSystem& sys, const Body& b, Card& c) {
         const int y = fmt::yearUTC(static_cast<int64_t>(std::llround((cm.perihelionJD - 2440587.5) * 86400000.0)));
         c.lines.push_back("Comes back around the year " + std::to_string(static_cast<long long>(std::llround((y + yrs) / 10) * 10)));   // 0.39.2: a year has no thousands comma ("4,361"); to the nearest 10, as the fixed orbit's period is not that exact
     }
-    c.lines.push_back(r < 4 ? "Tails drawn for show: their length and shape are not to scale" : "No tails drawn beyond 4 AU (a drawing rule: real comets can be active farther out)");   // 0.48: was "frozen and dark, no tail" beyond 4 AU, false as a rule
+    // 0.78.0: the tails are calculated (orbit/comet_tail.h); 0.48: was "frozen and dark, no tail" beyond 4 AU, false as a rule
+    if (r < 4) {
+        c.lines.push_back("Tails calculated: dust grains on orbits pushed by sunlight, gas along the 400 km/s solar wind");
+        c.lines.push_back("The tails' brightness is a model, not measured");
+    } else
+        c.lines.push_back("No dust released beyond 4 AU (a drawing choice: real comets can be active farther out)");
     fixedOrbitLines(c);
     // the note, wrapped to about 42 letters a line
     std::string cur, word, note = cm.note;

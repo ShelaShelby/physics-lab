@@ -11,6 +11,7 @@
 #include "app/prefs.h"
 #include "camera.h"                              // 0.75.0: the camera (ViewCam) and its field of view, kFieldOfViewDeg (45 degrees: one constant, there)
 #include "belt_layer.h"
+#include "tail_layer.h"
 #include "card_text.h"
 #include "render/renderer2d.h"
 #include "solar_system.h"
@@ -67,6 +68,7 @@ void sunColourBytes(int rgb[3]);
 
 class OrbitView {
 public:
+    const TailLayer& tailLayer() const { return tailLayer_; }   // 0.78.0: the comets' tails (the benchmark's Path line, tests)
     // Draw one frame. The picture is width × height points, placed at (originX, originY)
     // points in the window (for the text, which Dear ImGui draws). `uiScale` turns points
     // into window pixels.
@@ -152,6 +154,7 @@ private:
     void drawAlphaCen(render::Renderer2D& r, ImDrawList* text, double originX, double originY, double uiScale, const SolarSystem& sys, const ViewSettings& set, double width, double height);
     std::map<std::pair<int, int>, double> exag_; // moon (body id, index) -> how many times too wide its orbit is drawn
     BeltLayer beltLayer_;                        // the belts' rocks: the CPU path (positions kept until the time moves) or the GPU path (orbit/belt_layer.h)
+    TailLayer tailLayer_;                        // 0.78.0: the comets' calculated tails (orbit/tail_layer.h): the dust grains on the GPU or the CPU, the gas tail's direction
 };
 
 }  // namespace orbit

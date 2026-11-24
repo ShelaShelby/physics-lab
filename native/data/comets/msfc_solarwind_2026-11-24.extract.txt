@@ -1,0 +1,18 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/comets/msfc_solarwind_2026-11-24.html
+# Reference: NASA Marshall Space Flight Center, Solar Physics, "The Solar Wind" (web page)
+# URL: https://solarscience.msfc.nasa.gov/SolarWind.shtml
+# Date read: 2026-11-24
+# sha256 of the original: 2ccf1309905919feeecd435f74b7cebd52a675d689a7badf3a336b244b84077e
+# Place in the original: the first paragraph (the speed) and the paragraph on fast and slow wind
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used: orbit/comet_tail.h kSolarWindKmS = 400 (the gas tail's direction); the 300 and 800 km/s are named in the app's text as the range.
+#--- begin the speed
+    The solar wind streams off of the Sun in all directions at speeds of
+    about 400 km/s (about 1 million miles per hour). The source of the solar wind is the Sun's
+#--- end
+#--- begin fast and slow wind
+    speed is high (800 km/s) over <a href="feature3.shtml#Coronal Holes">coronal holes</a> and
+    low (300 km/s) over <a href="feature3.shtml#Helmet Streamers">streamers</a>. These high and
+#--- end

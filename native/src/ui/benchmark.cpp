@@ -38,6 +38,8 @@
 #include "molecule/molecule.h"
 #include "molecule/vibration.h"
 #include "orbit/belts.h"
+#include "orbit/comet_tail.h"
+#include "orbit/solar_data.h"
 #include "orbit/ring_check.h"
 #include "orbit/lines_check.h"
 #include "molecule/surface_check.h"
@@ -137,6 +139,35 @@ void orbitFlyby(AppState& app) {
     const double W = app.canvasW > 0 ? app.canvasW : 1280, H = app.canvasH > 0 ? app.canvasH : 800;
     const double cap = R > 0 ? std::log10(orbit::focalFor(H) / (1.5 * R) * 34 * units::kSimLength / std::min(W, H)) : kSaturnZoom;
     setZoom(app, zoomOr(cap - 1e-9));               // (PL_BENCH_ZOOM: another zoom, for the trials)
+}
+// 0.78.0: comet Hale-Bopp at its perihelion on the lab's orbit (orbit.comet_tails): followed, 3D, every comet on, time running at 1 day a second; the zoom
+// the closest that shows its whole dust tail: the farthest grain (orbit/comet_tail.h, the oldest release of the largest beta) at 0.3 of the picture's
+// smaller side from the head (px = min(W, H) / 34 x 10^zoom / kSimLength at the target, orbit_view.cpp)
+void orbitCometTails(AppState& app) {
+    commonSetup(app);
+    app.lab = 0;
+    resetToToday(app);
+    const orbit::CometData* hb = nullptr;
+    for (std::size_t i = 0; i < orbit::kCometCount; i++) if (std::string(orbit::kComets[i].name) == "Hale\xE2\x80\x93" "Bopp") hb = &orbit::kComets[i];
+    const double jd = hb ? hb->perihelionJD : 2450537.134907144;
+    jumpToDate(app, static_cast<int64_t>(std::llround((jd - 2440587.5) * 86400000.0)));
+    app.set = orbit::ViewSettings();
+    app.set.view3D = true; app.set.trueScale = true; app.set.comets = true;
+    app.set.tspeed = std::log10(units::kDay / units::kSimTime);          // 1 simulated day a second
+    app.view = orbit::OrbitView();
+    app.view.spin = false;
+    app.paused = false;
+    const int id = bodyId(app, "Hale\xE2\x80\x93" "Bopp");
+    if (id >= 0) app.view.select({orbit::Selection::Body, id}, true);
+    app.view.ox = app.view.oy = 0;
+    double reach = 0.2 * units::kAU;
+    if (hb) {
+        orbit::tail::CometGrains g;
+        g.update(*hb, jd);
+        orbit::Vec3 far;
+        if (g.farthest(far)) reach = orbit::length(far * units::kAU - orbit::cometState(*hb, jd).pos);
+    }
+    setZoom(app, zoomOr(std::log10(0.3 * 34 * units::kSimLength / reach)));
 }
 void orbitRealFast(AppState& app) {
     orbitHeaviest(app);
@@ -535,6 +566,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitJourney: orbitJourney(app); break;
         case K::OrbitAlphaCen: orbitAlphaCen(app); break;
         case K::OrbitFlyby: orbitFlyby(app); break;
+        case K::OrbitCometTails: orbitCometTails(app); break;   // 0.78.0
         case K::Atom:
             commonSetup(app);
             app.lab = 1;
@@ -585,7 +617,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
     using K = app::BenchKind;
     const double warm = b.run->warmupS(), meas = b.measure;
     switch (t.kind) {
-        case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds:
+        case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds: case K::OrbitCometTails:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
             break;
@@ -728,6 +760,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
         case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
         case K::OrbitFlyby: return orbit::ringCardPathText(g_vk) + "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.75.0
         case K::OrbitAlphaCen: return "the Alpha Centauri orbits: " + orbit::linesCardPathText(g_vk != nullptr);   // 0.73.0
+        case K::OrbitCometTails: return app.view.tailLayer().pathText() + "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.78.0
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
             if (t.atomWhich == atom::kBenchSliceSuper)                      // 0.64.0: the Slice's card program takes an orthogonal superposition too (an overlapping pair: the processor)
@@ -773,7 +806,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
     char z[200];
     switch (t.kind) {
         case K::Atom: return atom::benchShortText(app.atom);
-        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitEarthClouds: case K::OrbitSky: case K::OrbitFlyby:
+        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitEarthClouds: case K::OrbitSky: case K::OrbitFlyby: case K::OrbitCometTails:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
             return z;
         case K::OrbitAlphaCen:

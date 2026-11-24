@@ -1048,6 +1048,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         return pl;
     };
     // ---- planets, dwarf planets and comets (far ones first) ----
+    if (set.comets) tailLayer_.prepare(R, sys, set.gpuRocks);   // 0.78.0: every comet's grains brought to the time now (orbit/tail_layer.h)
     std::vector<const Body*> order = vis;
     std::stable_sort(order.begin(), order.end(), [&](const Body* a, const Body* b) { return cam.depth(a->pos.x, a->pos.y, a->pos.z) < cam.depth(b->pos.x, b->pos.y, b->pos.z); });   // far ones first
     for (const Body* bp : order) {
@@ -1064,23 +1065,21 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const bool tiny = TRUE_SCALE && rad < 2.5;
         const double rd = tiny ? 5 : rad;
         const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
-        if (b.comet) {   // a glowing head and two straight tails pointing away from the Sun (blue gas tail; yellow dust tail bent back along the path). Drawn for show only:
-            // the 4 AU switch-on, the length scale (CometData::tail) and the dust tail's direction are drawing choices, not measurements; the legend and the card say so
+        if (b.comet) {   // a glowing head; 0.78.0: the tails calculated (orbit/comet_tail.h, orbit/tail_layer.h). The dust: grains on Kepler orbits around a Sun of
+            // GM (1 - beta) GM (Finson & Probstein 1968), placed by the GPU (kGrainsCS) or the CPU. The gas tail: along the solar wind as the comet meets it
+            // (400 km/s, NASA MSFC), drawn as long as the dust tail (its length is not calculated). The head's glow, the 4 AU switch-on and each grain's
+            // brightness are drawing choices; the legend and the card say so.
             const double r = length(b.pos), rA = r / kAU, act = std::clamp((4 - rA) / 3.2, 0.0, 1.0);
-            const double L = b.comet->tail * act * std::min(1.5, 1 / rA) * kAU;   // tail length, m
-            const Vec3 u = b.pos * (1 / r);
-            const double vm = std::max(length(b.vel), 1e-9);
-            if (L * px > 4) {
-                const Vec3 dirs[2] = {u, u - b.vel * (0.7 / vm)};
-                const double lens[2] = {1, 0.8}, wds[2] = {0.05, 0.09};
-                const Color cols[2] = {rgba(marks::kIonTail[0], marks::kIonTail[1], marks::kIonTail[2]), rgba(marks::kDustTail[0], marks::kDustTail[1], marks::kDustTail[2])};
-                for (int k = 0; k < 2; k++) {
-                    const Vec3 d = dirs[k] * (1 / std::max(length(dirs[k]), 1e-12));
-                    const Q e = proj(b.pos.x + d.x * L * lens[k], b.pos.y + d.y * L * lens[k], b.pos.z + d.z * L * lens[k]);
-                    const double ex = e.first - q.first, ey = e.second - q.second, ln = std::hypot(ex, ey);
-                    if (ln < 3) continue;
-                    const double nx = -ey / ln, ny = ex / ln, w2 = std::min(14.0, ln * wds[k] + 2);
-                    const Color c0 = cols[k].withAlpha(0.85f), c1 = cols[k].withAlpha(0);
+            tailLayer_.drawDust(R, b, cam, set.gpuRocks, rgba(marks::kDustTail[0], marks::kDustTail[1], marks::kDustTail[2]).withAlpha(0.3f), 1.4);
+            Vec3 gd;
+            double L = 0;
+            if (tailLayer_.gasTail(b, gd, L)) {
+                const Q e = proj(b.pos.x + gd.x * L, b.pos.y + gd.y * L, b.pos.z + gd.z * L);
+                const double ex = e.first - q.first, ey = e.second - q.second, ln = std::hypot(ex, ey);
+                if (ln >= 3 && (!d3 || e.f > 0)) {
+                    const double nx = -ey / ln, ny = ex / ln, w2 = std::min(10.0, ln * 0.04 + 1.5);
+                    const Color col = rgba(marks::kIonTail[0], marks::kIonTail[1], marks::kIonTail[2]);
+                    const Color c0 = col.withAlpha(0.8f), c1 = col.withAlpha(0);
                     R.triangle(q.first + nx, q.second + ny, c0, e.first + nx * w2, e.second + ny * w2, c1, e.first - nx * w2, e.second - ny * w2, c1);
                     R.triangle(q.first + nx, q.second + ny, c0, e.first - nx * w2, e.second - ny * w2, c1, q.first - nx, q.second - ny, c0);
                 }

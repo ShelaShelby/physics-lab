@@ -4405,6 +4405,7 @@ static void testManyDots() {
 #include "test_atom0474.inc"  // 0.47.4: Ca, Sr, Ba, Ra, Hg, Yb with one orbital set per atom; D4, this app's own rates
 #include "test_atom0521.inc"  // 0.52.1: CIE 1931 line colours, the quark mass bar's nucleon, the phase ring inside a nucleon
 #include "test_zeeman.inc"    // 0.54.0: atoms in a magnetic field (the Zeeman effect, weak to strong field)
+#include "test_atom078.inc"   // 0.78.0: the photon's dipole pattern
 #include "test_atom0541.inc"  // 0.54.1: the nucleus Density look projected exactly; the outer electron's dots at their true share
 
 // 0.48 (review 4): Rf to Og have a family only by their column of the table (Smits et al., Phys. Rep. 1035 (2023), section 6.6: Og may be a solid semiconductor, Cn may act as a noble gas)
@@ -4422,6 +4423,7 @@ static void testSuperheavyFamilies() {
 }
 
 int main() {
+    testPhotonPattern078();
     testSuperheavyFamilies();
     testQcd042();
     testQcd043();

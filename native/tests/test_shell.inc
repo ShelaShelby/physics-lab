@@ -477,7 +477,7 @@ void testSubjectCardSynthetic() {
     }
     {   // a comet
         const orbit::Card c = mk("Halley’s Comet", {"Nucleus: about 11 km across", "Distance from the Sun now: 35 AU (5,272 million km)", "Speed now: 0.9 km/s", "Closest to the Sun: 0.57 AU  ·  farthest: 35 AU",
-                                 "One trip round the Sun: 76 years", "Last closest approach: 8 Feb 1986", "Next: 8 Jan 2062", "No tails drawn beyond 4 AU (a drawing rule: real comets can be active farther out)"});
+                                 "One trip round the Sun: 76 years", "Last closest approach: 8 Feb 1986", "Next: 8 Jan 2062", "No dust released beyond 4 AU (a drawing choice: real comets can be active farther out)"});
         const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Body, 20}, "", c);
         checkStr("card: comet name", s.name, "Halley’s Comet");
         checkStr("card: comet kind", s.kind, "comet");

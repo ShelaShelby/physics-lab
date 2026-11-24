@@ -35,6 +35,7 @@
 #include "render/ellipsoid.h"
 #include "render/shading.h"
 #include "orbit/far_occlusion.h"
+#include "orbit/comet_tail.h"
 #include "orbit/saturn_profile.h"
 #include "render/shaders.h"
 #include "orbit/sky.h"
@@ -1057,7 +1058,128 @@ static void testAlbedo077() {
 }
 
 
+// 0.78.0: the comet tails (orbit/comet_tail.h). The dust grains move on Kepler orbits around a Sun of GM (1 - beta) GM (Finson & Probstein 1968);
+// the gas tail points along the solar wind as the comet meets it. References: conservation of energy and angular momentum, the elliptic Kepler solution
+// (orbit::keplerState, which has its own tests against JPL), the first terms of the Taylor series (1/2 beta g t^2) and the vector sum of two speeds.
+// (Before 0.78.0 there was no grain motion at all: the tails were two straight triangles of a drawing length, CometData::tail.)
+static void checkSay(bool ok, const std::string& what) {   // (0.78.0: a check whose numbers are printed too, for REPORT.md)
+    check(ok, what);
+    std::printf("   %s\n", what.c_str());
+}
+
+static std::string sci(double v) { char b[32]; std::snprintf(b, sizeof b, "%.2e", v); return b; }
+
+static void testCometTail078() {
+    using namespace orbit::tail;
+    const double GM = units::kGMSun, AU = units::kAU, D = units::kDay;
+    // the comets' own orbits: Hale-Bopp (e 0.995), Encke (e 0.85), Halley (e 0.968); elements from solar_data.cpp
+    const CometData* hb = nullptr; const CometData* en = nullptr; const CometData* ha = nullptr;
+    for (std::size_t i = 0; i < kCometCount; i++) {
+        const std::string n = kComets[i].name;
+        if (n == "Hale–Bopp") hb = &kComets[i]; else if (n == "Encke") en = &kComets[i]; else if (n == "Halley") ha = &kComets[i];
+    }
+    checkSay(hb && en && ha, "comet tails: Hale-Bopp, Encke and Halley are in the comet list");
+    if (!hb || !en || !ha) return;
+    // 1. beta = 0: the grain stays on the comet's orbit. propagate (universal variables) against keplerState at M0 + n dt, n = sqrt(GM / a^3)
+    double worst = 0;
+    for (const CometData* c : {hb, en, ha}) {
+        const double a = c->qAU / (1 - c->e) * AU, n = std::sqrt(GM / (a * a * a)) * 180 / units::kPi;   // deg/s
+        for (double M0 : {-3.0, -0.5, 0.0, 0.2, 2.0}) for (double days : {0.5, 5.0, 40.0}) {
+            const State s0 = keplerState(a, c->e, c->inclDeg, c->nodeDeg, c->periDeg, M0);
+            const State s1 = keplerState(a, c->e, c->inclDeg, c->nodeDeg, c->periDeg, M0 + n * days * D);
+            Vec3 r, v;
+            propagate(s0.pos, s0.vel, GM, days * D, r, v);
+            worst = std::max({worst, length(r - s1.pos) / length(s1.pos), length(v - s1.vel) / length(s1.vel)});
+        }
+    }
+    checkSay(worst < 1e-9, "comet tails: a grain with beta = 0 stays on its comet's orbit (Hale-Bopp, Encke, Halley; 0.5 to 40 days; largest relative difference "
+                        "from the elliptic Kepler solution " + sci(worst) + ", limit 1e-9)");
+    // 2. short times: the grain's offset from the nucleus is 1/2 beta g t^2, straight away from the Sun (g = GM / r^2 at the nucleus)
+    {
+        const State s0 = cometState(*hb, hb->perihelionJD);
+        const Vec3 r0 = s0.pos * (1 / AU), v0 = s0.vel * (D / AU);
+        const double mu = gmSunAuDay(), t = 0.01, g = mu / dot(r0, r0);
+        double wMag = 0, wCos = 1;
+        for (double beta : {0.05, 0.3, 0.9}) {
+            Vec3 rg, vg, rn, vn;
+            propagate(r0, v0, (1 - beta) * mu, t, rg, vg);
+            propagate(r0, v0, mu, t, rn, vn);
+            const Vec3 d = rg - rn;
+            wMag = std::max(wMag, std::fabs(length(d) / (0.5 * beta * g * t * t) - 1));
+            wCos = std::min(wCos, dot(d, r0) / (length(d) * length(r0)));
+        }
+        checkSay(wMag < 1e-4 && wCos > 1 - 1e-6, "comet tails: after 0.01 day a grain is 1/2 beta g t^2 from the nucleus (largest relative difference " + sci(wMag) +
+                                               ", limit 1e-4), straight away from the Sun (1 minus the smallest cosine: " + sci(1 - wCos) + ", limit 1e-6)");
+    }
+    // 3. each grain's energy and angular momentum under (1 - beta) GM are conserved (ellipses and hyperbolas: near perihelion every beta > 0 grain is unbound)
+    {
+        double w = 0;
+        int hyper = 0;
+        const double mu0 = gmSunAuDay();
+        for (const CometData* c : {hb, en}) for (double dayOff : {-30.0, 0.0, 20.0}) for (int i = 0; i < kBetas; i += 7) for (double age : {0.25, 10.0, 39.75}) {
+            const State s0 = cometState(*c, c->perihelionJD + dayOff);
+            const Vec3 r0 = s0.pos * (1 / AU), v0 = s0.vel * (D / AU);
+            const double mu = (1 - betaOf(i)) * mu0;
+            Vec3 r, v;
+            propagate(r0, v0, mu, age, r, v);
+            const double E0 = dot(v0, v0) / 2 - mu / length(r0), E1 = dot(v, v) / 2 - mu / length(r);
+            hyper += E0 > 0;
+            w = std::max({w, std::fabs(E1 - E0) / std::fabs(E0), length(cross(r, v) - cross(r0, v0)) / length(cross(r0, v0))});
+        }
+        checkSay(w < 1e-11 && hyper > 0, "comet tails: every grain keeps its energy and angular momentum under (1 - beta) GM (largest relative change " + sci(w) +
+                                      ", limit 1e-11; " + std::to_string(hyper) + " of the grains on hyperbolas)");
+    }
+    // 4. the gas tail: exactly away from the Sun when the comet stands still; tilted by atan(v / V) when it moves at v across the line to the Sun
+    {
+        const Vec3 p{1.2 * AU, -0.4 * AU, 0.3 * AU};
+        const Vec3 d = ionTailDirection(p, Vec3{0, 0, 0});
+        const Vec3 u = p * (1 / length(p));
+        checkSay(length(d - u) < 1e-15, "comet tails: the gas tail points exactly away from the Sun when the comet's velocity is zero (difference " + sci(length(d - u)) + ")");
+        const Vec3 side = Vec3{0.4, 1.2, 0} * (1 / std::sqrt(1.6));   // across the line to the Sun (dot with p is 0)
+        const Vec3 d2 = ionTailDirection(p, side * 40e3, 400);
+        const double ang = std::acos(std::min(1.0, dot(d2, u))), want = std::atan(40.0 / 400.0);
+        checkSay(std::fabs(ang - want) < 1e-12 && dot(d2, side) < 0, "comet tails: a comet moving at 40 km/s across a 400 km/s wind has its gas tail " + std::to_string(ang * 180 / units::kPi) +
+                                                                  " degrees behind the anti-sunward line (atan(40/400) = " + std::to_string(want * 180 / units::kPi) + "), on the side it came from");
+        checkSay(kSolarWindKmS == 400, "comet tails: the solar wind's speed is NASA MSFC's 400 km/s (data/comets/msfc_solarwind_2026-11-24.extract.txt)");
+    }
+    // 5. the ring of grains: only releases within 4 AU have grains; every grain's place is the reference propagation; moving on one step re-makes one row only
+    {
+        CometGrains G;
+        G.update(*hb, hb->perihelionJD);
+        checkSay(G.live() == kGrains, "comet tails: Hale-Bopp at perihelion has every grain of the last 40 days (" + std::to_string(G.live()) + " of " + std::to_string(kGrains) + ")");
+        G.clearDirty();
+        G.update(*hb, hb->perihelionJD + kReleaseStepDays);
+        int rows = 0;
+        for (const auto& r : G.dirty()) rows += r.second / kBetas;
+        checkSay(rows == 1, "comet tails: one step on, one release is new (" + std::to_string(rows) + " rows re-made)");
+        CometGrains far;
+        far.update(*hb, hb->perihelionJD - 3 * 365.25);   // about 10 AU out: no dust
+        Vec3 r;
+        checkSay(far.live() == 0 && !far.position(0, r) && !far.farthest(r), "comet tails: no grains while the nucleus is beyond 4 AU (" + std::to_string(far.live()) + ")");
+        // a grain's place is propagate's from its own release, and the oldest grain of the largest beta is the farthest from the nucleus
+        const double mu = gmSunAuDay();
+        double w = 0, reach = 0, maxd = 0;
+        const State sn = cometState(*hb, hb->perihelionJD + kReleaseStepDays);
+        const Vec3 nuc = sn.pos * (1 / AU);
+        for (int gi = 0; gi < kGrains; gi += 13) {
+            Vec3 p, want, v;
+            if (!G.position(gi, p)) continue;
+            const double t0 = G.t0()[std::size_t(gi)];
+            const State s0 = cometState(*hb, kJ2000 + t0);
+            propagate(s0.pos * (1 / AU), s0.vel * (D / AU), (1 - betaOf(gi % kBetas)) * mu, G.now() - t0, want, v);
+            w = std::max(w, length(p - want));
+            maxd = std::max(maxd, length(p - nuc));
+            checkSay(G.now() - t0 >= 0 && G.now() - t0 < kReleases * kReleaseStepDays, "comet tails: grain " + std::to_string(gi) + " is 0 to 40 days old");
+        }
+        Vec3 fr;
+        if (G.farthest(fr)) reach = length(fr - nuc);
+        checkSay(w < 1e-12 && reach >= maxd && reach > 0.05, "comet tails: grain places from their own release (largest difference " + sci(w) + " AU); the dust tail's reach " +
+                                                          std::to_string(reach) + " AU is the farthest grain (" + std::to_string(maxd) + " AU)");
+    }
+}
+
 int main() {
+    testCometTail078();
     testCamera075();
     testRings075();
     testReview0752();

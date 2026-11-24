@@ -134,6 +134,8 @@ public:
     // The same squares, but their places are worked out on the GPU (0.13 stage 4 part A, render/rock_compute.h): sends the rocks if this set is not on the GPU yet, and in endVulkan() runs the compute
     // shader for the camera `f` and draws from the buffer it wrote (no CPU wait, no per-rock CPU work). Returns false, adding nothing, when the card cannot (the caller then uses squares()).
     bool rocksGpu(const RockSet& set, const RockFrame& f, double size, Color c);
+    // 0.78.0: a comet's dust grains, the same way: the grains of `slot` (IRockCompute::grainSlot, already written) placed by kGrainsCS for `f` and drawn as squares.
+    bool grainsGpu(int slot, int count, const RockFrame& f, double size, Color c);
 
     // Many round or square "blobs" with their own colours, drawn with ONE instanced draw call (the
     // Atom Lab's cloud dots, glowing nucleons, gluon-field particles, quarks). Each blob is a disc of
@@ -368,7 +370,7 @@ public:
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens, Lines, Surface };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; float albedoK = 1.0f; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; float albedoK = 1.0f; RockFrame rf; MeshProjection mp; bool grains = false; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame

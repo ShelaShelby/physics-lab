@@ -26,6 +26,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **source needed**: measured Landé g for Li, Na, Rb, Cs, Fr, He, Be, Mg, Ca, Sr, Cd, Ra (NIST ASD lists none).
 - One-electron atom: **source needed** the Lamb shift for n >= 3. **fix** the recoil beyond the reduced mass (H 2p gap 0.054 % low). Dirac clouds: 90 % outline, superpositions, m != j. Hyperfine beyond 1s.
 - Ions between neutral and one-electron (tools/dhf). Clouds for the 7s and 7p shells of the heaviest atoms. More than 240,000 dots for heavy atoms.
+- The photon's dipole pattern for the many-electron atoms (the lab does not follow m or M there) and the light's polarisation.
 - Atoms in fields: hydrogen's Stark effect, Breit-Rabi at low fields, a broadened synthetic spectrum, a Boltzmann-plot temperature, the cloud of one M sublevel.
 - Data tables: <r>, <1/r>, <r²>, P(r), Q(r) of the DHF orbitals (**source needed**: Desclaux's tables), higher alkali Rydberg levels (new ASD fetch), Q-values (AME2020).
 - Labels drawn in depth order (needs a renderer change).
@@ -44,11 +45,13 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 ## Orbit Lab
 - **fix**: the Orbit Lab at rest drew its picture anew every frame on the owner's PC (0.75.0: rest.orbit 766 drawings in 3 s). The build machine does not reproduce it. Read the changed key part (main.cpp orbitFrameKey) in his next benchmark, then fix it.
 - **fix**: outside 1800-2100 the moons start at made-up angles and planes. Use JPL's mean elements (saved: data/jpl/sats_mean_elements_2026-11-23.html) and their reference planes.
-- **fix**: Saturn's ring optical depths are the fact sheet's, lower than Cassini's for the B ring and the Cassini Division. Check against Colwell et al. 2010.
+- **source needed**: a measured phase law for each main ring (A, B, C, Cassini Division; brightness against phase angle up to the forward-scattering side), to replace the rings' even scattering (0.78.0 item 2, skipped after 2 tries: Déau et al. 2009, arXiv:0902.0289, has the opposition surge only; the UVIS power law is far-UV only).
+- **source needed**: a published syndyne or synchrone with readable numbers (Finson & Probstein 1968: the ADS scan did not load on 2026-11-24) to check one dust tail curve. The comets' dust: grain ejection speeds (the tail's width) and the gas tail's length are not modelled.
+- **source needed**: the comets' 4 AU dust switch-on (a choice since 0.78.0; a distance where water ice starts to sublimate), Haumea's shape,, lower than Cassini's for the B ring and the Cassini Division. Check against Colwell et al. 2010.
 - A Field of view setting for the 3D camera (45 degrees now, orbit/camera.h). A pick of a closer body lowers the zoom to its cap at once.
 - Alpha Centauri (PLAN_ALPHACEN.md): the Sun's pick looking back in 2D, A and B seen from Proxima b, Fit planets with the card open, Proxima's orbit time on its card and a faster time choice, A and B as one label when close.
 - Real mode: the belts' mass is not in the model (Neptune 1,436 km off). Europa up to 17,700 km off (Laplace terms). Belt asteroids ignore Jupiter far from 2026.
-- **source needed**: comet tails and the 4 AU switch-on, Haumea's shape, the belt cards' counts and masses, the Sun card's frost line and lifetime, comets active far out (Hale-Bopp, C/2017 K2).
+- **source needed**: the comets' 4 AU dust switch-on (a choice since 0.78.0; a distance where water ice starts to sublimate), Haumea's shape, the belt cards' counts and masses, the Sun card's frost line and lifetime, comets active far out (Hale-Bopp, C/2017 K2).
 - **source needed**: ring spectra, Pluto, the grey moons and their maps, McEwen 1996's lunar phase polynomial, the giants' limb darkening, photometric functions for Mercury and Pluto, Neckel & Labs 1994 for the Sun's edge.
 - **source needed**: the full papers for the rotation periods (Lamy et al. 2025 Uranus, Karkoschka 2011 Neptune: only abstract or news saved).
 - Speed: comets' dotted orbits, the Sun's path in Real, moons' orbits and spin axes are still drawn by the CPU's LinePen. In real_fast the frame thread waits for the integrator (NBodyClock::ensure).

@@ -34,6 +34,8 @@
 #include "render/outline_compute.h"
 #include "render/renderer2d.h"
 #include "orbit/belt_layer.h"
+#include "orbit/tail_layer.h"
+#include "orbit/solar_data.h"
 #include "orbit/ring_check.h"
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
@@ -815,6 +817,7 @@ using namespace orbit;
 #include "rock_reference.h"
 }
 #include "vk_rocks.inc"   // 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU
+#include "vk_tails.inc"   // 0.78.0: the comets' dust grains on the GPU
 #include "vk_chart.inc"   // 0.13 stage 4 part B: the chart of nuclides from the retained mesh
 #include "vk_cards.inc"   // 0.61.0: the card programs on Vulkan (lavapipe) against the processor
 
@@ -901,6 +904,7 @@ int main(int argc, char** argv) {
     gpuOutlinePictures(R, dir);
     gpuRocks(R, dir);
     gpuRocksPictures(R, dir);
+    gpuGrains(R);   // 0.78.0
     chartPictures(R, dir);
     chartShaderRules(R);
     fallback33(dir);

@@ -1385,6 +1385,92 @@ void main() {
 }
 )";
 
+// ---- 0.78.0: the comets' dust grains (orbit/comet_tail.h) ----
+// One thread a grain: a grain left the nucleus at its release time t0 with the nucleus' velocity and moves on a Kepler orbit around a Sun of GM (1 - beta) GM
+// (Finson & Probstein 1968). Each part is a port of its C++ twin, named in its comment (orbit/comet_tail.cpp: stumpff, propagate). The age t - t0 is formed in
+// DOUBLE (t reaches 1e4 days and more); the age itself (0 to 40 days) and the orbit are float, in AU and days (the numbers stay near 1). The camera part is
+// kRocksCS's screenOf. A grain's place is then good to about 1e-6 of its distance from the Sun (tests/vk_compare.cpp measures it against the CPU's double).
+static const char* const kGrainsCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Elements { float el[]; };          // 8 floats a grain: r0 (AU), v0 (AU/day), mu (AU^3/day^2; below 0: no grain), 0
+layout(std430, binding = 1) readonly buffer Release { double t0[]; };          // the release time, days since J2000 (TDB)
+layout(std430, binding = 2) writeonly buffer Positions { float pos[]; };       // x, y on the picture, points, two floats a grain
+uniform int uCount;
+uniform int uD3;                                                               // 1: the 3D view (the pinhole camera)
+uniform vec2 uT;                                                               // the time now = double(uT.x) + double(uT.y) days since J2000 (hi + lo: exact)
+uniform dvec4 uBc;                                                             // as kRocksCS: the barycentre, m; w: the near plane (m)
+uniform dvec4 uCam;                                                            // ca, sa, cb, sb
+uniform dvec4 uView;                                                           // px (points per metre), sx, sy (points), d (m)
+uniform dvec4 uOff;                                                            // cd (m), lx, ly (m), F (points)
+const double AU = 1.495978707e11LF;                                            // units::kAU, the IAU astronomical unit, m
+
+// twin: stumpff (comet_tail.cpp). Near 0 the series (float: up to |z| = 1, where the closed forms lose digits in 1 - cos), else the closed forms.
+void stumpff(float z, out float C, out float S) {
+    if (abs(z) < 1.0) {
+        float c = 0.5, s = 1.0 / 6.0, tc = 0.5, ts = 1.0 / 6.0;
+        for (int k = 1; k <= 6; k++) {
+            float fk = float(k);
+            tc *= -z / ((2.0 * fk + 1.0) * (2.0 * fk + 2.0));
+            ts *= -z / ((2.0 * fk + 2.0) * (2.0 * fk + 3.0));
+            c += tc; s += ts;
+        }
+        C = c; S = s;
+    } else if (z > 0.0) {
+        float q = sqrt(z);
+        C = (1.0 - cos(q)) / z; S = (q - sin(q)) / (q * q * q);
+    } else {
+        float q = sqrt(-z);
+        C = (cosh(q) - 1.0) / -z; S = (sinh(q) - q) / (q * q * q);
+    }
+}
+
+// twin: orbit::tail::propagate (comet_tail.cpp), the place only. At most 30 Newton steps, stopped when a step moves chi by less than 1e-6 of it.
+vec3 grainPoint(uint i, float dt) {
+    uint b = i * 8u;
+    vec3 r0 = vec3(el[b], el[b + 1u], el[b + 2u]), v0 = vec3(el[b + 3u], el[b + 4u], el[b + 5u]);
+    float mu = el[b + 6u];
+    if (!(mu > 0.0)) return r0 + v0 * dt;
+    float R0 = length(r0), vr0 = dot(r0, v0) / R0, al = 2.0 / R0 - dot(v0, v0) / mu, sm = sqrt(mu);
+    float x = sm * dt / R0, C = 0.5, S = 1.0 / 6.0;
+    for (int it = 0; it < 30; it++) {
+        float z = al * x * x;
+        stumpff(z, C, S);
+        float F = R0 * vr0 / sm * x * x * C + (1.0 - al * R0) * x * x * x * S + R0 * x - sm * dt;
+        float Fp = R0 * vr0 / sm * x * (1.0 - z * S) + (1.0 - al * R0) * x * x * C + R0;
+        float d = F / Fp;
+        x -= d;
+        if (abs(d) <= 1e-6 * max(1.0, abs(x))) break;
+    }
+    stumpff(al * x * x, C, S);
+    float f = 1.0 - x * x / R0 * C, g = dt - x * x * x * S / sm;
+    return f * r0 + g * v0;
+}
+
+// twin: kRocksCS screenOf (orbit/belts.cpp beltScreen, orbit/camera.h ViewCam::proj); behind the camera: -1e9, -1e9 (off the picture)
+vec2 screenOf(dvec3 pm) {
+    dvec3 p = pm - uBc.xyz;
+    double ca = uCam.x, sa = uCam.y, cb = uCam.z, sb = uCam.w;
+    double x1 = p.x * ca - p.y * sa, y1 = p.x * sa + p.y * ca, y2 = y1 * cb - p.z * sb, dep = y1 * sb + p.z * cb;
+    if (uD3 != 0) {
+        double Z = uOff.x + uView.w - dep;
+        if (!(Z >= uBc.w)) return vec2(-1.0e9, -1.0e9);
+        return vec2(float(uView.y + uOff.w * (x1 - uOff.y) / Z), float(uView.z - uOff.w * (y2 - uOff.z) / Z));
+    }
+    return vec2(float(uView.y + x1 * uView.x), float(uView.z - y2 * uView.x));
+}
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(uCount)) return;
+    vec2 s = vec2(-1.0e9, -1.0e9);
+    if (el[i * 8u + 6u] >= 0.0) {
+        float dt = float((double(uT.x) + double(uT.y)) - t0[i]);              // the grain's age, days
+        s = screenOf(dvec3(grainPoint(i, dt)) * AU);
+    }
+    pos[2u * i] = s.x; pos[2u * i + 1u] = s.y;
+}
+)";
+
 static const char* const kKerrTableCS = R"(#version 430 core
 // 0.55.6: the spinning hole's light paths on the graphics card (blackhole/spin_card.h): the rays, the step and the stored values of the processor's table
 // (geodesic.cpp KerrBL::launch, rhs, ended, farDirection and trace; spin_sky.cpp spinRay and the node's psi; spin.cpp shadowEdge), all in double precision.

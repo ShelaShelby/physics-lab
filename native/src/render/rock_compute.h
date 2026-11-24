@@ -44,13 +44,24 @@ public:
     // The sets of rocks that are alive now (the serials of the belts being drawn): every other set is dropped from the GPU. Called at the start of each frame's belts, so a slot number given out
     // during a frame stays valid until the next frame.
     virtual void keepOnly(const std::vector<std::uint64_t>& live) = 0;
-    // The slot holding these rocks, sent to the GPU first if this serial is not there yet (at most 16 sets at a time). -1: could not (all 16 are in use: the caller draws by the CPU).
+    // The slot holding these rocks, sent to the GPU first if this serial is not there yet (at most 32 sets at a time with the comets' grains; 0.78.0: was 16). -1: could not (all 32 are in use: the caller draws by the CPU).
     virtual int slotFor(const RockSet& set) = 0;
     // Works out the screen position (x, y points, 2 floats a rock) of every rock of the slot into its buffer. Needs no CPU wait: the draw that follows uses the buffer.
     virtual bool dispatch(int slot, const RockFrame& f) = 0;
     virtual unsigned positionsBuffer(int slot) const = 0;              // the card's buffer of the last dispatch's positions (Vulkan: not 0 once made)
     virtual bool readPositions(int slot, std::vector<float>& xy) = 0;  // for tests: waits for the GPU and copies the positions back
     virtual int uploads() const = 0;                                   // how many times a set of rocks was sent (for tests: a rebuild only when the rocks change)
+    // 0.78.0: the comets' dust grains (orbit/comet_tail.h), run by the same program object and guard (kGrainsCS). One slot a comet holds a ring of `count`
+    // grains: kGrainStride floats each (r0 in AU, v0 in AU/day, mu in AU^3/day^2, below 0: no grain) and a DOUBLE release time (days since J2000, TDB).
+    // The ring is rewritten in parts as releases change. For grains, RockFrame::t is the time now in days since J2000 (TDB), not the simulated seconds.
+    virtual bool grainsOk() const { return false; }
+    // the slot for this comet's ring (made if new: fresh = true, the caller then sends every grain); -1: could not
+    virtual int grainSlot(std::uint64_t id, int count, bool& fresh) { (void)id; (void)count; fresh = false; return -1; }
+    virtual bool grainWrite(int slot, int first, int n, const float* el, const double* t0) { (void)slot; (void)first; (void)n; (void)el; (void)t0; return false; }
+    virtual bool grainDispatch(int slot, const RockFrame& f) { (void)slot; (void)f; return false; }
+    virtual void keepOnlyGrains(const std::vector<std::uint64_t>& live) { (void)live; }   // the comets' rings that are drawn this frame: the others leave the GPU
 };
+
+constexpr int kGrainStride = 8;   // (orbit::tail::kStride)
 
 }  // namespace render

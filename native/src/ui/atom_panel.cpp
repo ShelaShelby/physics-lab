@@ -266,6 +266,7 @@ const char* atomNote(const std::string& which) {
           "and the upper level's share rises as e^(−(T−t)/τ). τ is slowed down to 0.2 s for every line (the real one is a few nanoseconds or much less: Lifetimes card); the jump ends after 2.2 s, "
           "when less than one dot in 48,000 is left to change. A ring at the nucleus glows in the photon's colour while the wave passes it. The wave is not to scale: its drawn wiggles grow with the real "
           "wavelength, but a real wavelength is thousands of times the atom's size, and a real photon is c τ long (half a metre for hydrogen's 2p). "
+          "The photon's direction is drawn at random in the picture's plane: this view does not follow the electron's m, so the dipole pattern (the Cloud views, 0.78.0) cannot be given here. "
           "With Reduced motion on (Settings, Motion) the electron leaps at once and the photon is a short packet.";
     if (which == "jumpCloud") return "How a jump is drawn (0.49.3): the cloud is a mixture of the old and the new orbital, each with its share (below): an old dot stays with the old orbital's share and a new dot appears with the new one's, "
           "so the dots on screen are an exact sample of the mixture at every moment, slowed down. Each dot keeps the phase colour of its own orbital. "
@@ -276,6 +277,7 @@ const char* atomNote(const std::string& which) {
           "and the upper level's share rises as e^(−(T−t)/τ). τ is slowed down to 0.2 s for every line (the real one is a few nanoseconds or much less: Lifetimes card); the jump ends after 2.2 s, "
           "when less than one dot in 48,000 is left to change. A ring at the nucleus glows in the photon's colour while the wave passes it. The wave is not to scale: its drawn wiggles grow with the real "
           "wavelength, but a real wavelength is thousands of times the atom's size, and a real photon is c τ long (half a metre for hydrogen's 2p). "
+          "Its direction (0.78.0) is the electric-dipole pattern of the jump (Jackson, Classical Electrodynamics, 3rd ed., sect. 9.2): drawn at random in 3D with odds 1 − |n·u|², u the jump's dipole <new|r|old> made a unit vector, then seen from the camera (towards or away from you the path looks short). A jump with Δm = 0 (2p z → 1s) gives sin²θ about the z axis: no photon leaves along z, because a dipole does not radiate along its own line. A jump from an m = ±1 state (Δm = ±1) gives (1 + cos²θ)/2: most along z, half as much in the x-y plane. A real orbital such as 2p x is a mix of m = +1 and −1: its dipole points along x. An absorbed photon comes in from a direction drawn the same way. \"Emission pattern\" draws the outline. Limits: dipole (E1) light only; the light's polarisation is not drawn. "
           "With Reduced motion on (Settings, Motion) the jump is over at once and the photon is a short packet.";
     if (which == "jumpLevel") return "How a jump is drawn (an atom with two outer electrons, 0.47.3): the whole atom goes from one level to another, every electron with it: each level's cloud is its own "
           "GRASP2018 calculation (natural orbitals and their occupations), so the inner electrons change a little too. During a photon jump the atom is a mixture of the two levels, each with its share (below); "
@@ -288,6 +290,7 @@ const char* atomNote(const std::string& which) {
           "and the upper level's share rises as e^(−(T−t)/τ). τ is slowed down to 0.2 s for every line (the real one is a few nanoseconds or much less: Lifetimes card); the jump ends after 2.2 s, "
           "when less than one dot in 48,000 is left to change. A ring at the nucleus glows in the photon's colour while the wave passes it. The wave is not to scale: its drawn wiggles grow with the real "
           "wavelength, but a real wavelength is thousands of times the atom's size, and a real photon is c τ long (half a metre for hydrogen's 2p). "
+          "The photon's direction is drawn at random in the picture's plane: the lab does not follow m (or M) for these atoms, so it cannot give the dipole pattern (0.78.0: the one-electron Cloud views do). "
           "With Reduced motion on (Settings, Motion) the jump is over at once.";
     if (which == "jumpValence") return "How a jump is drawn (every electron shown, non-relativistic model, 0.46): only the outer electron changes orbital; the inner electrons stay in the same orbitals (a model: the frozen core). "
           "During a photon jump the atom is a mixture of the two levels, each with its share (below); \"Put the outer electron in\" (no photon) is a plain cross-fade (1.2 s) that only helps the eye. The photon's wavelength is a measured line (NIST ASD); "
@@ -304,6 +307,7 @@ const char* atomNote(const std::string& which) {
           "and the upper level's share rises as e^(−(T−t)/τ). τ is slowed down to 0.2 s for every line (the real one is a few nanoseconds or much less: Lifetimes card); the jump ends after 2.2 s, "
           "when less than one dot in 48,000 is left to change. A ring at the nucleus glows in the photon's colour while the wave passes it. The wave is not to scale: its drawn wiggles grow with the real "
           "wavelength, but a real wavelength is thousands of times the atom's size, and a real photon is c τ long (half a metre for hydrogen's 2p). "
+          "The photon's direction is drawn at random in the picture's plane: the lab does not follow m (or M) for these atoms, so it cannot give the dipole pattern (0.78.0: the one-electron Cloud views do). "
           "With Reduced motion on (Settings, Motion) the jump is over at once.";
     if (which == "jumpValenceRel") return "How a jump is drawn (every electron shown, relativistic model, 0.47.2): each level's cloud is its own GRASP2018 calculation with every electron and their correlation "
           "(natural orbitals and their occupations), so the inner electrons change a little too. During a photon jump the atom is a mixture of the two levels, each with its share (below); \"Put the outer electron in\" "
@@ -319,6 +323,7 @@ const char* atomNote(const std::string& which) {
           "and the upper level's share rises as e^(−(T−t)/τ). τ is slowed down to 0.2 s for every line (the real one is a few nanoseconds or much less: Lifetimes card); the jump ends after 2.2 s, "
           "when less than one dot in 48,000 is left to change. A ring at the nucleus glows in the photon's colour while the wave passes it. The wave is not to scale: its drawn wiggles grow with the real "
           "wavelength, but a real wavelength is thousands of times the atom's size, and a real photon is c τ long (half a metre for hydrogen's 2p). "
+          "The photon's direction is drawn at random in the picture's plane: the lab does not follow m (or M) for these atoms, so it cannot give the dipole pattern (0.78.0: the one-electron Cloud views do). "
           "With Reduced motion on (Settings, Motion) the jump is over at once.";
     return "";
 }
