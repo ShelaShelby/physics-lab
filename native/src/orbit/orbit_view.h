@@ -10,6 +10,7 @@
 
 #include "app/prefs.h"
 #include "camera.h"                              // 0.75.0: the camera (ViewCam) and its field of view, kFieldOfViewDeg (45 degrees: one constant, there)
+#include "camera_motion.h"                       // 0.82.0: the turn per point, the momentum and the wheel's eased step (shared with the Black Hole Lab)
 #include "belt_layer.h"
 #include "tail_layer.h"
 #include "card_text.h"
@@ -89,9 +90,9 @@ public:
     void letGo() { sel = Selection{}; follow = false; glide_ = glidePending_ = false; }   // Escape: nothing selected; the view stays where it is, on the barycentre
     bool gliding() const { return glide_ || glidePending_; }
     static constexpr double kGlideSeconds = 0.8;  // a pick's glide (eased in and out)
-    static constexpr double kMomentumFade = 7.5;  // a released turn's speed falls by e^-7.5 a second (5 % left after 0.4 s); it stops below kMomentumStop
-    static constexpr double kMomentumStop = 0.05; // rad/s
-    static constexpr double kMomentumMax = 2.5;   // rad/s: a fast flick coasts at most kMomentumMax / kMomentumFade = 0.33 rad
+    static constexpr double kMomentumFade = orbit::kMomentumFade;   // 0.82.0: the numbers are in orbit/camera_motion.h, shared with the Black Hole Lab
+    static constexpr double kMomentumStop = orbit::kMomentumStop;
+    static constexpr double kMomentumMax = orbit::kMomentumMax;
     static constexpr double kPitchMax = 89.5 * 3.14159265358979323846 / 180;   // the Solar System's tilt reaches ±89.5° (Alpha Centauri: ±3.1 rad, turned right over)
     // 0.67.0: a key of everything the picture is drawn from (this view's camera and choices, the settings, the system's time, bodies, trails and moons, the
     // picture's size and place): the same key, the same picture. The app keeps the last picture while the key stays the same (time stopped, nothing moving).

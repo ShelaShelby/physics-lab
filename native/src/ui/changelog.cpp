@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.82.0", "Black Hole Lab: circle the hole as you circle a planet",
+     "Dragging in the Black Hole Lab now takes the camera round the black hole the way the Orbit Lab's camera goes round a planet: the same speed for the "
+     "same drag, the same way, and the same little glide when you let go (none with Reduce motion; a click stops it). Before, the sky stuck to the "
+     "pointer, which felt as if you were moving the hole itself. The wheel and + \xE2\x88\x92 now move you closer or farther in a short smooth step, as in the "
+     "Orbit Lab, and end where the old jump did. Escape stops a glide; Reset view brings back the first view. The camera still hovers at each place you "
+     "put it: it does not fly or orbit, so every number on the card is the same as before for the same place. The benchmark has a new scene that circles "
+     "a spinning hole with its disc, and a new wait for the sharp picture after a tilt."},
     {"0.81.0", "Film: a soft, partly see-through disc",
      "In the Black Hole Lab's Film look the disc has no hard rims any more: its edges fade out inside the film's edges (9.26 and 18.70 GM/c\xC2\xB2). The disc "
      "is partly see-through, as the paper behind the film describes it (\"marginally optically thick\"): each time a ray crosses it, it covers part of "

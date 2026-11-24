@@ -86,6 +86,7 @@ struct AppState {
     blackhole::Settings blackhole = blackhole::settingsDefaults();
     blackhole::BlackHoleView blackholeView;
     double bhFreeX = 0, bhFreeY = 0, bhFreeW = -1, bhFreeH = -1;
+    blackhole::CameraMotion bhCam;                                    // 0.82.0: the Black Hole Lab's camera motion (a coasting turn, an eased step; not saved)
     double bhGasT = 0;                                                // 0.72.0: the moving gas's far time (GM/c^3; blackhole/lab.h gasTick)   // the part of the picture the bars and the Controls panel leave free (points): the hole is at its middle
     int bhLearn = 0;                       // the open Black Hole Lab guide: 0 none, 1 What is real in this picture
     std::string bhLearnJump;
@@ -112,7 +113,7 @@ void setZoom(AppState& app, double zoom);        // at once (a direct set: the J
 void glideZoom(AppState& app, double zoom, double seconds);
 void zoomBy(AppState& app, double dz);            // a wheel notch or a key: from where a running glide is going
 void cameraTick(AppState& app, double dt);        // each frame: the zoom glide's step (it ends exactly on its value)
-constexpr double kWheelZoomSeconds = 0.15;
+constexpr double kWheelZoomSeconds = orbit::kWheelZoomSeconds;   // (0.82.0: orbit/camera_motion.h, shared with the Black Hole Lab)
 
 // The Performance card: frame times (last, average, worst, a graph) and the VSync switch.
 void performanceCard(AppState& app);

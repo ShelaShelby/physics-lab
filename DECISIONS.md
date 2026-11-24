@@ -96,6 +96,9 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   blackhole.hot_flow and the guide text wait for a model that passes both (REPORT 0.80.0, ROADMAP).
 - The camera after the disc (24 Nov 2026): a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every
   side". Planned with the owner before it is built (0.82.0; ROADMAP, Black Hole Lab).
+- The camera handles as the Orbit Lab's (24 Nov 2026, 0.82.0): "in BH lab you like move the BH itself which is so weird". He circles the black hole as he
+  circles a planet in the Orbit Lab: the same turn per point, the same way, the same glide on release (off with Reduce motion), the eased wheel, Reset view
+  and Escape. The camera still hovers at each place (a static observer); a truly moving camera (orbiting, falling in) stays on ROADMAP.
 - A benchmark job after the camera (24 Nov 2026): 0.83.0, after the camera job (0.82.0). New Black Hole scenes that move as a user does (circling, moving in and
   out, over the top and under), and the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
 - Sagittarius A*'s hot flow (24 Nov 2026): 0.80.0 ships the tested physics with nothing drawn (BL06's model passes neither reading's two checks). After

@@ -44,6 +44,7 @@
 #include "blackhole/looks.h"
 #include "blackhole/light.h"
 #include "blackhole/tone.h"
+#include "orbit/camera_motion.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -1880,6 +1881,147 @@ static void testMovingTable() {
 }
 
 // the lab's spin setting and readout (lab.h): all from the module
+// ---- 0.82.0: the camera handles as the Orbit Lab's (lab.h CameraMotion, orbit/camera_motion.h). References: the Orbit Lab's 0.74.0 numbers in
+// orbit_view.cpp (0.01 rad a point; the speed falls by e^-7.5 a second, stops below 0.05 rad/s, at most 2.5 rad/s), 0.81.0's jump of 15 % a notch
+// (main.cpp: dist x 1.15^-notches, clamped to 2.2..1000), the pitch limits 0.01 rad from each pole, and the exact sum of a fading speed (v0 / k).
+// The cross-check against OrbitView itself (same rate, same direction) is in test_app.cpp testBlackHoleCamera.
+static void testCameraMotion() {
+    const double dt = 1.0 / 60;
+    check(orbit::kTurnPerPoint == 0.01 && orbit::kMomentumFade == 7.5 && orbit::kMomentumStop == 0.05 && orbit::kMomentumMax == 2.5 && orbit::kWheelZoomSeconds == 0.15,
+          "the shared numbers are the Orbit Lab's of 0.74.0 (0.01 rad a point, fade 7.5 /s, stop 0.05 rad/s, at most 2.5 rad/s, 0.15 s a wheel step)");
+    {   // the turn per point
+        Settings s = settingsDefaults(); CameraMotion m;
+        s.pitch = kPi / 2;
+        const double y0 = s.yaw, p0 = s.pitch;
+        dragTurn(s, m, 25, 0);
+        check(std::fabs(std::remainder(s.yaw - y0, 2 * kPi) + 0.25) < 1e-12 && s.pitch == p0, "a drag of 25 points to the right turns the camera 0.25 rad round the axis (0.01 rad a point)");
+        const double y1 = s.yaw;
+        dragTurn(s, m, 0, -20);
+        check(std::fabs(s.pitch - (p0 + 0.2)) < 1e-12 && s.yaw == y1, "a drag of 20 points up tilts it 0.2 rad (0.01 rad a point)");
+        Settings t = settingsDefaults();
+        t.pitch = kPitchMax - 0.05;
+        dragTurn(t, m, 0, -100);
+        check(t.pitch == kPitchMax && kPitchMax == kPi - 0.01 && kPitchMin == 0.01, "a drag past the pole stops 0.01 rad from it");
+    }
+    // a steady drag of v points a frame, held for n frames, then released (dx, dy per frame); returns the speed at release
+    const auto dragFor = [&](Settings& s, CameraMotion& m, double dx, double dy, int n) {
+        grab(m);
+        for (int k = 0; k < n; k++) { dragTurn(s, m, dx, dy); cameraTick(s, m, dt, false); }
+        return std::hypot(m.vYaw, m.vPitch);
+    };
+    {   // the released speed falls by the shared fade and stops below the shared stop speed; the yaw moves by the exact integral of the speed
+        Settings s = settingsDefaults(); CameraMotion m;
+        s.pitch = kPi / 2;
+        const double v = dragFor(s, m, 2, 0, 30);                       // 2 points a frame at 60 frames a second: 1.2 rad/s
+        check(std::fabs(v - 1.2) < 1e-6 && m.vYaw < 0, "while dragged the speed follows the drag (1.2 rad/s for 2 points a frame at 60 Hz)");
+        release(m, false);
+        check(std::fabs(m.vYaw + 1.2) < 1e-6, "on release the speed is kept");
+        bool fade = true, step = true, ended = false;
+        int frames = 0;
+        const double f = std::exp(-7.5 * dt), g = (1 - f) / 7.5;
+        while (cameraMoving(m) && frames < 1000) {
+            const double v0 = m.vYaw, y0 = s.yaw;
+            cameraTick(s, m, dt, false);
+            frames++;
+            step = step && std::fabs(std::remainder(s.yaw - y0 - v0 * g, 2 * kPi)) < 1e-12;
+            if (m.vYaw != 0) fade = fade && std::fabs(m.vYaw - v0 * f) <= 1e-15 * std::fabs(v0);
+            else ended = std::fabs(v0 * f) < 0.05 && std::fabs(v0) >= 0.05;
+        }
+        check(fade && step, "each frame the speed falls by e^(-7.5 dt) and the turn is its exact integral over the frame");
+        check(ended && frames == int(std::ceil(std::log(1.2 / 0.05) / (7.5 * dt))), "it stops at the first frame below 0.05 rad/s (" + std::to_string(frames) + " frames)");
+        const double y = s.yaw;
+        for (int k = 0; k < 10; k++) cameraTick(s, m, dt, false);
+        check(s.yaw == y, "once stopped it stays");
+    }
+    for (double fdt : {1.0 / 255, 1.0 / 60, 0.05}) {                     // a flick coasts at most kMomentumMax / kMomentumFade (2.5 / 7.5 = 0.333 rad), at any frame rate
+        Settings s = settingsDefaults(); CameraMotion m;
+        s.pitch = kPi / 2;
+        grab(m);
+        for (int k = 0; k < 5; k++) { dragTurn(s, m, 300, 0); cameraTick(s, m, fdt, false); }
+        release(m, false);
+        const double vr = std::hypot(m.vYaw, m.vPitch), y0 = s.yaw;
+        double total = 0;
+        for (int k = 0; k < 10000 && cameraMoving(m); k++) { const double y = s.yaw; cameraTick(s, m, fdt, false); total += std::fabs(std::remainder(s.yaw - y, 2 * kPi)); }
+        check(std::fabs(vr - 2.5) < 1e-12 && total <= 2.5 / 7.5 && total > 0.9 * 2.5 / 7.5 && std::fabs(std::remainder(s.yaw - y0, 2 * kPi)) <= 2.5 / 7.5,
+              "a flick at " + std::to_string(int(std::lround(1 / fdt))) + " frames a second is capped at 2.5 rad/s and coasts " + std::to_string(total) + " rad, at most 2.5 / 7.5");
+    }
+    {   // a press stops it; Reduce motion: no coasting; a turn set by someone else stops it
+        Settings s = settingsDefaults(); CameraMotion m;
+        dragFor(s, m, 3, 0, 10); release(m, false);
+        cameraTick(s, m, dt, false);
+        grab(m);
+        const double y = s.yaw;
+        cameraTick(s, m, dt, false); cameraTick(s, m, dt, false);
+        check(s.yaw == y && !cameraMoving(m), "a press stops a coasting turn");
+        release(m, false);
+        dragFor(s, m, 3, 0, 10); release(m, true);
+        check(!cameraMoving(m), "with Reduce motion nothing coasts");
+        dragFor(s, m, 3, 0, 10); release(m, false);
+        cameraTick(s, m, dt, false);
+        resetView(s);
+        const Settings r = s;
+        cameraTick(s, m, dt, false);
+        check(s.yaw == r.yaw && s.pitch == r.pitch && !cameraMoving(m), "Reset view stops a coasting turn where it puts the camera");
+    }
+    {   // the pitch stays inside its limits during a glide (both poles)
+        for (double dy : {-6.0, 6.0}) {                                      // 3 frames of 6 points: 0.18 rad, then a glide of up to 0.33 rad
+            Settings s = settingsDefaults(); CameraMotion m;
+            s.pitch = dy < 0 ? kPitchMax - 0.25 : kPitchMin + 0.25;
+            dragFor(s, m, 0, dy, 3); release(m, false);
+            const bool before = s.pitch > kPitchMin && s.pitch < kPitchMax;
+            bool inside = true;
+            double lo = s.pitch, hi = s.pitch;
+            for (int k = 0; k < 2000 && cameraMoving(m); k++) { cameraTick(s, m, dt, false); inside = inside && s.pitch >= kPitchMin && s.pitch <= kPitchMax; lo = std::min(lo, s.pitch); hi = std::max(hi, s.pitch); }
+            check(before && inside && (dy < 0 ? hi == kPitchMax : lo == kPitchMin), "a flick " + std::string(dy < 0 ? "up" : "down") + " towards the pole: the glide reaches the limit 0.01 rad from it and stays inside");
+        }
+    }
+    {   // the wheel's eased step ends exactly where 0.81.0's jump ended (dist x 1.15^-notches, clamped)
+        struct Case { double d0; std::vector<double> notches; };
+        for (const Case& c : {Case{50, {1}}, Case{50, {-1}}, Case{50, {1, 1}}, Case{7.3, {2, -1, 3}}, Case{2.3, {3}}, Case{900, {-2}}, Case{1000, {-1}}, Case{2.2, {1}}}) {
+            Settings s = settingsDefaults(), old = settingsDefaults(); CameraMotion m;
+            setDistance(s, c.d0); setDistance(old, c.d0);
+            bool mono = true, between = true;
+            for (double n : c.notches) {
+                setDistance(old, old.dist * std::pow(1.15, -n));             // 0.81.0's jump (main.cpp)
+                const double from = s.dist;
+                stepDistance(s, m, n, false);
+                for (int k = 0; k < 3 && m.zoomOn; k++) { const double d = s.dist; cameraTick(s, m, dt, false); mono = mono && (n > 0 ? s.dist <= d : s.dist >= d);
+                                                          between = between && s.dist >= std::min(from, m.zoomTo) && s.dist <= std::max(from, m.zoomTo); }   // (a notch before the last has ended)
+            }
+            for (int k = 0; k < 100 && m.zoomOn; k++) { const double d = s.dist; cameraTick(s, m, dt, false); mono = mono && (s.dist - d) * (old.dist - c.d0) >= 0; }
+            Settings r = settingsDefaults(); CameraMotion rm;
+            setDistance(r, c.d0);
+            for (double n : c.notches) stepDistance(r, rm, n, true);
+            std::string ns;
+            for (double n : c.notches) ns += (ns.empty() ? "" : ", ") + f(n);
+            char b[260];
+            std::snprintf(b, sizeof b, "the eased steps (%s notches) from %.4g GM/c^2 end at %.17g = 0.81.0's jumps' %.17g (Reduce motion, at once: %.17g)", ns.c_str(), c.d0, s.dist, old.dist, r.dist);
+            check(!m.zoomOn && s.dist == old.dist && r.dist == old.dist && !rm.zoomOn && between, b);
+        }
+        Settings s = settingsDefaults(); CameraMotion m;
+        stepDistance(s, m, 1, false);
+        const double d0 = s.dist;
+        double t = 0;
+        while (m.zoomOn && t < 1) { cameraTick(s, m, 0.01, false); t += 0.01; }
+        check(std::fabs(t - 0.15) < 0.011 && d0 == 50 && s.dist == 50 / 1.15, "a notch takes 0.15 s (the Orbit Lab's wheel step)");
+        stepDistance(s, m, 1, false);
+        cameraTick(s, m, 0.01, false);
+        setDistance(s, 20);                                                // the slider moves the camera during a step: the slider wins
+        cameraTick(s, m, 0.01, false);
+        check(s.dist == 20 && !m.zoomOn, "the distance slider during an eased step wins");
+    }
+    {   // the readout depends only on yaw, pitch and distance: the same after a drag and glide that end there
+        Settings a = settingsDefaults(); CameraMotion m;
+        setSpin(a, 0.9);
+        dragFor(a, m, 5, -3, 8); release(m, false);
+        for (int k = 0; k < 200 && cameraMoving(m); k++) cameraTick(a, m, dt, false);
+        Settings b = settingsDefaults(); setSpin(b, 0.9);
+        b.yaw = a.yaw; b.pitch = a.pitch; b.dist = a.dist;
+        const Readout ra = readout(a), rb = readout(b);
+        check(ra.omega == rb.omega && ra.shadowWideDeg == rb.shadowWideDeg && ra.shadowHighDeg == rb.shadowHighDeg && ra.distKm == rb.distKm, "the readout after a glide is the readout of its yaw, pitch and distance");
+    }
+}
+
 static void testSpinLab() {
     Settings s = settingsDefaults();
     check(s.spin == 0, "the lab opens at spin 0 (the real holes' spin is not measured)");
@@ -3445,6 +3587,7 @@ int main() {
     testSpinLab();
     testLooks();
     testFilmSoft();
+    testCameraMotion();
     testTrueLight();
     testGlare();
     testGas();

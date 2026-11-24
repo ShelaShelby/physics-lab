@@ -270,7 +270,9 @@ void OrbitView::drag(double dx, double dy, bool rotate) {
     // 3D: drag turns the view (0.73.0: in the Alpha Centauri scene it may turn right over, so you can look back at our Sun, which is towards +z)
     if (rotate) {
         const double y0 = yaw, p0 = pitch;
-        yaw += dx * 0.01; pitch = std::clamp(pitch + dy * 0.01, acScene ? -3.1 : -kPitchMax, acScene ? 3.1 : kPitchMax);
+        double dYaw = 0, dPitch = 0;
+        dragAngles(dx, dy, dYaw, dPitch);                 // (0.82.0: orbit/camera_motion.h, shared with the Black Hole Lab)
+        yaw += dYaw; pitch = std::clamp(pitch + dPitch, acScene ? -3.1 : -kPitchMax, acScene ? 3.1 : kPitchMax);
         turnYaw_ += yaw - y0; turnPitch_ += pitch - p0; turned_ = true;
         return;
     }
@@ -298,22 +300,18 @@ void OrbitView::grab() { pressed_ = true; spinYaw_ = spinPitch_ = 0; }
 
 void OrbitView::release() {
     pressed_ = false;
-    const double v = std::hypot(spinYaw_, spinPitch_);
-    if (reduceMotion || v < kMomentumStop) { spinYaw_ = spinPitch_ = 0; return; }
-    if (v > kMomentumMax) { spinYaw_ *= kMomentumMax / v; spinPitch_ *= kMomentumMax / v; }
+    momentumRelease(spinYaw_, spinPitch_, reduceMotion);   // (0.82.0: orbit/camera_motion.h, shared with the Black Hole Lab)
 }
 
 void OrbitView::tick(double dt, const ViewSettings& set) {
     // a turn or tilt set by someone else since the last tick (Learn, the Journey, a benchmark scene, PL_TILT) stops the momentum
     if ((!turned_ && (yaw != heldYaw_ || pitch != heldPitch_)) || reduceMotion || journey || !set.view3D) { if (!pressed_) spinYaw_ = spinPitch_ = 0; }
     if (pressed_) {                                       // the drag's speed, smoothed over a few frames (a held, still pointer brings it to 0)
-        if (dt > 0) { spinYaw_ = 0.5 * spinYaw_ + 0.5 * turnYaw_ / dt; spinPitch_ = 0.5 * spinPitch_ + 0.5 * turnPitch_ / dt; }
+        momentumFollow(spinYaw_, spinPitch_, turnYaw_, turnPitch_, dt);
     } else if (spinYaw_ != 0 || spinPitch_ != 0) {        // a released turn coasts, fading; it ends exactly (0 below kMomentumStop)
         yaw += spinYaw_ * dt;
         pitch = std::clamp(pitch + spinPitch_ * dt, acScene ? -3.1 : -kPitchMax, acScene ? 3.1 : kPitchMax);
-        const double f = std::exp(-kMomentumFade * dt);
-        spinYaw_ *= f; spinPitch_ *= f;
-        if (std::hypot(spinYaw_, spinPitch_) < kMomentumStop) spinYaw_ = spinPitch_ = 0;
+        momentumFade(spinYaw_, spinPitch_, dt);
     }
     turnYaw_ = turnPitch_ = 0; turned_ = false;
     if (set.view3D && spin) yaw += 0.15 * dt;             // ⟳ Spin: the 3D view turns slowly

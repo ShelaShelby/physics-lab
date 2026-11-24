@@ -327,6 +327,30 @@ void blackholeDiscStreaks(AppState& app) {
     app.blackholeView.makeFineNow(app.blackhole);
 }
 
+// 0.82.0: blackhole.circle_spin: a feeding hole (the disc on) spinning at 0.9, Real, the starting 45-degree view, 10 degrees above the disc, at the closest
+// distance where the shadow leaves part of the picture (lab.h shadowFillsPicture, checked at the tilts the scene reaches: 80 to 100 degrees from the axis). The
+// shadow fills the picture closer in, and there is nothing to circle but black. PL_BENCH_ZOOM="dist,fov" tries another view.
+void blackholeCircleSpin(AppState& app) {
+    commonSetup(app);
+    app.lab = blackhole::kLabIndex;
+    app.blackhole = blackhole::settingsDefaults();
+    blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
+    blackhole::setSpin(app.blackhole, 0.9);
+    const double cx = app.bhFreeW > 0 ? app.bhFreeX + app.bhFreeW / 2 : app.canvasW / 2, cy = app.bhFreeH > 0 ? app.bhFreeY + app.bhFreeH / 2 : app.canvasH / 2;
+    double d = blackhole::kDistMin;
+    for (; d < 100; d *= 1.02) {
+        blackhole::Settings t = app.blackhole;
+        blackhole::setDistance(t, d);
+        bool fills = false;
+        for (double deg : {80.0, 90.0, 100.0}) { t.pitch = deg * kPi / 180; fills = fills || blackhole::shadowFillsPicture(t, app.canvasW, app.canvasH, cx, cy); }
+        if (!fills) break;
+    }
+    blackhole::setDistance(app.blackhole, d);
+    if (envHas("PL_BENCH_ZOOM")) { double z = 0, f = 0; if (std::sscanf(SDL_getenv("PL_BENCH_ZOOM"), "%lf,%lf", &z, &f) == 2) { blackhole::setDistance(app.blackhole, z); blackhole::setFov(app.blackhole, f); } }
+    app.blackhole.pitch = 80 * kPi / 180;
+    app.blackholeView.makeFineNow(app.blackhole);
+}
+
 // 0.81.0: blackhole.film_soft: the Film look (spin 0.6, J15's disc) with its soft edges and see-through disc (up to four crossings laid per pixel), the streaks
 // and the clump moving at the fastest rate, at the paper's view (74.1 GM/c^2, 86.56 degrees) with the Film scenes' 30-degree view; turning round the axis as
 // moving_gas. PL_BENCH_ZOOM="dist,fov" tries another view.
@@ -447,6 +471,7 @@ struct BenchState {
     std::uint64_t bhPic = 0;
     long bhCard = 0, bhSkyPics = 0, bhDiscFills = 0;
     std::map<int, app::BenchBlackHole> bhByScene;
+    blackhole::CameraMotion bhCam;            // 0.82.0: blackhole.circle_spin's drag and glide (the app's own is stopped while the benchmark runs)
     // film_tilt: the last moving picture and the one at rest (read back), and whether the next frame reads one back (1 moving, 2 at rest)
     PixelGrab grabMoving, grabRest;
     int grabNext = 0, shotFor = -1, shotK = 0;
@@ -608,6 +633,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::BlackHoleMovingGas: blackholeMovingGas(app); break;
         case K::BlackHoleDiscStreaks: blackholeDiscStreaks(app); break;
         case K::BlackHoleFilmSoft: blackholeFilmSoft(app); break;
+        case K::BlackHoleCircleSpin: blackholeCircleSpin(app); b.bhCam = blackhole::CameraMotion(); break;   // 0.82.0
         case K::UiGuideScroll: {
             commonSetup(app);
             // the longest Learn guide (measured in 0.56.1 at 1280 x 800: the Orbit Lab's timeline, 7,157 px of scrolling; the next the Orbit Lab's "What am I looking
@@ -727,6 +753,18 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
             blackhole::turn(app.blackhole, 0.15 * dt, 0.0);
             break;
         }
+        case K::BlackHoleCircleSpin: {                                        // 0.82.0: dragged 0.6 s, then let go to glide 0.6 s, through the lab's own camera motion
+            const double m = u - warm;
+            if (m < 0) break;
+            const int stroke = static_cast<int>(m / 1.2);
+            blackhole::CameraMotion& c = b.bhCam;
+            if (m - 1.2 * stroke < 0.6) {
+                if (!c.pressed) blackhole::grab(c);
+                blackhole::dragTurn(app.blackhole, c, 200 * dt, (stroke % 2 == 0 ? -35.0 : 35.0) * dt);   // round the hole, and up (then down) through the disc's plane
+            } else if (c.pressed) blackhole::release(c, false);
+            blackhole::cameraTick(app.blackhole, c, dt, false);
+            break;
+        }
         case K::BlackHoleAllLight: {                                          // 0.58.0: turning 0.3 rad a second, tilting 12 degrees each way through the disc's plane
             const double m = u - warm;
             if (m < 0) break;
@@ -762,7 +800,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
 long pictureCounter(AppState& app, const render::Renderer2D& R, int idx) {
     const app::BenchSceneText& t = sceneText(idx);
     using K = app::BenchKind;
-    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme || t.kind == K::BlackHoleAllLight || t.kind == K::BlackHoleMovingGas || t.kind == K::BlackHoleDiscStreaks || t.kind == K::BlackHoleFilmSoft) {
+    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme || t.kind == K::BlackHoleAllLight || t.kind == K::BlackHoleMovingGas || t.kind == K::BlackHoleDiscStreaks || t.kind == K::BlackHoleFilmSoft || t.kind == K::BlackHoleCircleSpin) {
         const blackhole::ViewStats& s = app.blackholeView.stats();
         return s.skyCard ? R.skyStats().draws : static_cast<long>(s.picture);   // the card's sky and disc, else the worker's finished pictures
     }
@@ -772,7 +810,7 @@ long pictureCounter(AppState& app, const render::Renderer2D& R, int idx) {
 std::string picturesBy(AppState& app, int idx) {
     const app::BenchSceneText& t = sceneText(idx);
     using K = app::BenchKind;
-    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme || t.kind == K::BlackHoleAllLight || t.kind == K::BlackHoleMovingGas || t.kind == K::BlackHoleDiscStreaks || t.kind == K::BlackHoleFilmSoft) return app.blackholeView.stats().skyCard ? "graphics card" : "processor";
+    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme || t.kind == K::BlackHoleAllLight || t.kind == K::BlackHoleMovingGas || t.kind == K::BlackHoleDiscStreaks || t.kind == K::BlackHoleFilmSoft || t.kind == K::BlackHoleCircleSpin) return app.blackholeView.stats().skyCard ? "graphics card" : "processor";
     if (t.kind == K::Atom) return app.atom.gpuOutline && app.computeOk ? "graphics card" : "processor";
     return "";
 }
@@ -815,7 +853,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
         case K::MoleculeDensity: case K::MoleculeVibDensity:          // 0.57.1
             return molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk) + "; " + (molecule::surfaceCardState() == 1 || g_vk ? molecule::surfaceCardPathText(g_vk != nullptr) :   // 0.68.0
                    std::string("the surface: the processor (its triangles ") + (t.kind == K::MoleculeVibDensity ? "made again for each new phase of the swing, and sorted and coloured each frame)" : "sorted again and coloured each frame as the camera turns)"));
-        case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: case K::BlackHoleMovingGas: case K::BlackHoleDiscStreaks: case K::BlackHoleFilmSoft: {
+        case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: case K::BlackHoleMovingGas: case K::BlackHoleDiscStreaks: case K::BlackHoleFilmSoft: case K::BlackHoleCircleSpin: {
             const auto it = b.bhByScene.find(runIdx);
             if (it != b.bhByScene.end() && !it->second.skyPath.empty()) return "the sky and disc: " + it->second.skyPath;
             const blackhole::BlackHoleView& v = app.blackholeView;
@@ -843,7 +881,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
             std::snprintf(z, sizeof z, "Molecule Lab: %s (%zu atoms), zoom x%.2f%s", app.molecule.mol().id.c_str(), app.molecule.mol().atoms.size(), app.molecule.set.cam.zoom,
                           app.molecule.vibOn() ? (", vibration mode " + std::to_string(app.molecule.vibMode + 1)).c_str() : "");
             return z;
-        case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: case K::BlackHoleMovingGas: case K::BlackHoleDiscStreaks: case K::BlackHoleFilmSoft:
+        case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: case K::BlackHoleMovingGas: case K::BlackHoleDiscStreaks: case K::BlackHoleFilmSoft: case K::BlackHoleCircleSpin:
             std::snprintf(z, sizeof z, "Black Hole Lab: distance %.1f GM/c\xC2\xB2, field of view %.0f\xC2\xB0, pitch %.3f rad (at the set-up)", app.blackhole.dist, app.blackhole.fovDeg, app.blackhole.pitch);
             return z;
         case K::UiGuideScroll: return "Learn guide " + b.pickedGuide + " (lab:guide)";
@@ -908,6 +946,8 @@ const std::vector<WaitDef>& waitDefs() {
         {"response.blackhole_look_back", "Film back to Real", "the look changed from Film back to Real (with the glare); until the finished picture"},
         {"response.blackhole_streaks", "The disc's streaks made", "a feeding hole, Real look, the streaks off: their field (gas.h, made once at start-up on a worker) made again from "
                                                                  "nothing and the streaks turned on; until the picture with them"},
+        {"response.blackhole_tilt", "The fine picture after a tilt", "a feeding hole spinning at 0.9 (the disc on), from 20 GM/c\xC2\xB2, 10\xC2\xB0 above the disc: "
+                                                                  "the camera turned and tilted 0.1 rad, as a drag leaves it (0.82.0); until the fine picture of the new tilt"},
         {"response.orbit_date", "A jump to a far date in Real physics", "Planet physics Real: from today to 1850-06-01, 2095-01-01 and 1805-03-01; until the picture of that date is drawn"},
     };
     return v;
@@ -957,6 +997,7 @@ void waitPrepare(AppState& app, int w, int t) {
         if (id == "response.blackhole_spin") { blackhole::setSpin(app.blackhole, 0.5); blackhole::setDistance(app.blackhole, 20); }
         if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Film);
         if (id == "response.blackhole_streaks") app.blackhole.gasPattern = false;
+        if (id == "response.blackhole_tilt") { blackhole::setSpin(app.blackhole, 0.9); blackhole::setDistance(app.blackhole, 20); app.blackhole.pitch = 80 * kPi / 180; }
     } else if (id == "response.orbit_date") {
         app.lab = 0;
         resetToToday(app);
@@ -978,6 +1019,7 @@ void waitAct(AppState& app, int w, int t) {
     else if (id == "response.blackhole_look") blackhole::setLook(app.blackhole, blackhole::Look::Film);
     else if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Real);
     else if (id == "response.blackhole_streaks") { blackhole::streakFieldRemake(); app.blackhole.gasPattern = true; }
+    else if (id == "response.blackhole_tilt") blackhole::turn(app.blackhole, 0.1, 0.1);   // (from 80 to 85.7 degrees from the axis; each try starts from waitPrepare)
     else if (id == "response.orbit_date") {
         static const int64_t dates[3] = {-3773779200000LL, 3944678400000LL, -5201798400000LL};   // 1850-06-01, 2095-01-01, 1805-03-01 (00:00 UTC)
         jumpToDate(app, dates[t], true);   // (as the Go button: 0.67.0 walks a far date on a worker)

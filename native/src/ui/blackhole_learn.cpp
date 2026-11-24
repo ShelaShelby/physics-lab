@@ -153,7 +153,9 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>The sky is ours.</b> It is the sky seen from Earth, placed behind the hole. Nobody has a map of the sky as it looks from the centre of our galaxy or "
           "from M87: one would have to be invented.") +
         p("<b>You hover.</b> Staying still that close to a black hole would take a powerful rocket. Your clock runs slow, and the starlight reaches you bluer and "
-          "brighter: the card gives these as numbers, but the picture does not draw the change of colour or brightness.") +
+          "brighter: the card gives these as numbers, but the picture does not draw the change of colour or brightness. Dragging takes you round the hole "
+          "as the Orbit Lab's camera goes round a planet, and you glide a little when you let go, but at each place you hover again: you are not flying or "
+          "orbiting. A camera that orbits or falls in sees a different picture (its own motion shifts and crowds the light); the lab does not draw that.") +
         p("<b>Sagittarius A* and M87*.</b> Only their mass and distance are measured (GRAVITY Collaboration 2022; the Event Horizon Telescope 2019 and 2022). "
           "Their spin is not measured. Their real gas is a faint, very hot fog that shines mostly in radio light, not a bright disc. The famous telescope "
           "pictures are radio maps at 1.3 mm drawn in chosen colours, and their bright ring need not lie exactly on the shadow's edge.")});

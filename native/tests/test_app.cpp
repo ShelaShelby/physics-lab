@@ -43,6 +43,10 @@
 #include <chrono>
 #include "atom/quark_light.h"
 #include "orbit/solar_system.h"
+#include "orbit/orbit_view.h"
+#include "orbit/camera.h"
+#include "orbit/camera_motion.h"
+#include "blackhole/lab.h"
 
 
 // Orbit Lab texts (the guide, the timeline, the far-away things)
@@ -1096,16 +1100,17 @@ static void testBenchBlackHole() {
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas, 0.73.0 orbit.alphacen, 0.75.0 orbit.flyby, 0.77.0 orbit.earth_clouds, 0.78.0 orbit.comet_tails, 0.79.0 blackhole.disc_streaks, 0.81.0 blackhole.film_soft): 39 Hard scenes first, 55 in All", app::kBenchHardScenes == 39 && app::kBenchAllScenes == 55 && int(v.size()) == 55);
+    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas, 0.73.0 orbit.alphacen, 0.75.0 orbit.flyby, 0.77.0 orbit.earth_clouds, 0.78.0 orbit.comet_tails, 0.79.0 blackhole.disc_streaks, 0.81.0 blackhole.film_soft, 0.82.0 blackhole.circle_spin): 40 Hard scenes first, 56 in All", app::kBenchHardScenes == 40 && app::kBenchAllScenes == 56 && int(v.size()) == 56);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[55] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+    static const char* const ids[56] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
         "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.slice_super_drag",
         "atom.slice_all_drag", "atom.slice_dirac_drag", "atom.side_all_glow", "atom.side_all_classic", "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
         "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas", "blackhole.disc_streaks",   // 0.79.0, on purpose
         "blackhole.film_soft",   // 0.81.0, on purpose
+        "blackhole.circle_spin",   // 0.82.0, on purpose
         "ui.guide_scroll", "ui.data_plot", "ui.settings_open", "orbit.alphacen", "orbit.flyby", "orbit.earth_clouds", "orbit.comet_tails",   // 0.77.0, 0.78.0, on purpose
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
         "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};
@@ -1149,7 +1154,8 @@ static void testBenchSceneNumbers() {
     // 0.73.0 (on purpose): 34 scenes (orbit.alphacen), 297.8 s planned: the upper limit 5.0 minutes (REPORT 0.73.0); 0.75.0 (on purpose): 35 (orbit.flyby), 304.3 s: 5.1 minutes
     // 0.77.0 (on purpose): 36 (orbit.earth_clouds), 310.8 s: 5.2 minutes (REPORT 0.77.0); 0.78.0 (on purpose): 37 (orbit.comet_tails), 317.3 s: 5.3 minutes (REPORT 0.78.0)
     // 0.81.0 (on purpose): 39 (blackhole.film_soft), 335.1 s: 5.6 minutes (REPORT 0.81.0)
-    checkTrue("benchmark run: planned at about five and a half minutes since 0.79.0 (on purpose: blackhole.disc_streaks, response.blackhole_streaks; 0.81.0 blackhole.film_soft; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 336);
+    // 0.82.0 (on purpose): 40 (blackhole.circle_spin) and 39 waits (response.blackhole_tilt), 346.4 s: 5.8 minutes (REPORT 0.82.0)
+    checkTrue("benchmark run: planned at about five and three-quarter minutes since 0.82.0 (on purpose: blackhole.disc_streaks, response.blackhole_streaks; 0.81.0 blackhole.film_soft; 0.82.0 blackhole.circle_spin, response.blackhole_tilt; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 347);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {
@@ -1576,6 +1582,46 @@ static void testQuarkLight() {
     for (int c = 0; c < 3; c++) atom::lightQuarkColour(atom::kColourCharge[c], d[c]);
     for (int a = 0; a < 3; a++) for (int b = a + 1; b < 3; b++)
         checkTrue("colour charges " + std::to_string(a) + " and " + std::to_string(b) + " stay apart (RGB distance over 80)", std::sqrt(std::pow(d[a][0] - d[b][0], 2) + std::pow(d[a][1] - d[b][1], 2) + std::pow(d[a][2] - d[b][2], 2)) > 80);
+}
+
+// ---- 0.82.0: the Black Hole Lab's drag against the Orbit Lab's own (OrbitView::drag's orbit::dragAngles): the same turn per point, and the same way for the same drag.
+// Each lab's camera sits on the +depth axis of its own view frame (orbit/camera.h turn: depth = (x sa + y ca) sb + z cb, so the axis is (sa sb, ca sb, cb)).
+// The Orbit Lab's frame uses yaw + pi and -pitch (orbit_view.cpp, "3D the right way up"); the Black Hole Lab's is holeView's (yaw, pitch). The camera's new
+// place is put into the frame it had before the drag: x1 > 0 is to the right of the old picture, y2 > 0 up.
+static void testBlackHoleCamera() {
+    static_assert(orbit::OrbitView::kMomentumFade == orbit::kMomentumFade && orbit::OrbitView::kMomentumStop == orbit::kMomentumStop && orbit::OrbitView::kMomentumMax == orbit::kMomentumMax, "one set of numbers");
+    const double pi = 3.14159265358979323846;
+    const auto frame = [](double ya, double pa) { orbit::ViewCam c; c.ca = std::cos(ya); c.sa = std::sin(ya); c.cb = std::cos(pa); c.sb = std::sin(pa); return c; };
+    const auto where = [](const orbit::ViewCam& before, const orbit::ViewCam& after, double& x1, double& y2) {   // the camera's new place in the old frame
+        double dep = 0;
+        before.turn(after.sa * after.sb, after.ca * after.sb, after.cb, x1, y2, dep);
+    };
+    struct Drag { double dx, dy; const char* what; };
+    for (const Drag& d : {Drag{30, 0, "right"}, Drag{-30, 0, "left"}, Drag{0, 30, "down"}, Drag{0, -30, "up"}}) {
+        orbit::OrbitView ov;                                               // the Orbit Lab's starting view (yaw 0.6, pitch 1.0)
+        const orbit::ViewCam o0 = frame(ov.yaw + pi, -ov.pitch);
+        const double oy = ov.yaw, op = ov.pitch;
+        double dYaw = 0, dPitch = 0;                                       // OrbitView::drag's turn (orbit_view.cpp is not in this test's libraries: its lines,
+        orbit::dragAngles(d.dx, d.dy, dYaw, dPitch);                       // yaw += dYaw, pitch += dPitch inside the tilt limit, here)
+        ov.yaw += dYaw; ov.pitch = std::clamp(ov.pitch + dPitch, -orbit::OrbitView::kPitchMax, orbit::OrbitView::kPitchMax);
+        const orbit::ViewCam o1 = frame(ov.yaw + pi, -ov.pitch);
+        blackhole::Settings s = blackhole::settingsDefaults();              // the Black Hole Lab's starting view
+        blackhole::CameraMotion m;
+        const blackhole::HoleView h0 = blackhole::holeView(s, 1280, 800, 640, 400);
+        const double by = s.yaw, bp = s.pitch;
+        blackhole::dragTurn(s, m, d.dx, d.dy);
+        const blackhole::HoleView h1 = blackhole::holeView(s, 1280, 800, 640, 400);
+        const orbit::ViewCam b0 = frame(std::atan2(h0.sa, h0.ca), std::atan2(h0.sb, h0.cb)), b1 = frame(std::atan2(h1.sa, h1.ca), std::atan2(h1.sb, h1.cb));
+        double ox = 0, oyy = 0, bx = 0, byy = 0;
+        where(o0, o1, ox, oyy); where(b0, b1, bx, byy);
+        const double turnO = std::hypot(std::remainder(ov.yaw - oy, 2 * pi), ov.pitch - op), turnB = std::hypot(std::remainder(s.yaw - by, 2 * pi), s.pitch - bp);
+        checkTrue(std::string("a drag of 30 points ") + d.what + ": both labs turn 0.3 rad (Orbit " + std::to_string(turnO) + ", Black Hole " + std::to_string(turnB) + ")",
+                  std::fabs(turnO - 0.3) < 1e-12 && std::fabs(turnB - 0.3) < 1e-12);
+        const bool sameWay = d.dx != 0 ? (ox * d.dx < 0 && bx * d.dx < 0 && std::fabs(oyy) < 0.1 * std::fabs(ox) && std::fabs(byy) < 0.1 * std::fabs(bx))   // (a circle of latitude bends a little)
+                                       : (oyy * d.dy < 0 && byy * d.dy < 0 && std::fabs(ox) < 1e-12 && std::fabs(bx) < 1e-12);
+        checkTrue(std::string("a drag ") + d.what + " moves both cameras the same way on the picture (" + (d.dx != 0 ? "against the pointer, round the target" : "with the pointer, over or under the target") +
+                  "; Orbit " + std::to_string(ox) + ", " + std::to_string(oyy) + "; Black Hole " + std::to_string(bx) + ", " + std::to_string(byy) + ")", sameWay);
+    }
 }
 
 // ---- 0.9.7: "Reset to today" keeps the zoom and the four switches (and the Time speed), and resets the date, the selection and Follow ----
@@ -2373,6 +2419,7 @@ int main() {
     testFarMasses();
     testQuarkLight();
     testResetToToday();
+    testBlackHoleCamera();
     testOutline();
     testThemeGrid();
     testPlanetPhysics();

@@ -176,7 +176,7 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_blackhole.py:settings | 6 | KEEP | ui_blackhole | settings are saved and loaded |
 | check_blackhole.py:layout | 6 | DELETE | - | the bar and card at two sizes: pixel layout |
 | check_audit19.py:molsearch | 6 | KEEP | ui_screens | search in the Molecule Lab lists nothing that does nothing |
-| check_blackhole.py:open | 6 | KEEP | ui_blackhole | the lab opens and draws |
+| check_blackhole.py:open | 6 | KEEP | ui_blackhole | the lab opens and draws; a drag circles the camera as the Orbit Lab's, 1.0 rad for 100 points plus the glide (0.82.0) |
 | check_6b.py:benchrest | 6 | KEEP | ui_screens | a busy lab is said to be busy at rest |
 | check_022.py:factsrc | 6 | KEEP | ui_orbit | a fact names its source and opens it in About |
 | check_5k.py:about | 6 | KEEP | ui_shell | About opens with its last line |

@@ -26,6 +26,8 @@ constexpr int kLabIndex = 3;               // AppState::lab (0.55.0: Orbit 0, At
 // the shadow), turned towards the galactic centre: picked from 5 distances x 3 fields of view x 3 tilts rendered (REPORT 0.70.0): the shadow about a
 // quarter of the picture's height, the disc and its image over the shadow both in view. Until 0.69: 20 GM/c^2 and 90 degrees, inside the disc.
 constexpr double kDistMin = 2.2, kDistMax = 1000, kDistDefault = 50;
+// the pitch (the camera's angle from the spin axis) stays 0.01 rad from each pole: straight up or down the view's roll would be undefined
+constexpr double kPitchMin = 0.01, kPitchMax = 3.14159265358979323846 - 0.01;
 constexpr double kTiltDefaultDeg = 100;    // the camera's angle from the disc's (the sky frame's z) axis
 constexpr double kFovMin = 10, kFovMax = 360, kFovDefault = 45;     // degrees across the picture's height (above 180: a fisheye; the corners reach at most pi from the middle)
 constexpr double kMassMin = 1, kMassMax = 1e11;                      // Suns: the range of the slider (the picture does not depend on it)
@@ -113,8 +115,32 @@ bool allLightOn(const Settings& s);        // 0.58.0: Real, the disc on and allL
 void paperView(Settings& s);
 void setDistance(Settings& s, double dist);
 void setFov(Settings& s, double fovDeg);
-void turn(Settings& s, double dYaw, double dPitch);       // the pitch stays inside (0, pi)
+void turn(Settings& s, double dYaw, double dPitch);       // the pitch stays inside [kPitchMin, kPitchMax]
 void saveSettings(const Settings& s, std::map<std::string, std::string>& out);
+
+// 0.82.0: the camera handles as the Orbit Lab's (orbit/camera_motion.h holds the shared numbers). A drag circles the camera round the hole at
+// orbit::kTurnPerPoint rad a point, the same way as the Orbit Lab's for the same drag: right, the camera goes to its left; down, the camera goes down
+// (orbit_view.cpp puts its camera at (sin yaw sin pitch, cos yaw sin pitch, cos pitch) with its picture turned half a turn from this lab's, so its yaw
+// and pitch go up where these go down). On release the turn keeps its speed, fading (none with Reduce motion); a press stops it. The wheel and + -
+// move the camera in eased steps (orbit::kWheelZoomSeconds, eased in ln distance) that end exactly where 0.81.0's 15 % jump ended.
+// The camera still hovers at each place it is put (J15 (A.3)): this is how the view is moved, not a moving camera. Not saved.
+struct CameraMotion {
+    bool pressed = false;                  // a press on the picture is held
+    double vYaw = 0, vPitch = 0;           // the turn's speed (rad/s): while pressed the drag's, after release the coasting one
+    double turnYaw = 0, turnPitch = 0;     // the turn the drag made since the last tick
+    bool turned = false;
+    double heldYaw = 0, heldPitch = 0;     // the view after the last tick (a change by someone else stops the coasting)
+    bool zoomOn = false;                   // an eased step of the distance
+    double zoomFrom = 0, zoomTo = 0, zoomS = 0, zoomLast = 0;   // GM/c^2 (zoomLast: the distance the step set last; a change by someone else stops it)
+};
+constexpr double kNotch = 1.15;            // a wheel notch or a key: 15 % of the distance (0.55.0)
+void dragTurn(Settings& s, CameraMotion& m, double dx, double dy);   // a drag of dx, dy points (y down)
+void grab(CameraMotion& m);                // a press on the picture: a coasting turn stops
+void release(CameraMotion& m, bool reduceMotion);   // the press ends
+void stepDistance(Settings& s, CameraMotion& m, double notches, bool reduceMotion);   // + closer, - farther; at once with Reduce motion
+void stopMotion(CameraMotion& m);          // Reset view, Escape, the benchmark: no coasting, no eased step (the view stays where it is)
+void cameraTick(Settings& s, CameraMotion& m, double dt, bool reduceMotion);
+bool cameraMoving(const CameraMotion& m);  // coasting or in an eased step
 Settings loadSettings(const std::map<std::string, std::string>& in);    // unknown keys and bad values are ignored
 
 // The log sliders: position 0..1 <-> value
@@ -159,6 +185,9 @@ bool finishLook(DiscLook& L, const Settings& s);
 
 // The view for a picture of W x H pixels with the hole at (cx, cy): K from the field of view (at most so that every corner is within pi of the middle)
 HoleView holeView(const Settings& s, double W, double H, double cx, double cy);
+// 0.82.0 (moved from the Camera section's caption): the shadow covers the whole W x H picture round (cx, cy): its half-height (spin: readout's, latest as
+// there; spin 0: shadowAngle) times holeView's K reaches the farthest corner. Bending off: no shadow.
+bool shadowFillsPicture(const Settings& s, double W, double H, double cx, double cy, bool latest = false);
 
 // What the readout shows. All from the module: gravRadiusM (presets.h), horizon (kerr.h, BPT (2.6)), shadowAngle (Synge, Perlick & Tsupko (7)),
 // hoverClockRate, hoverBlueshift, hoverBrightening, shadowSkyFraction (schwarzschild.h), shadowDiameterMuas and the measured rings (presets.h).

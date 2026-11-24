@@ -47,6 +47,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **source needed**: a measured phase law for each main ring (A, B, C, Cassini Division; brightness against phase angle up to the forward-scattering side), to replace the rings' even scattering (0.78.0 item 2, skipped after 2 tries: Déau et al. 2009, arXiv:0902.0289, has the opposition surge only; the UVIS power law is far-UV only).
 - **source needed**: a published syndyne or synchrone with readable numbers (Finson & Probstein 1968: the ADS scan did not load on 2026-11-24) to check one dust tail curve. The comets' dust: grain ejection speeds (the tail's width) and the gas tail's length are not modelled.
 - **source needed**: the comets' 4 AU dust switch-on (a choice since 0.78.0; a distance where water ice starts to sublimate), Haumea's shape,, lower than Cassini's for the B ring and the Cassini Division. Check against Colwell et al. 2010.
+- **fix**: a released turn coasts up to 6 % past its stated most (kMomentumMax / kMomentumFade = 0.33 rad) at 60 Hz, 1.5 % at 255 Hz: it steps before the fade. The Black Hole Lab uses the exact step (orbit/camera_motion.h momentumCoastSeconds); the Orbit Lab was kept as it is (0.82.0's stop rule).
 - A Field of view setting for the 3D camera (45 degrees now, orbit/camera.h). A pick of a closer body lowers the zoom to its cap at once.
 - Alpha Centauri (PLAN_ALPHACEN.md): the Sun's pick looking back in 2D, A and B seen from Proxima b, Fit planets with the card open, Proxima's orbit time on its card and a faster time choice, A and B as one label when close.
 - Real mode: the belts' mass is not in the model (Neptune 1,436 km off). Europa up to 17,700 km off (Laplace terms). Belt asteroids ignore Jupiter far from 2026.
@@ -77,7 +78,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Real light: the stars' own glare, colour and adaptation in the glare, a calibrated sky map (**source needed**).
 - The realistic gas disc (native/PLAN_DISC.md section 9, the owner's order): Sagittarius A*'s hot flow waits (the **source needed** line below).
 - Film's see-through disc, what is left: the stars on the CPU table's picture (the fallback) stay hidden behind the whole disc (the GPU sky pass lets them show through it).
-- 0.82.0: a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every side" (the owner, 24 Nov 2026). Planned with the owner first.
+- Tilting at spin on the CPU table (the owner's path): each new tilt refills the coarse table on a worker (build machine, 0.81.0's real_move: 27 ms a fill, 47 worst; the whole new picture about 8 a second), and the fine one comes 2.2 s after a tilt (response.blackhole_tilt, 4 cores). The frame itself is not held up (0.02 ms). Faster needs a cheaper table or the GPU light paths back on his card (the **fix** above). Measure on his PC with blackhole.circle_spin first.
 - After 0.83.0 (the owner, 24 Nov 2026): a research job for Sagittarius A*'s hot flow: the missing source (BL06's definition, or another fitted model), tested against the 1.3 mm and 2.2 um checks; drawn only if both pass.
 - Moving gas, what is left: the streaks and the clump on the CPU path (the fallback draws the surface but no moving gas), a check of the clump's light curve against a published curve.
 - The disc's thickness round a spinning hole: Zhu's R_z spin term (their (6), a^2 (u_t - 1) as printed) checked against Abramowicz et al. 1997 (**source needed**: not saved). Until then a spinning hole's disc is drawn in its plane.
@@ -91,7 +92,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look at 1.3 mm.
 
 ## Whole app
-- 0.83.0, after the camera job (the owner, 24 Nov 2026): new Black Hole benchmark scenes that move as a user does (circling, moving in and out, over the top and under); the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
+- 0.83.0, after the camera job (the owner, 24 Nov 2026): new Black Hole benchmark scenes that move as a user does (moving in and out, over the top and under; circling with the glide is blackhole.circle_spin since 0.82.0); the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
 - A GPU timing of the Black Hole sky pass alone (timestamps around one pass), if needed again.
 - The Glow and Density clouds' exposure grid is read back in the frame that draws it. A grid one frame late would remove the wait.
 - The crash-safe helper: the sky's, lens's and light paths' first runs still happen in the app first. The sky's helper also makes the lens's and table pass's pipelines.

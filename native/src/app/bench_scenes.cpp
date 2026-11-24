@@ -106,6 +106,9 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "The Film look at the paper's view (74.1 GM/c\xC2\xB2, 86.6\xC2\xB0 from the spin axis) with a 30\xC2\xB0 view: the soft-edged, partly see-through disc "
             "(up to four crossings laid per pixel) with its streaks and the clump moving at the fastest rate (10^7), the camera turning slowly round the axis. "
             "A new picture every frame on the graphics card.");
+        add(true, "blackhole.circle_spin", BenchKind::BlackHoleCircleSpin, -1, "Black Hole Lab, circling the spinning hole and its disc as a user drags, with the glide",
+            "A feeding hole spinning at 0.9, Real, the disc on, a 45\xC2\xB0 view, at the closest distance where the shadow does not fill the picture: dragged "
+            "round 2 rad a second and up or down through the disc's plane for 0.6 s, then let go to glide 0.6 s, over and over. Each tilt needs new light paths.");
         add(true, "ui.guide_scroll", BenchKind::UiGuideScroll, -1, "Pages, the longest Learn guide scrolled",
             "The longest Learn guide (the Orbit Lab's timeline: 7,157 px of scrolling at 1280 x 800) open in the reading view over its lab, scrolled from top to bottom "
             "at a steady rate in the counted time (and back up in the warm-up).");
@@ -180,7 +183,9 @@ double benchPlannedS() {
 // 328.6 s planned; the limit is 5.5 minutes now (nothing shortened, REPORT 0.79.0)
 // 0.81.0: 39 scenes (blackhole.film_soft, CLAUDE.md: a new drawing adds its scene; no new wait): 335.1 s planned; the limit is 5.6 minutes now (nothing
 // shortened, REPORT 0.81.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.6 * 60,
+// 0.82.0: 40 scenes (blackhole.circle_spin, CLAUDE.md: a new drawing adds its scene) and 39 waits (response.blackhole_tilt: a feature with a wait adds its
+// line): 346.4 s planned; the limit is 5.8 minutes now (nothing shortened, REPORT 0.82.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.8 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");

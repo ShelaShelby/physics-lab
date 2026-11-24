@@ -678,8 +678,8 @@ int main(int argc, char** argv) {
                         if (dz) app.molecule.wheel(dz);           // one wheel notch (15 %)
                         if (reset) app.molecule.resetView();
                     } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: + closer, − farther (15 % of the distance a step, as a wheel notch); R / Home the first view
-                        if (dz) blackhole::setDistance(app.blackhole, app.blackhole.dist * std::pow(1.15, -dz));
-                        if (reset) blackhole::resetView(app.blackhole);
+                        if (dz) blackhole::stepDistance(app.blackhole, app.bhCam, dz, ui::look().reduced);   // 0.82.0: eased, as the Orbit Lab's
+                        if (reset) { blackhole::resetView(app.blackhole); blackhole::stopMotion(app.bhCam); }
                     } else if (app.lab == 1) {
                         if (dz && app.atom.chartOn()) app.atom.chartZoomAt(std::pow(1.15, dz), (app.canvasW - app.set.insetRight) / 2, app.canvasH / 2);   // about the middle of the free picture
                         else if (dz) app.atom.setParam("zoom", app.atom.p.zoom + dz * 0.4);   // one wheel notch
@@ -701,8 +701,8 @@ int main(int argc, char** argv) {
                     if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) app.molecule.wheel(e.wheel.y);
                     break;
                 }
-                if (app.lab == blackhole::kLabIndex) {  // 0.55.0: the wheel moves the camera closer (up) or farther (down), 15 % of the distance a notch
-                    if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) blackhole::setDistance(app.blackhole, app.blackhole.dist * std::pow(1.15, -e.wheel.y));
+                if (app.lab == blackhole::kLabIndex) {  // 0.55.0: the wheel moves the camera closer (up) or farther (down), 15 % of the distance a notch (0.82.0: eased over 0.15 s, as the Orbit Lab's)
+                    if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) blackhole::stepDistance(app.blackhole, app.bhCam, e.wheel.y, ui::look().reduced);
                     break;
                 }
                 if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
@@ -722,6 +722,7 @@ int main(int argc, char** argv) {
                 if (app.lab >= 1) {                     // (Atom and Molecule Lab: a press on the picture starts a drag or a click)
                     if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && e.button.y < headerH + pictureWinH) {
                         mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y;
+                        if (app.lab == blackhole::kLabIndex) blackhole::grab(app.bhCam);   // 0.82.0: a press stops a coasting turn (as the Orbit Lab's)
                     }
                     break;
                 }
@@ -733,10 +734,8 @@ int main(int argc, char** argv) {
                     if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) { dragging = true; ui::shellNoteDrag(); }
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
-                    if (dragging && app.lab == blackhole::kLabIndex) {   // 0.55.0: drag turns you round the hole: the sky follows the pointer at the picture's own scale
-                        const double K = (app.canvasH / 2) / (app.blackhole.fovDeg * 3.14159265358979 / 360);
-                        blackhole::turn(app.blackhole, (e.motion.x - lastX) / scale / K / std::max(0.2, std::sin(app.blackhole.pitch)), -(e.motion.y - lastY) / scale / K);   // (the sky moves with the pointer near the middle)
-                    }
+                    if (dragging && app.lab == blackhole::kLabIndex)   // 0.82.0: drag circles the camera round the hole as the Orbit Lab's round a planet (any button: nothing to slide here)
+                        blackhole::dragTurn(app.blackhole, app.bhCam, (e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale);
                     else if (dragging && app.lab == molecule::kLabIndex) app.molecule.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));   // 0.18: turn; Shift / right / middle: move
                     else if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
                     else if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
@@ -756,6 +755,7 @@ int main(int argc, char** argv) {
                     else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
                 }
                 if (mouseDown && app.lab == 0) app.view.release();   // 0.74.0: a turning drag keeps a little momentum (orbit_view.h)
+                if (mouseDown && app.lab == blackhole::kLabIndex) blackhole::release(app.bhCam, ui::look().reduced);   // 0.82.0: the same (blackhole/lab.h)
                 mouseDown = dragging = false;
                 break;
             default: break;
@@ -813,6 +813,8 @@ int main(int argc, char** argv) {
         } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: the camera hovers; 0.72.0: the moving gas's clock runs (blackhole/lab.h gasTick)
             static const char* gasEnv = SDL_getenv("PL_BH_GAS");       // (checks that need a still picture: PL_BH_GAS=off keeps the gas still)
             if (gasEnv) app.blackhole.gasMoving = std::string(gasEnv) != "off";
+            if (app.benchRunning) blackhole::stopMotion(app.bhCam);              // 0.82.0: the benchmark moves the camera itself
+            else blackhole::cameraTick(app.blackhole, app.bhCam, dt, ui::look().reduced);   // a released turn coasts; the wheel's eased step
             blackhole::gasTick(app.blackhole, dt, app.bhGasT);
             app.blackholeView.gasT = app.bhGasT;
         } else if (app.lab == molecule::kLabIndex) {

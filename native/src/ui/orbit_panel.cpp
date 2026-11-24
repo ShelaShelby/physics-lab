@@ -73,7 +73,7 @@ void cameraTick(AppState& app, double dt) {
     if (!g.on) return;
     if (app.journey.active || app.benchRunning || app.lab != 0) { g.on = false; return; }   // a Journey or a benchmark scene sets the zoom itself
     g.s += dt / g.secs;
-    const double s = std::min(g.s, 1.0), e = s * s * (3 - 2 * s);   // eased in and out
+    const double e = orbit::ease01(g.s);   // eased in and out (0.82.0: orbit/camera_motion.h)
     applyZoom(app, g.s >= 1 ? g.to : g.from + (g.to - g.from) * e);   // it ends exactly on its value: the picture is kept again at rest
     if (g.s >= 1) g.on = false;
 }

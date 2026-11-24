@@ -87,10 +87,13 @@ def part_open(binary, work):
         check(ring > 0.05, f"the sky round the shadow is lit (brightest {ring:.3f})")
         check(int(st["images"]) > 150 and int(st["extra"]) > 50, f"the stars are drawn, many doubled ({st})")   # (0.70.0: the starting view 45 degrees across, not 90: a quarter of the sky's area; 300 until then)
 
-    # dragging turns the camera round the hole (the yaw of the view), the hole stays in the middle
+    # dragging turns the camera round the hole (the yaw of the view), the hole stays in the middle. 0.82.0 (a reference changed on purpose, REPORT 0.82.0): as the
+    # Orbit Lab's drag, 0.01 rad a point, a right drag takes the yaw down (until 0.81.0 the sky followed the pointer: up), then it glides at most 2.5 / 7.5 rad
     d = run_app(binary, work, "bh_drag", dict(BASE, PL_BLACKHOLE="1", PL_SCRIPT="6:drag=300,400,400,400"), frames=20)
     s0, s1 = bh(r), bh(d)
-    check(s0 is not None and s1 is not None and float(s1["yaw"]) - float(s0["yaw"]) > 0.05 and s1["pitch"] == s0["pitch"] and s1["dist"] == s0["dist"], f"a drag to the right turns the view ({s0} -> {s1})")
+    turned = -math.remainder(float(s1["yaw"]) - float(s0["yaw"]), 2 * math.pi) if s0 is not None and s1 is not None else 0
+    check(s0 is not None and s1 is not None and 1.0 - 1e-6 <= turned <= 1.0 + 2.5 / 7.5 + 1e-6 and s1["pitch"] == s0["pitch"] and s1["dist"] == s0["dist"],
+          f"a drag of 100 points to the right circles the camera 1.0 rad round the hole and a short glide ({turned:.4f} rad; {s0} -> {s1})")
 
 def part_presets(binary, work):
     P = presets()

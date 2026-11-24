@@ -1,24 +1,22 @@
-# 0.81.0: Film's disc made better (PLAN_DISC.md D4): soft edges, partly see-through, streaks; all labelled as the lab's own
+# 0.82.0: the Black Hole Lab's camera handles like the Orbit Lab's
 
 ## What changed
-- Read: CLAUDE.md, REPORT 0.80.1, ROADMAP (Black Hole Lab), PLAN_DISC.md sections 5, 6, 7, 9, disc078_film.txt, disc079_real_feeding.txt; by grep and line ranges looks.h/.cpp, gas.h StreakField, lab.cpp discLight and discGeom, shaders.h kKerrSkyFS and kKerrFS, vk_blackhole.cpp, blackhole_view.cpp (toneCompare, sky checks, PLBHFILM), sky_card.cpp, discproto.cpp film mode, test_blackhole.cpp testLooks, bench_scenes.cpp, benchmark.cpp; J15 App. A.6 in the saved original.
-- looks.h/.cpp: filmEdge (smoothstep fade over 0.12 in ln r inside 9.26 and 18.70 M), filmTau (1.5 S edge), filmCover (1 - exp(-tau)), layFrontToBack. LookRule gets fade and tau (Film only). J15's numbers are unchanged. Film's exposure rule is unchanged.
-- GPU: kKerrSkyFS (with the streaks' S) and kKerrFS (S = 1) scale each crossing's cover by 1 - exp(-tau). The existing front-to-back laying now lets the far side, the thin rings and the sky show through. kKerrTableCS is not touched.
-- Text: the Film panel ("Ours"), the chip line, "What is real" and the guide say what is the lab's own and what is not published (texture, Houdini volume, lens flare). The guide's J15 App. A.6 facts are added to the J15 extract (two blocks, checked against the original). The changelog has an entry. VERSION 0.81.0.
-- Benchmark: Hard scene blackhole.film_soft (Film, paper's view, streaks at 10^7, turning). No new wait. docs/blackhole/disc081_film.png, disc081_fades.png and .txt come from discproto film081.
-- The look: no hard rims, depth (the lower ring shows through), light spread across the disc 1.70 in ln Y against 0.88. At the same exposure the disc is darker (a third of the light: cover 0.78 at S = 1). The fade stays 0.12: 0.06 and 0.2 are not clearly better.
+- Read: CLAUDE.md, REPORT 0.81.0, ROADMAP (Black Hole Lab); by grep and line ranges main.cpp (key, wheel, mouse down, motion, up; the Black Hole tick), lab.h/.cpp (turn, kPitchMin/Max, setDistance, resetView), orbit_view.h/.cpp (drag, grab, release, tick, the momentum constants), orbit_panel.h/.cpp (zoomBy, glideZoom, cameraTick), shell.cpp (Escape), shell_blackhole.cpp (Camera section, Reset view), blackhole_view.cpp (ensureSpinTable, spinMatches, settled), gpu_guard.h, bench_scenes.cpp, benchmark.cpp (scenes, waitDefs), test_blackhole.cpp, test_app.cpp, check_blackhole.py, DECISIONS (Orbit Lab camera, the camera after the disc).
+- New orbit/camera_motion.h holds 0.74.0's numbers and steps (0.01 rad a point, fade 7.5 /s, stop 0.05 rad/s, at most 2.5 rad/s, 0.15 s wheel step). OrbitView uses them with the same arithmetic. The Black Hole Lab uses them through lab.h CameraMotion: drag, glide on release (none with Reduce motion), a press stops it, eased wheel and + - in ln distance, Escape stops a glide, Reset view as before.
+- Direction, read from the code: both labs put the camera at (sin yaw sin pitch, cos yaw sin pitch, cos pitch). The Orbit Lab's picture uses yaw + pi and -pitch (orbit_view.cpp), so it is half a turn from the Black Hole Lab's. So the Black Hole Lab takes the negative angles. In both, a right drag moves the camera to its left (the near side follows the pointer) and a down drag moves the camera down. test_app checks this in both frames.
+- The pitch limit (0.01 rad from each pole) is unchanged. The Camera caption and the guide say how to circle and that the camera hovers at each place.
+- Speed (feasibility, before the drag change): 0.81.0's real_move on the CPU table (GPU light paths and sky off, build machine, 4 cores), tilting at spin 0.9 with the disc: frame thread 0.02 ms, coarse table 27 ms a fill (47 worst), about 8 new pictures a second, no fine picture within 0.9 s. The coarse table already serves the motion and the fine one comes at rest. No small fix is left, so nothing was changed (ROADMAP).
+- Benchmark: Hard scene blackhole.circle_spin (spin 0.9, disc on, 45 degrees, 5.9 GM/c^2 at 1280 x 800: the closest where the shadow does not fill the picture). On the CPU table it makes 7.3 new pictures a second while moving. New wait response.blackhole_tilt: the fine picture 2188 ms after a tilt (worst 2191).
 
 ## Tests run
-- blackhole_physics: 1083 checks, 0 failed. New testFilmSoft (18 checks): fade value, slope and ends, cover closed form, two-layer algebra, conservation, tau -> infinity gives the opaque colour to the bit. With PL_SOURCES_DIR: J15 16 of 16 blocks in the original.
-- check_blackhole.py sky (48 checks, 0 failed). PLBHFILMSOFT: paper's view 2 of 13,936 pixels over 8 levels (2 over 1 level); 3 degrees below the plane 1 of 13,251. Far side seen through: 125 and 95 pixels.
-- check_blackhole.py precision (81 checks, 0 failed). PLBHFILM: 0 of 55,891 pixels more than 1 level from the laid colour. Seen through: 663 pixels. Glow within 1 level.
-- check.sh job: quick 17 of 18 at first. app_settings failed on the benchmark id list, which lacked blackhole.film_soft. Fixed, then app_settings passed and ui_smoke passed. The benchmark run with the new scene alone works (CPU path here, as film_tilt). check_sources.py: no J15 problem (the rest of its list is files missing from the partial checkout).
-- On 0.80.1 the new unit tests do not compile (the functions are new). The Python checks need lines and fields 0.80.1 does not print. They were not run on 0.80.1.
+- blackhole_physics: 1111 checks, 0 failed. New testCameraMotion (28 checks): rate, fade and stop (26 frames at 60 Hz), a flick coasts 0.327 rad at 255, 60 and 20 Hz (at most 2.5 / 7.5), glide stays inside the pitch limits, eased steps end bit-exactly at 0.81.0's jumps (8 cases), readout after a glide.
+- app_settings: 202,316 checks, 0 failed. New testBlackHoleCamera (8 checks): the same 0.3 rad for 30 points and the same way in both labs.
+- The new unit tests do not compile on 0.81.0 (the functions are new). check_blackhole.py open fails on 0.81.0 (-0.0997 rad) and passes on 0.82.0.
+- check.sh job: quick 18 of 18, ui_smoke passed. By hand: check_blackhole.py open (8/0) and whiteout (4/0), check_022.py keys (6/0). Bench runs of circle_spin on both paths and of the new wait work.
 
 ## Not done
-- The CPU table fallback still hides the stars behind the whole disc (ROADMAP). Its picture has no streaks (the existing ROADMAP line).
+- A faster tilt on the CPU table (above, and ROADMAP). The Orbit Lab's flick coasts up to 6 % past 0.33 rad (it steps before the fade). It was kept by the stop rule (ROADMAP **fix**). The Black Hole Lab uses the exact step.
 
 ## References changed on purpose
-- PLBHFILM: "one colour over the whole disc" is now "the laid colour within 1 level", read from the disc-only picture because the sky now shows through.
-- Benchmark: 39 Hard scenes and 55 in All (were 38 and 54). The planned-time limit is 5.6 min (static_assert, test_app 336 s; was 5.5 and 330). 335.1 s is planned.
-- Floors in the new checks set after the first run: inner pixels > 10,000 (about 14,000 at 640 x 400) and at least 50 seen-through pixels.
+- check_blackhole.py open: a right drag now lowers the yaw by 1.0 rad for 100 points plus at most 0.333 of glide (was: raises it over 0.05).
+- Benchmark: 40 Hard scenes, 56 in All, 39 waits. Planned 346.4 s, so the limit is 5.8 minutes (static_assert; test_app 347 s).

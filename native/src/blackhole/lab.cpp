@@ -18,6 +18,7 @@
 #include "blackhole/presets.h"
 #include "blackhole/spin.h"
 #include "blackhole/spin_sky.h"
+#include "orbit/camera_motion.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -25,7 +26,6 @@ namespace blackhole {
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kPitchMin = 0.01, kPitchMax = kPi - 0.01;    // (straight up or down the view's roll would be undefined)
 
 bool num(const std::map<std::string, std::string>& in, const char* key, double lo, double hi, double& out) {
     const auto it = in.find(key);
@@ -144,6 +144,48 @@ void setFov(Settings& s, double f) { s.fovDeg = std::clamp(f, kFovMin, kFovMax);
 void turn(Settings& s, double dy, double dp) {
     s.yaw = std::remainder(s.yaw + dy, 2 * kPi);
     s.pitch = std::clamp(s.pitch + dp, kPitchMin, kPitchMax);
+}
+
+// 0.82.0: the camera's motion (lab.h CameraMotion), as orbit_view.cpp's drag, grab, release and tick
+void dragTurn(Settings& s, CameraMotion& m, double dx, double dy) {
+    double oYaw = 0, oPitch = 0;
+    orbit::dragAngles(dx, dy, oYaw, oPitch);                             // the Orbit Lab's turn for this drag; this lab's picture is turned half a turn from it
+    const double p0 = s.pitch, dYaw = -oYaw;
+    turn(s, dYaw, -oPitch);
+    m.turnYaw += dYaw; m.turnPitch += s.pitch - p0; m.turned = true;
+}
+void grab(CameraMotion& m) { m.pressed = true; m.vYaw = m.vPitch = 0; }
+void release(CameraMotion& m, bool reduceMotion) { m.pressed = false; orbit::momentumRelease(m.vYaw, m.vPitch, reduceMotion); }
+void stepDistance(Settings& s, CameraMotion& m, double notches, bool reduceMotion) {
+    const double from = m.zoomOn ? m.zoomTo : s.dist;                    // from where a running step is going
+    const double to = std::clamp(from * std::pow(kNotch, -notches), kDistMin, kDistMax);
+    if (reduceMotion || to == s.dist) { m.zoomOn = false; setDistance(s, to); return; }   // (at the end of the range: nothing to ease)
+    m.zoomOn = true; m.zoomFrom = s.dist; m.zoomTo = to; m.zoomS = 0; m.zoomLast = s.dist;
+}
+void stopMotion(CameraMotion& m) { m.vYaw = m.vPitch = 0; m.turnYaw = m.turnPitch = 0; m.turned = false; m.zoomOn = false; }
+bool cameraMoving(const CameraMotion& m) { return m.vYaw != 0 || m.vPitch != 0 || m.zoomOn; }
+void cameraTick(Settings& s, CameraMotion& m, double dt, bool reduceMotion) {
+    // a turn or tilt set by someone else since the last tick (Reset view, the paper's view, a loaded setting) stops the coasting
+    if ((!m.turned && (s.yaw != m.heldYaw || s.pitch != m.heldPitch)) || reduceMotion) { if (!m.pressed) m.vYaw = m.vPitch = 0; }
+    if (m.pressed) orbit::momentumFollow(m.vYaw, m.vPitch, m.turnYaw, m.turnPitch, dt);
+    else if (m.vYaw != 0 || m.vPitch != 0) {                             // a released turn coasts, fading; turn keeps the pitch inside its limits
+        const double g = orbit::momentumCoastSeconds(dt);
+        turn(s, m.vYaw * g, m.vPitch * g);
+        orbit::momentumFade(m.vYaw, m.vPitch, dt);
+    }
+    m.turnYaw = m.turnPitch = 0; m.turned = false;
+    if (m.zoomOn) {                                                      // the eased step, in ln distance; it ends exactly on its value
+        if (s.dist != m.zoomLast || reduceMotion) m.zoomOn = false;     // the slider, Reset view or a preset moved the camera: that wins
+        else {
+            m.zoomS += dt / orbit::kWheelZoomSeconds;
+            const double e = orbit::ease01(m.zoomS);
+            const double d = std::exp(std::log(m.zoomFrom) + (std::log(m.zoomTo) - std::log(m.zoomFrom)) * e);
+            setDistance(s, m.zoomS >= 1 ? m.zoomTo : std::clamp(d, std::min(m.zoomFrom, m.zoomTo), std::max(m.zoomFrom, m.zoomTo)));   // (exp of ln may miss by a bit)
+            m.zoomLast = s.dist;
+            if (m.zoomS >= 1) m.zoomOn = false;
+        }
+    }
+    m.heldYaw = s.yaw; m.heldPitch = s.pitch;
 }
 
 void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
@@ -329,6 +371,13 @@ HoleView holeView(const Settings& s, double W, double H, double cx, double cy) {
     v.K = std::max(v.K, far / kPi);
     v.ca = std::cos(s.yaw); v.sa = std::sin(s.yaw); v.cb = std::cos(s.pitch); v.sb = std::sin(s.pitch);
     return v;
+}
+
+bool shadowFillsPicture(const Settings& s, double W, double H, double cx, double cy, bool latest) {
+    const HoleView hv = holeView(s, W, H, cx, cy);
+    double far = 0;
+    for (double x : {0.0, W}) for (double y : {0.0, H}) far = std::max(far, std::hypot(x - cx, y - cy));
+    return s.bend && (s.spin > 0 ? readout(s, latest).shadowHighDeg / 2 * kPi / 180 : shadowAngle(s.dist)) * hv.K > far;
 }
 
 namespace {

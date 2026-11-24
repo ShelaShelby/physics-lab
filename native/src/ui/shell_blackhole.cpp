@@ -269,7 +269,7 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
         if (toolToggle("blackhole.bar.bend", ImVec2(bx, by), ImVec2(static_cast<float>(bw), ch), bendName, s.bend)) s.bend = !s.bend;
         if (ImGui::IsItemHovered()) ui::SetTooltip("%s", s.bend ? "Gravity bends light (on). Click to see the same sky without the hole's bending." : "Gravity bends light: off (the plain sky, to compare). Click to turn it on.");
         bx += static_cast<float>(bw + m.s12);
-        if (button("blackhole.bar.reset", ImVec2(bx, by), ImVec2(static_cast<float>(rw), ch), resetName, Face::Quiet)) blackhole::resetView(s);
+        if (button("blackhole.bar.reset", ImVec2(bx, by), ImVec2(static_cast<float>(rw), ch), resetName, Face::Quiet)) { blackhole::resetView(s); blackhole::stopMotion(app.bhCam); }
         if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the first view: distance, field of view and direction (key R)");
         endPanel(p);
     }
@@ -368,13 +368,12 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         }
         {   // the shadow fills the picture (close in, a narrow view): say how to see the sky round it
             const double cx = app.bhFreeW > 0 ? app.bhFreeX + app.bhFreeW / 2 : app.canvasW / 2, cy = app.bhFreeH > 0 ? app.bhFreeY + app.bhFreeH / 2 : app.canvasH / 2;
-            const blackhole::HoleView hv = blackhole::holeView(s, app.canvasW, app.canvasH, cx, cy);
-            double far = 0;
-            for (double x : {0.0, app.canvasW}) for (double y : {0.0, app.canvasH}) far = std::max(far, std::hypot(x - cx, y - cy));
-            if (s.bend && (s.spin > 0 ? blackhole::readout(s, true).shadowHighDeg / 2 * 3.14159265358979 / 180 : blackhole::shadowAngle(s.dist)) * hv.K > far) pCaption(p, "The shadow fills the whole picture: widen the field of view to see the sky round it.", false);
+            if (blackhole::shadowFillsPicture(s, app.canvasW, app.canvasH, cx, cy, true)) pCaption(p, "The shadow fills the whole picture: widen the field of view to see the sky round it.", false);
         }
-        if (pButton(p, "blackhole.reset", "Reset view", Face::Quiet)) blackhole::resetView(s);
-        pCaption(p, "Drag to go round the hole; the wheel or + − move you closer or farther.");
+        if (pButton(p, "blackhole.reset", "Reset view", Face::Quiet)) { blackhole::resetView(s); blackhole::stopMotion(app.bhCam); }
+        pCaption(p, "Drag to circle the hole, as round a planet in the Orbit Lab: left and right go round it, up and down go over or under it. Let go and it glides "
+                    "a little. The wheel or + − move you closer or farther.");
+        pCaption(p, "The camera hovers at each place you put it: it is not flying or orbiting (a moving camera sees a different sky).");
     }
     if (section("disc", "Gas disc (model)", true)) {                       // 0.55.1
         int on = (s.disc || film) ? 1 : 0;
@@ -643,7 +642,7 @@ void blackholeSearch(AppState& app, const SearchAdd& add) {
     add("Light", "Gravity bends light: off (the plain sky)", "bhbend:off", [&app] { app.blackhole.bend = false; });
     add("Light", "Sky: our sky", "bhsky:ours", [&app] { app.blackhole.skyOurs = true; });
     add("Light", "Sky: black", "bhsky:black", [&app] { app.blackhole.skyOurs = false; });
-    add("Camera", "Reset view", "bhreset", [&app] { blackhole::resetView(app.blackhole); });
+    add("Camera", "Reset view", "bhreset", [&app] { blackhole::resetView(app.blackhole); blackhole::stopMotion(app.bhCam); });
     add("Black holes", std::string(blackhole::kFeedingName), "bh:feeding", [&app] { blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey); });
     add("Gas", "Gas disc (model): on", "bhdisc:on", [&app] { app.blackhole.disc = true; });
     add("Gas", "Gas disc (model): off", "bhdisc:off", [&app] { app.blackhole.disc = false; });
