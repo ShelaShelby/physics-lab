@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.81.0", "Film: a soft, partly see-through disc",
+     "In the Black Hole Lab's Film look the disc has no hard rims any more: its edges fade out inside the film's edges (9.26 and 18.70 GM/c\xC2\xB2). The disc "
+     "is partly see-through, as the paper behind the film describes it (\"marginally optically thick\"): each time a ray crosses it, it covers part of "
+     "what is behind, so the far side and the thin rings round the shadow show faintly through the near side, and the sky through the gaps between "
+     "the streaks. Film keeps every number from the paper (spin 0.6, one temperature of 4500 K, no colour or brightness shift, the white balance, the "
+     "paper's view) and the streaks, the clump and the glow. How wide the fade is and how see-through the disc is are the lab's own choices, said in the "
+     "Film panel and the guide, as are the streaks, the clump and the glow; the film's own textures and lens flare are not published. The graphics card "
+     "draws it every frame; the processor keeps the same steps as the reference the tests check it against. The benchmark has a new scene for it."},
     {"0.80.1", "Test fix, nothing changes in the app",
      "Nothing changes in how the app works. The automatic test that compares the Atom Lab's Classic dots drawn by the graphics card with the processor's "
      "had failed on every full run since 0.75: it took the two pictures at the same time on the clock, so the slower run was caught at another zoom. It "

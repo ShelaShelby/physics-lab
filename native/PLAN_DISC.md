@@ -124,7 +124,7 @@ and glow. He wants the most realistic option. Pictures: native/docs/blackhole/di
   procedural textures ("such as fractal noise"). Section 4.1.1: "physically thin and marginally optically thick". No texture, density or voxel numbers
   are published: none is copied.
 - **Added, labelled "the lab's own, not the film's"**: (1) edges fading over 0.12 in ln r inside J15's edges (prototype choice; the build shows 0.06, 0.12,
-  0.2 to the owner if asked); (2) the same streak field as Real (section 4); (3) partial transparency: each crossing covers 1 - exp(-tau), tau = 1.5 x S x
+  0.2 to the owner if asked; 0.81.0 kept 0.12, docs/blackhole/disc081_film.txt); (2) the same streak field as Real (section 4); (3) partial transparency: each crossing covers 1 - exp(-tau), tau = 1.5 x S x
   edge (prototype choice standing for "marginally optically thick"), crossings laid front to back. disc078_film.png.
 - **Glow**: Real keeps the eye's glare (light.h, CIE disability glare). For Film, a published camera spread: Talvala et al. 2007 measured glare spread
   functions of three cameras but publishes them as plots only (one number: the Canon 20D's uniform glare 20 stops below the point source). J15's IMAX
@@ -184,8 +184,8 @@ and glow. He wants the most realistic option. Pictures: native/docs/blackhole/di
 |---|---|---|---|
 | 0.79.0 | D1's thin-disc parts + D2: the thickness and the surface (disc.h), the streak field (gas.h, replacing the patches), on the card from the start | streaks in place of patches (Real and Film), the true thickness and the thinning inner edge (Real, spin 0), guide text; Hard scene blackhole.disc_streaks; response line response.blackhole_streaks | **done** (REPORT 0.79.0) |
 | 0.80.0 | hot-flow physics, tested; nothing drawn: hot.h (the RIAF, emissivities, transfer, colours), the 1.3 mm and 2.2 um checks of every sourced reading | no change: Sagittarius A* keeps today's picture | **done** (REPORT 0.80.0) |
-| 0.81.0 | D4: Film | soft edges, streaks, partly see-through, labelled; Film better than disc078_film.png; Hard scene blackhole.film_soft | next |
-| 0.82.0 | the camera round the black hole (as the Orbit Lab's round a planet) | planned with the owner first | |
+| 0.81.0 | D4: Film | soft edges, streaks, partly see-through, labelled; Film better than disc078_film.png; Hard scene blackhole.film_soft | **done** (REPORT 0.81.0; docs/blackhole/disc081_film.txt) |
+| 0.82.0 | the camera round the black hole (as the Orbit Lab's round a planet) | planned with the owner first | next |
 D5 (the Illinois data for the hot flow's structure, M87*'s model) is not chosen (24 Nov 2026).
 0.79.0's findings: the thickness uses Zhu's own opacity and particle weight (0.3383 cm^2/g, 0.615 m_H) with the lab's L_Edd (0.4 cm^2/g), so h is 0.846 of
 section 2's numbers (largest h/R 0.0150); the gas's pressure is in (Zhu (B1e)), half the total from 567 M at 10^8 Suns (alpha 0.1, a labelled choice), so far

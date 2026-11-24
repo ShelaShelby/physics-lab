@@ -14,7 +14,7 @@
 //   - the disc: section 4.1.1 p. 26: "physically thin and marginally optically thick", in the equatorial plane, "not currently accreting", "cooled to a
 //     position-independent temperature T = 4500K, at which it emits a black-body spectrum". Drawn here as the model disc's geometry (the same thin opaque
 //     disc in the equatorial plane, the same ray tables) with one temperature: "marginally optically thick" is drawn opaque (the lab has no partly
-//     transparent disc).
+//     transparent disc). 0.81.0: partly see-through and soft-edged, the lab's own (below, kFilmFade, kFilmTau).
 //   - its edges: the caption of Figure 13 p. 24: "inner and outer radii r = 9.26M and r = 18.70M" (the paint-swatch disc; Figure 14's artists' disc is drawn
 //     "with the same geometry", p. 25, and Figure 15a is that disc at a/M = 0.6, p. 27). The paper gives no other edges for the film's disc.
 //   - no shift: Figure 15a and its caption p. 27, Figure 16's caption p. 28 ("no colour or brightness shifts"); section 4.1.1 p. 24: the light's specific
@@ -71,6 +71,7 @@ struct LookRule {
     bool fixedSpin = false;                         // Film: the spin and the disc are the film's, the controls locked
     double spin = 0;
     double rIn = 0, rOut = 0;
+    double fade = 0, tau = 0;                       // 0.81.0, Film: the lab's own soft edges and see-through disc (below); 0: hard edges, opaque (Real)
 };
 LookRule lookRule(Look l);
 
@@ -93,6 +94,24 @@ double glowSigmaBlocks(int H);
 int glowRadiusBlocks(int H);
 // The reference (double): lin is W x H x 3 linear light of the disc alone over the screen's white, row by row; returns the glow to add (same layout), not yet times the strength
 std::vector<double> glowReference(const std::vector<double>& lin, int W, int H);
+
+// 0.81.0 (PLAN_DISC.md D4): THE FILM DISC'S SOFT EDGES AND SEE-THROUGH. Both are THE LAB'S OWN, NOT THE FILM'S. J15 says the disc is "physically thin and
+// marginally optically thick" (section 4.1.1 p. 26). Its App. A.6 (pp. 42-43) samples a thin disc "at each intersection" with the beam attenuated "by the
+// optical thickness", and builds a volume disc in Houdini (about 17 million voxels). It publishes no texture, density, voxel or edge-profile numbers.
+//   - the fade: the disc's cover goes from 0 at J15's edges (rIn, rOut) to 1 at kFilmFade inside them, in ln r, by the smoothstep 3x^2 - 2x^3 (value and slope
+//     continuous; slope 0 at both ends). The width is the lab's choice: tools/discproto's 0.12 (docs/blackhole/disc081_film.txt shows 0.06, 0.12, 0.2).
+//   - the see-through: each crossing of the disc's plane covers c = 1 - exp(-tau) of what is behind it, tau = kFilmTau x S x edge (S: the streaks' factor,
+//     gas.h; edge: the fade). kFilmTau = 1.5 is the lab's choice standing for "marginally optically thick" (tools/discproto's). The crossings are laid front to
+//     back: the pixel gets L1 c1 + L2 c2 (1 - c1) + ..., and the part (1 - c1)(1 - c2)... of the sky behind. A crossing's light L is the film's one colour
+//     (times the moving gas's factor), unchanged by tau: tau sets only how much of the pixel it covers. As tau -> infinity every crossing inside the edges
+//     covers 1 and the opaque disc of 0.55-0.80 comes back exactly.
+constexpr double kFilmFade = 0.12, kFilmTau = 1.5;
+double filmEdge(double r, double rIn, double rOut, double fade = kFilmFade);   // the fade (1 well inside, 0 at and beyond the edges)
+double filmTau(double S, double edge, double scale = kFilmTau);              // scale x S x edge (0 where S or edge is 0, also for an infinite scale)
+double filmCover(double tau);                                                // 1 - exp(-tau) (1 for an infinite tau)
+struct FilmLayer { std::array<double, 3> light{}; double cover = 0; };
+// the crossings laid front to back (layers[0] nearest the camera): sum of L_k c_k prod_{j<k} (1 - c_j); left (if given): prod (1 - c_k), the part of what is behind
+std::array<double, 3> layFrontToBack(const std::vector<FilmLayer>& layers, double* left = nullptr);
 
 // The guide's table "What the film changed": one row per choice
 struct FilmRow { std::string physics, choice, reason, where; };

@@ -102,6 +102,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "The feeding preset (spin 0), Real look: the disc at its true thickness with its streaks and the clump moving at the fastest rate (10^7), the camera at "
             "2.2 GM/c\xC2\xB2 (the closest the control allows) with a 360\xC2\xB0 view (the widest), 10\xC2\xB0 below the disc, turning slowly round the axis. "
             "A new picture every frame on the graphics card.");
+        add(true, "blackhole.film_soft", BenchKind::BlackHoleFilmSoft, -1, "Black Hole Lab, the Film look's see-through disc and streaks, turning",
+            "The Film look at the paper's view (74.1 GM/c\xC2\xB2, 86.6\xC2\xB0 from the spin axis) with a 30\xC2\xB0 view: the soft-edged, partly see-through disc "
+            "(up to four crossings laid per pixel) with its streaks and the clump moving at the fastest rate (10^7), the camera turning slowly round the axis. "
+            "A new picture every frame on the graphics card.");
         add(true, "ui.guide_scroll", BenchKind::UiGuideScroll, -1, "Pages, the longest Learn guide scrolled",
             "The longest Learn guide (the Orbit Lab's timeline: 7,157 px of scrolling at 1280 x 800) open in the reading view over its lab, scrolled from top to bottom "
             "at a steady rate in the counted time (and back up in the warm-up).");
@@ -174,7 +178,9 @@ double benchPlannedS() {
 // 0.78.0: 37 scenes (orbit.comet_tails, CLAUDE.md: a new drawing adds its scene): 317.3 s planned; the limit is 5.3 minutes now (nothing shortened, REPORT 0.78.0)
 // 0.79.0: 38 scenes (blackhole.disc_streaks, CLAUDE.md: a new drawing adds its scene) and 36 waits (response.blackhole_streaks: a new wait adds its line):
 // 328.6 s planned; the limit is 5.5 minutes now (nothing shortened, REPORT 0.79.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.5 * 60,
+// 0.81.0: 39 scenes (blackhole.film_soft, CLAUDE.md: a new drawing adds its scene; no new wait): 335.1 s planned; the limit is 5.6 minutes now (nothing
+// shortened, REPORT 0.81.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.6 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");

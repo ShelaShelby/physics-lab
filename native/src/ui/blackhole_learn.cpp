@@ -98,8 +98,15 @@ std::vector<BhLearnSection> blackholeLearnSections() {
                           "Thorne (2015) state them, on the same calculated hole and the same light paths as the Real look. One row per choice:");
         for (const blackhole::FilmRow& r : blackhole::filmRows())
             h += "<p class=\"lrnP\"><b>" + r.physics + "</b><br>The film: " + r.choice + ".<br>Why: " + r.reason + ".<br><small>" + r.where + "</small></p>";
-        h += p("<b>Not in the app:</b> the artists' textures, the real lens flare (the measured blur of the IMAX lenses) and the film's colour grading are not published. "
-               "The glow is the app's own, a simple blur of the disc's bright parts (the sky and the stars are not part of it). The paper gives no mass for the film's black hole.") +
+        h += p("<b>The lab's own, not the film's.</b> The paper calls the film's disc \"physically thin and marginally optically thick\" (section 4.1.1): light from "
+               "behind it gets partly through. It does not publish how much, nor the disc's texture. So the lab adds its own: the disc's edges fade over " +
+               fmt::fixed(blackhole::kFilmFade, 2) + " in ln r inside the paper's edges (no hard rim); each time a ray crosses the disc it covers 1 − e^−τ of what is behind, "
+               "with τ = " + fmt::fixed(blackhole::kFilmTau, 1) + " × the streaks' brightness × the fade, and the crossings are laid front to back, so the far side and the thin "
+               "rings show through faintly; the streaks and the clump (see Moving gas); and the glow, a simple blur of the disc's bright parts (the sky and the stars "
+               "are not part of it). Each is the lab's choice, not a number from the film.") +
+             p("<b>Not in the app:</b> the artists' textures (fractal noise in the close-ups), the film's volume disc (built in Houdini, about 17 million voxels), the "
+               "real lens flare (the measured blur of the IMAX lenses) and the film's colour grading are not published (James et al. 2015, appendix A.6 and section "
+               "4.3.1). The paper gives no mass for the film's black hole.") +
              p("<b>The Real look is still a model</b>, not a photograph: the standard thin disc, with every shift it calculates. A real disc would be blinding; Glare "
                "draws the veil an average eye would see.");
         v.push_back({"film", "🎬 What the film changed", h});

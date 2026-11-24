@@ -224,7 +224,7 @@ def precision_sky(binary, work):
     r = run_app(binary, work, "bh_precision_sky", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
     seen = set()
     for ln in r.out.splitlines():
-        if (ln.startswith("PLBHSKY") or ln.startswith("PLBHTONE")) and ln not in seen: print(ln); seen.add(ln)
+        if (ln.startswith("PLBHSKY") or ln.startswith("PLBHTONE") or ln.startswith("PLBHFILMSOFT")) and ln not in seen: print(ln); seen.add(ln)
     m = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYMATH ")]
     check(len(m) >= 1, "the sky shader's elliptic functions were compared")
     if m:
@@ -290,6 +290,18 @@ def precision_sky(binary, work):
     check({x["case"] for x in tc} == {"near", "far", "spin", "streaks"}, f"the curve's picture compared at spin 0 near and far, at 0.9, and with the streaks ({len(tc)})")
     for x in tc:
         check(x["ok"] == "1" and int(x["pixels"]) > 50000 and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")
+    # 0.81.0 (PLAN_DISC.md D4): Film's soft edges and see-through disc with the streaks and the clump, the card's pass (kKerrSkyFS) against the processor
+    # (traceClosed's crossings, gas.h's factors, looks.h's fade, cover and laying, in double; blackhole_view.cpp filmSoftCompare), at the paper's view and 3
+    # degrees below the plane: at most 1 % of the disc's inner pixels over 8 levels of 255 (DECISIONS "Tests and precision"; limit fixed before looking); the
+    # far side shows through (the reference's disc pixels where a farther crossing adds more than 2 levels); the look's fade 0.12 and tau scale 1.5 reach the
+    # card. (The floor of 10000 inner pixels: the disc covers about 14000 at 640 x 400 and 30 degrees; REPORT 0.81.0)
+    fs = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHFILMSOFT ")]
+    check(len(fs) == 2, f"Film's see-through disc compared at the paper's view and 3 degrees below the plane ({len(fs)})")
+    for x in fs:
+        check(x["ok"] == "1" and float(x["fade"]) == 0.12 and float(x["tau"]) == 1.5 and int(x["pixels"]) > 10000 and float(x["share"]) <= 0.01,
+              f"Film's see-through disc (tilt {x['tilt']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']}; over 1 level: {x['over1']})")
+        # (the floor of 50: set after the first run, REPORT 0.81.0: the far side shows only on thin rings; discproto counts 73 at 480 x 300, this 95-125)
+        check(int(x["through"]) >= 50, f"Film (tilt {x['tilt']}): the far side shows through the near side in {x['through']} pixels")
     # the card's moving picture and its picture at rest at the same resolution: not one pixel differs (the same formulas), Film at the paper's view and
     # 3 degrees below the plane; at half the resolution the pixels more than 8 levels off are counted (printed)
     st = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYSTOP ")]
@@ -339,8 +351,8 @@ def part_precision(binary, work):   # (0.76.0: the sky's half and the card's are
     # 0.55.3, the looks. Real: the feeding preset at spin 0.6 from 74.1 M, 86.56 deg, field of view 30, drawn as the app draws it: the hash of its 8-bit picture made
     # by 0.55.2's code before this version changed anything (REPORT 0.55.3; Mesa llvmpipe). Film at the same place (the paper's view): the card's disc against the
     # double lookup of the same table: the same image at every pixel away from an image's edge, those edges moved by under 0.1 pixel (the spin cases' limit; measured
-    # 0.0018 here), every radius on the disc within the paper's edges 9.26..18.70 M; every pixel fully on the disc exactly the one colour the module gives
-    # (looks.h filmDiscLinear over the screen's white, encoded); the glow: the card's picture with it = the double reference applied to the card's picture without
+    # 0.0018 here), every radius on the disc within the paper's edges 9.26..18.70 M; every pixel fully on the disc the laid colour (0.81.0; until 0.80 exactly the
+    # one colour the module gives, looks.h filmDiscLinear over the screen's white, encoded); the glow: the card's picture with it = the double reference applied to the card's picture without
     # it, to one level of 255, no channel of any pixel darker, the added light = the reference's to 1 %.
     rl = [ln for ln in r.out.splitlines() if ln.startswith("PLBHREAL ")]
     # 0.55.8: the fine table's rays followed Mino's form (src/blackhole/mino.h); 0.55.9: they come from the closed forms (src/blackhole/kerr_closed.h). The same
@@ -359,7 +371,10 @@ def part_precision(binary, work):   # (0.76.0: the sky's half and the card's are
               f"Film: the paper's spin, view and disc edges ({x['spin']}, {x['dist']}, {x['theta']}, {x['rin']}, {x['rout']})")
         check(int(x["pixels"]) > 20000 and int(x["wrong"]) == 0 and float(x["edgeshift"]) < 0.1, f"Film: the disc where the module puts it ({x['pixels']} pixels, {x['wrong']} wrong, edges moved {x['edgeshift']} px)")
         check(float(x["rmin"]) >= 9.26 - 1e-4 and float(x["rmax"]) <= 18.7 + 1e-4, f"Film: every radius on the disc within the paper's edges ({x['rmin']}, {x['rmax']})")
-        check(int(x["colours"]) == 1 and int(x["offcolour"]) == 0, f"Film: one colour all over the disc before the glow ({x['colours']} colours, {x['offcolour']} off; {x['want']})")
+        # 0.81.0: the disc is partly see-through with soft edges (looks.h, the lab's own): every pixel fully on the disc is the laid colour of its crossings
+        # (the one colour times 1 - exp(-1.5 edge), front to back) within one level of 255; until 0.80 it was the one colour everywhere (REPORT 0.81.0)
+        check(int(x["offcolour"]) == 0 and float(x["fade"]) == 0.12 and float(x["tau"]) == 1.5, f"Film: the laid colour of the see-through disc before the glow ({x['offcolour']} off by more than 1 level, largest {x['maxoff']}; {x['colours']} colours)")
+        check(int(x["through"]) >= 50, f"Film: the far side shows through the near side on the table's pass ({x['through']} pixels)")
         check(int(x["darker"]) == 0 and int(x["brighter"]) > 1000 and int(x["glowdiff"]) <= 1 and abs(float(x["added"]) / float(x["addedref"]) - 1) < 0.01,
               f"Film: the glow adds light only and is its reference ({x['darker']} darker, {x['glowdiff']} levels, added {x['added']} against {x['addedref']})")
     # 0.55.4: the Film glow is made from the disc's own light: every pixel its reference leaves alone is the plain picture (the sky untouched); and the eye's glare

@@ -1,0 +1,33 @@
+disc081_film.png (0.81.0; native/PLAN_DISC.md section 5, D4; REPORT 0.81.0), 964 x 604: two rows of two panels of 480 x 300, 2 x 2 rays a pixel
+disc081_fades.png (0.81.0), 1448 x 300: three panels of 480 x 300
+Made by: build/discproto film081 disc081_film.png disc081_fades.png (native/tools/discproto/discproto.cpp; CPU, double precision, the lab's own ray paths:
+geodesic.h KerrBL and trace, up to four crossings of the disc's plane a ray). 37.3 s on 4 threads of the build machine (1,152,000 rays, 447 steps a ray).
+The Film look's numbers from James et al. 2015 (looks.h): spin 0.6, disc from 9.26 to 18.70 GM/c^2, one temperature 4500 K, no colour or brightness shift,
+white balance at 6500 K. The streaks (gas.h StreakField, c = 1.3) and the clump (BL06) of the app, at one moment (T = 0), no light travel time (the app's
+picture has it; left out here on every panel alike). No sky.
+Exposure and glow, every panel alike: the screen's white is the film disc's own colour (its largest channel, 0.3494 x the Sun's surface; the app's Film rule),
+each crossing's light over it and scaled into the screen as the shaders do, then the lab's own glow (looks.h glowReference, strength 0.6).
+
+disc081_film.png. Left: today (0.80.1): the first crossing inside J15's edges, opaque, hard rims. Right: 0.81.0, the app's new Film disc, all of it LABELLED as
+the lab's own, not the film's: the edges fade over 0.12 in ln r inside J15's edges (smoothstep); each crossing covers 1 - exp(-1.5 S edge) of what is behind
+(J15 section 4.1.1: "marginally optically thick"; 1.5 the lab's choice, tools/discproto's), the crossings laid front to back.
+Top row: the lab's starting view (50 GM/c^2, 10 degrees below the plane, field 45 degrees, as disc078_film.png). Bottom row: the paper's view (J15
+Figure 13: 74.1 GM/c^2, 86.56 degrees from the spin axis; field 30 degrees, the Film scenes').
+                                    disc pixels  mean ln Y   spread of ln Y   pixels where a farther crossing adds over 2 levels of 255
+  starting view, today (0.80.1)     15473        -1.101      0.875            0 (opaque)
+  starting view, 0.81.0             15473        -2.218      1.703            315
+  paper's view, today (0.80.1)       9829        -1.414      0.889            0 (opaque)
+  paper's view, 0.81.0               9829        -2.623      1.568            73
+(Y: the luminance after the glow, in the screen's white; "disc pixels": pixels with a crossing inside J15's edges.)
+Read: the hard rims are gone; the lower ring round the shadow shows through the near side (bottom right) and the far side's image through the gaps between
+the streaks; the light varies twice as much across the disc (spread of ln Y 1.70 against 0.88): not flat. At the same exposure the new disc is darker
+(mean ln Y about 1.1 lower, a third of the light): a crossing covers 1 - e^-1.5 = 0.78 of a pixel where S = 1, and less where the streaks are dark. The
+Film exposure is unchanged (its white is the film's colour), so the app's Film picture is darker by the same amount.
+
+disc081_fades.png, the starting view, the fade's width in ln r: 0.06 | 0.12 (kept) | 0.2.
+  fade 0.06    mean ln Y -2.038   spread of ln Y 1.580
+  fade 0.12    mean ln Y -2.218   spread of ln Y 1.703
+  fade 0.2     mean ln Y -2.464   spread of ln Y 1.864
+Read: at this size the three differ little. 0.06 keeps the disc's edges a little sharper. 0.2 fades 57 % of the disc's width (2 x 0.2 of its 0.70 in ln r)
+and dims it further (mean ln Y 0.25 lower than 0.12). None is clearly better, so 0.12, the prototype's choice, is kept.
+The film's own texture, its Houdini volume disc and its lens flare are not published (J15 App. A.6, section 4.3.1): none is copied.

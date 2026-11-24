@@ -72,7 +72,7 @@ bool Renderer2D::lensSameView(const LensSky& P, const LensSky& L, bool ksky, boo
                       P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
                       P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
                       P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow) &&
+                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.filmSoft, L.filmSoft + 4, P.filmSoft) && std::equal(L.glow, L.glow + 3, P.glow) &&
                       P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil &&
                       P.kerrSky == L.kerrSky && (!L.kerrSky || (std::equal(L.skyCam, L.skyCam + 4, P.skyCam) && std::equal(L.skyMet, L.skyMet + 4, P.skyMet) &&
                       std::equal(L.skyMet2, L.skyMet2 + 4, P.skyMet2) && std::equal(L.filmRaw, L.filmRaw + 4, P.filmRaw) && std::equal(L.kM, L.kM + 9, P.kM) &&

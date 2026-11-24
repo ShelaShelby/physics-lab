@@ -777,6 +777,7 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     const int dn[3] = {L.discFN, L.discC, 0};
     u.i("uDN", dn, 3);
     u.f("uDFix", L.discFix, 4);
+    u.f("uFilmSoft", L.filmSoft, 4);                                 // 0.81.0
     i1("uRaw", raw ? 1 : 0);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
@@ -815,6 +816,8 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     const int dn[3] = {L.discFN, L.discC, 0};
     u.i("uDN", dn, 3);
     u.f("uDFix", L.filmRaw, 4);
+    u.f("uFilmSoft", L.filmSoft, 4);                                 // 0.81.0: Film's soft edges and see-through
+    i1("uGasFoot", L.gasNoFoot ? 0 : 1);
     const bool cardWhite = L.whiteMode == 1 && disc && !sum_.empty() && mode == 0;
     i1("uWhiteMode", cardWhite ? 1 : 0);
     f1("uWhiteSet", L.white);

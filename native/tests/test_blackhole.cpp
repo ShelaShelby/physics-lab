@@ -15,6 +15,7 @@
 //    and every block of the extract found in it); the Film disc's colour = the CIE black body at the paper's temperature through the paper's white balance;
 //    no shift: the same light from the approaching and the receding side (and Real not); the glow's reference adds light only and spreads it without loss.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -2056,6 +2057,87 @@ static void testLooks() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.81.0 (PLAN_DISC.md D4): the Film disc's soft edges and see-through, the lab's own (looks.h). Written before the code: on 0.80.1 none of it exists.
+// References: J15's numbers (testLooks reads each from the extract; here the rule must keep them), the smoothstep's closed form (value 1/2 at the middle,
+// slope at most 1.5 / width, second derivative at most 6 / width^2), 1 - exp(-tau) written out, and the algebra of laying two layers front to back.
+static void testFilmSoft() {
+    const FilmChoices& c = filmChoices();
+    const LookRule F = lookRule(Look::Film), R = lookRule(Look::Real);
+    check(F.spin == 0.6 && F.discT == 4500 && F.rIn == 9.26 && F.rOut == 18.70 && F.whiteT == 6500 && !F.shifts && F.oneTemperature && F.whiteBalance && F.glow &&
+          F.spin == c.spin && F.discT == c.discT && F.rIn == c.rIn && F.rOut == c.rOut && F.whiteT == c.whiteT,
+          "Film keeps J15's numbers: spin 0.6, 4500 K, edges 9.26 and 18.70 M, white at 6500 K, no shifts (each read from the extract in testLooks)");
+    check(F.fade == 0.12 && F.tau == 1.5 && R.fade == 0 && R.tau == 0, "Film adds the lab's own fade 0.12 in ln r and tau = 1.5 S edge; Real keeps hard edges and an opaque disc");
+    {   // the guide's facts about the film's disc that the lab does not have (App. A.6 pp. 42-43, the extract's lines; the original with PL_SOURCES_DIR in testLooks)
+        const std::string ex = readExtract("blackhole/arxiv/1502.03808_james2015.extract.txt");
+        check(ex.find("intersections of the beam with the disk. At each intersection") != std::string::npos && ex.find("we attenuate the beam by the optical\nthickness") != std::string::npos,
+              "J15 App. A.6: the thin disc sampled at each crossing, the beam attenuated by the optical thickness");
+        check(ex.find("Houdini software and stored in a volumetric data structure containing roughly 17 million\nvoxels") != std::string::npos && ex.find("such as fractal noise") != std::string::npos,
+              "J15 App. A.6: the volume disc (Houdini, roughly 17 million voxels) and the close-ups' procedural textures (fractal noise), not published as numbers");
+    }
+    // the fade
+    const double rIn = c.rIn, rOut = c.rOut, w = kFilmFade, l0 = std::log(rIn), l1 = std::log(rOut);
+    bool inside = true, outside = true;
+    for (int i = 0; i <= 1000; i++) {
+        const double u = l0 + w + (l1 - l0 - 2 * w) * i / 1000.0;
+        inside = inside && filmEdge(std::exp(u), rIn, rOut) == 1.0;
+    }
+    for (double r : {rIn, rOut, rIn * 0.999, rOut * 1.001, 0.5 * rIn, 2.0 * rOut, 1.0, 1000.0}) outside = outside && filmEdge(r, rIn, rOut) == 0.0;
+    check(inside, "fade: 1 everywhere from 0.12 in ln r inside the edges");
+    check(outside, "fade: 0 at the edges and beyond them");
+    check(std::fabs(filmEdge(std::exp(l0 + w / 2), rIn, rOut) - 0.5) < 1e-12 && std::fabs(filmEdge(std::exp(l1 - w / 2), rIn, rOut) - 0.5) < 1e-12,
+          "fade: 1/2 halfway across its width (the smoothstep 3x^2 - 2x^3 at x = 1/2)");
+    {   const double h = 1e-5;
+        double jump = 0, slopeJump = 0, endSlope = 0;
+        const auto e = [&](double u) { return filmEdge(std::exp(u), rIn, rOut); };
+        for (double base : {l0, l1 - w})
+            for (double u = base - 0.03; u < base + w + 0.03; u += h) {
+                jump = std::max(jump, std::fabs(e(u + h) - e(u)) / h);
+                const double d0 = (e(u) - e(u - h)) / h, d1 = (e(u + h) - e(u)) / h;
+                slopeJump = std::max(slopeJump, std::fabs(d1 - d0) / h);
+            }
+        for (double u : {l0, l0 + w, l1 - w, l1}) endSlope = std::max(endSlope, std::max(std::fabs(e(u + h) - e(u)), std::fabs(e(u) - e(u - h))) / h);
+        check(jump <= 1.5 / w * (1 + 1e-3), "fade: no jump in value (largest slope " + f(jump) + ", the smoothstep's 1.5 / width = " + f(1.5 / w) + ")");
+        check(slopeJump <= 6 / (w * w) * 1.01, "fade: no jump in slope (largest change of slope per unit " + f(slopeJump) + ", the smoothstep's 6 / width^2 = " + f(6 / (w * w)) + ")");
+        check(endSlope < 6 / (w * w) * h * 1.01, "fade: slope 0 at both ends of its width, at each edge (" + f(endSlope) + ")");
+    }
+    // the cover
+    bool closed = true;
+    for (double t : {1e-6, 1e-3, 0.1, 0.5, 1.5, 3.0, 10.0, 40.0}) closed = closed && std::fabs(filmCover(t) - (1 - std::exp(-t))) <= 2e-16;
+    check(closed && filmCover(0) == 0 && filmCover(std::numeric_limits<double>::infinity()) == 1, "cover: 1 - exp(-tau) (0 at tau 0, 1 as tau -> infinity)");
+    check(filmTau(1.3, 0.7) == 1.5 * 1.3 * 0.7 && filmTau(2, 0) == 0 && filmTau(0, 1) == 0 && filmTau(1, 0, std::numeric_limits<double>::infinity()) == 0,
+          "tau = 1.5 x S x edge (0 at and beyond the edges, also for an opaque disc)");
+    check(std::fabs(filmCover(filmTau(1, 1)) - 0.77686983985157021) < 1e-15, "a crossing well inside with S = 1 covers 1 - e^-1.5 = 0.7769 of the pixel");
+    // laying front to back: two crossings of known light and cover
+    {   const std::array<double, 3> L1{0.31, 0.52, 0.17}, L2{0.9, 0.25, 0.6};
+        const double c1 = filmCover(filmTau(1.2, 0.8)), c2 = filmCover(filmTau(0.6, 1.0));
+        double left = -1;
+        const std::array<double, 3> o = layFrontToBack({{L1, c1}, {L2, c2}}, &left);
+        double err = 0;
+        for (int k = 0; k < 3; k++) err = std::max(err, std::fabs(o[static_cast<std::size_t>(k)] - (L1[static_cast<std::size_t>(k)] * c1 + L2[static_cast<std::size_t>(k)] * c2 * (1 - c1))));
+        check(err < 1e-16 && std::fabs(left - (1 - c1) * (1 - c2)) < 1e-16, "two crossings: the pixel gets L1 c1 + L2 c2 (1 - c1), the sky behind (1 - c1)(1 - c2) (" + f(err) + ")");
+        double lw = -1;
+        const std::array<double, 3> u = layFrontToBack({{{1, 1, 1}, c1}, {{1, 1, 1}, c2}, {{1, 1, 1}, 0.3}}, &lw);
+        check(std::fabs(u[0] + lw - 1) < 1e-15 && std::fabs(u[2] + lw - 1) < 1e-15, "laying conserves light: unit layers and the part behind sum to 1");
+        check(c2 * (1 - c1) > 0.05, "the far side shows through the near side (" + f(c2 * (1 - c1)) + " of a pixel)");
+        const double inf = std::numeric_limits<double>::infinity();
+        double l2 = -1;
+        const std::array<double, 3> q = layFrontToBack({{L1, filmCover(filmTau(1.2, 0.8, inf))}, {L2, filmCover(filmTau(0.6, 1.0, inf))}}, &l2);
+        check(q == L1 && l2 == 0, "tau -> infinity: the first crossing's light exactly, nothing behind (the opaque disc of 0.55-0.80)");
+    }
+    {   // the old picture's light at a crossing (lab.cpp discLight, Film) comes back exactly from the laying with an opaque disc
+        Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        setLook(s, Look::Film);
+        const Settings v = shown(s);
+        DiscPixel a, b;
+        discLight(v, 12, 1.3, a); discLight(v, 15, 0.7, b);
+        const double inf = std::numeric_limits<double>::infinity();
+        const std::array<double, 3> q = layFrontToBack({{a.rgb, filmCover(filmTau(1, filmEdge(12, rIn, rOut), inf))}, {b.rgb, filmCover(filmTau(1, filmEdge(15, rIn, rOut), inf))}});
+        check(q == filmDiscLinear() && a.rgb == filmDiscLinear(), "tau -> infinity: the Film pixel = the old opaque Film colour, to the bit");
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
 // 0.55.4, one true exposure (light.h): the Sun's V magnitude from Willmer 2018 (the extract; the saved original with PL_SOURCES_DIR), the catalogue's mag is V
 // (the HYG README), the bridge's identity, Pogson's rule, the screen's faintest step, the readout's numbers
 static std::string checkedExtract(const std::string& rel, const std::string& orig, const std::string& who) {
@@ -3362,6 +3444,7 @@ int main() {
     testMovingTable();
     testSpinLab();
     testLooks();
+    testFilmSoft();
     testTrueLight();
     testGlare();
     testGas();

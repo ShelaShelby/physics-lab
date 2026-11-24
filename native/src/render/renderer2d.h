@@ -310,6 +310,9 @@ public:
         // temperature and shift rule (the spinning hole's pass). glow[0] > 0: the app's own glow over the finished bent picture (glow[0] the strength, glow[1]
         // the threshold, glow[2] the blur's sigma over the picture's height; blocks of 4 x 4 pixels), made when the picture is drawn anew and kept with it.
         float discFix[4] = {0, 0, 0, 0};
+        // 0.81.0 (blackhole/looks.h filmEdge, filmCover): Film's soft edges and see-through disc, the lab's own: (ln rIn, ln rOut, the fade's width in ln r, the tau
+        // scale); [3] = 0: hard edges and an opaque disc (Real). kKerrSkyFS and kKerrFS
+        float filmSoft[4] = {0, 0, 1, 0};
         float glow[3] = {0, 0, 0};
         // 0.55.4 (blackhole/light.h): glareKeep > 0: the eye's glare over the finished bent picture: the disc's light (before its colour is scaled into the screen)
         // averaged over blocks of glareBlock(...) pixels, read back, glareVeil(...) makes the veil on the processor; the picture is then the disc's light x glareKeep

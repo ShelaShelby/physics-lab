@@ -11,6 +11,7 @@
 #include "blackhole/kerr.h"
 #include "blackhole/lab.h"
 #include "blackhole/light.h"
+#include "blackhole/looks.h"
 #include "blackhole/presets.h"
 #include "blackhole/spin_sky.h"
 #include "imgui.h"
@@ -117,7 +118,13 @@ std::string filmDiscText() {
 const char* kFilmShifts = "None: no colour shift and no brightness shift from the gas's speed and gravity (the film's choice, Figure 15a)";
 std::string filmColourText() { return "The paper's white balance: a " + fmt::commas(blackhole::filmChoices().whiteT) + " K black body drawn white (appendix A.6), by the app's CIE 1931 eye in place of the film stock's colours"; }
 const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the disc's bright parts, laid over the sky (the film's lens data is not published)";
-const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the real lens flare and the film's colour grading are not published and are not here.";
+const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the film's Houdini volume disc, the real lens flare and the film's colour grading are not published and are not here.";
+// 0.81.0 (blackhole/looks.h kFilmFade, kFilmTau): what the lab adds to the film's disc, labelled as its own
+std::string filmOwnText() {
+    return "The lab's own, not the film's: the edges fade over " + sig(blackhole::kFilmFade, 2) + " in ln r inside the paper's edges; the disc is partly see-through "
+           "(the paper: \"marginally optically thick\"; each crossing covers 1 − e^−τ, τ = " + sig(blackhole::kFilmTau, 2) + " × the streaks' brightness × the fade), so the far side "
+           "and the thin rings show through faintly; the streaks, the clump and the glow";
+}
 const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding: Glare draws the veil an average eye would see. "
                            "The picture uses a camera's response curve (Reinhard et al. 2002), our display choice; the colours and the light's ratios are the physics.";
 // 0.55.4 (blackhole/light.h): the two controls of real light, and their honest limits
@@ -154,7 +161,7 @@ ChipInfo blackholeChip(const AppState& app) {
         c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; the standard thin disc, real for quasars and small black holes feeding from a star; dimmed" +
                 (blackhole::allLightOn(v) ? ", all light (not an eye's picture)" : "") + (blackhole::glareOn(v) ? ", an average eye's glare" : "") + (blackhole::trueSkyOn(v) ? "  ·  the stars at their true brightness beside it" : "  ·  our sky, seen from Earth");
     if (v.look == blackhole::Look::Film)
-        c.sub = "The film's choices (James et al. 2015): " + spin + ", one temperature, no shifts, our own glow  ·  a copy of stated choices, not of the film's pictures";
+        c.sub = "The film's choices (James et al. 2015): " + spin + ", one temperature, no shifts; our own soft edges, see-through disc, streaks and glow  ·  a copy of stated choices, not of the film's pictures";
     c.play = false;
     auditNote("bhchip " + c.sub);
     return c;
@@ -423,6 +430,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pStat(p, "Shifts", kFilmShifts);
             pStat(p, "Colour", filmColourText());
             pStat(p, "Glow", kFilmGlow);
+            pStat(p, "Ours", filmOwnText());
             if (pButton(p, "blackhole.paperview", "The paper's view")) blackhole::paperView(s);
             const blackhole::FilmChoices& c = blackhole::filmChoices();
             pCaption(p, "Puts the camera where the paper's disc figure has it: " + sig(c.camR, 3) + " GM/c², " + sig(c.camThetaDeg, 4) + "° from the spin axis (Figure 13). "
@@ -613,7 +621,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         }
         pHeading(p, "What is real in this picture");
         if (film) {
-            pCaption(p, "The film's choices on a calculated black hole: spin " + sig(blackhole::filmChoices().spin, 2) + ", a thin disc at one temperature, no colour or brightness shift, our own glow. " + std::string(kFilmHonest), false);
+            pCaption(p, "The film's choices on a calculated black hole: spin " + sig(blackhole::filmChoices().spin, 2) + ", a thin disc at one temperature, no colour or brightness shift. "
+                        "Our own: the soft edges, how see-through the disc is, the streaks, the clump and the glow. " + std::string(kFilmHonest), false);
             pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars, the disc's shape. The Real look is still a model, not a photograph.", false);
         } else {
             const std::string kind = s.spin > 0 ? "a black hole spinning at " + sig(s.spin, 3) + " of the largest possible spin (your choice)" : std::string("a black hole that does not spin");

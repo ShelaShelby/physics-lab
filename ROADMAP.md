@@ -75,7 +75,8 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - The GPU sky pass per new picture, faster: one duplication shared by the two R_J of the same amplitude, Carlson's stop at 0.03.
 - Quality levels High and Ultra (only Basic exists).
 - Real light: the stars' own glare, colour and adaptation in the glare, a calibrated sky map (**source needed**).
-- The realistic gas disc (native/PLAN_DISC.md section 9, the owner's order): 0.81.0 Film (D4: soft edges, streaks, partly see-through, labelled; better than disc078_film.png). Sagittarius A*'s hot flow waits (the **source needed** line below).
+- The realistic gas disc (native/PLAN_DISC.md section 9, the owner's order): Sagittarius A*'s hot flow waits (the **source needed** line below).
+- Film's see-through disc, what is left: the stars on the CPU table's picture (the fallback) stay hidden behind the whole disc (the GPU sky pass lets them show through it).
 - 0.82.0: a camera that moves round the black hole as the Orbit Lab's moves round a planet, "to see the black hole from every side" (the owner, 24 Nov 2026). Planned with the owner first.
 - After 0.83.0 (the owner, 24 Nov 2026): a research job for Sagittarius A*'s hot flow: the missing source (BL06's definition, or another fitted model), tested against the 1.3 mm and 2.2 um checks; drawn only if both pass.
 - Moving gas, what is left: the streaks and the clump on the CPU path (the fallback draws the surface but no moving gas), a check of the clump's light curve against a published curve.

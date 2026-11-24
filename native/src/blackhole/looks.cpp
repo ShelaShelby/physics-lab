@@ -32,7 +32,27 @@ LookRule lookRule(Look l) {
     r.glow = true;                                       // ours, in place of the flare of Figure 16 / section 4.3.1
     r.fixedSpin = true; r.spin = c.spin;                 // section 4.1.1 p. 26
     r.rIn = c.rIn; r.rOut = c.rOut;                      // Figure 13's caption p. 24
+    r.fade = kFilmFade; r.tau = kFilmTau;                // 0.81.0: the lab's own, not the film's (looks.h)
     return r;
+}
+
+double filmEdge(double r, double rIn, double rOut, double fade) {
+    if (!(r > rIn && r < rOut)) return 0;
+    const double u = std::log(r);
+    const double e1 = std::min((u - std::log(rIn)) / fade, 1.0), e2 = std::min((std::log(rOut) - u) / fade, 1.0);
+    return e1 * e1 * (3 - 2 * e1) * e2 * e2 * (3 - 2 * e2);
+}
+double filmTau(double S, double edge, double scale) { return S > 0 && edge > 0 ? scale * S * edge : 0.0; }
+double filmCover(double tau) { return tau > 0 ? -std::expm1(-tau) : 0.0; }
+std::array<double, 3> layFrontToBack(const std::vector<FilmLayer>& layers, double* left) {
+    std::array<double, 3> o{0, 0, 0};
+    double t = 1;
+    for (const FilmLayer& q : layers) {
+        for (int k = 0; k < 3; k++) o[static_cast<std::size_t>(k)] += t * q.cover * q.light[static_cast<std::size_t>(k)];
+        t *= 1 - q.cover;
+    }
+    if (left) *left = t;
+    return o;
 }
 
 std::array<double, 3> whiteBalanceGains(double whiteT) {

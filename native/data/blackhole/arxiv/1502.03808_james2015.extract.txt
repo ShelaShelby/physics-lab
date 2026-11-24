@@ -4,7 +4,7 @@
 # URL: https://arxiv.org/pdf/1502.03808
 # Date read: 2026-11-16
 # sha256 of the original: 5e4a210c6295be6818eedf2ad0d60c9a4d40dca6e3b79666dc73886b3c02641e
-# Place in the original: section 1.2 (p. 5), the caption of Figure 13 (p. 24), sections 4.1.1, 4.1.2, 4.2 (pp. 25-28), the captions of Figures 15 and 16 (pp. 27, 28), section 4.3.1 (p. 29), Appendix A.3.1 (p. 39), Appendix A.6 (p. 43); pages of arXiv v2
+# Place in the original: section 1.2 (p. 5), the caption of Figure 13 (p. 24), sections 4.1.1, 4.1.2, 4.2 (pp. 25-28), the captions of Figures 15 and 16 (pp. 27, 28), section 4.3.1 (p. 29), Appendix A.3.1 (p. 39), Appendix A.6 (pp. 42-43); pages of arXiv v2
 # Used by: src/blackhole/looks.cpp (the Film look) and tests/test_blackhole.cpp testLooks, which reads every number of the Film look from these lines.
 # Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
 # native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
@@ -90,4 +90,20 @@ when visualized, has a moderate spin a/M = 0.6, which gives rise to few areas of
 spectrum with equal red, green and blue pixel values by applying a simple gain to
 each colour channel. We did not model the complex, nonlinear interaction between the
 colour-sensitive layers that occurs in real film.
+#--- end
+#--- begin Appendix A.6 (p. 42), the film's thin and volume discs (0.81.0: the guide's "Not in the app")
+Our code DNGR includes three different implementations of an accretion disk:
+     Thin disk : For this, we adapted our DNGR ray-bundle code so it detects
+intersections of the beam with the disk. At each intersection, we sample the artist’s
+image in the manner described in Section 2.2 and Appendix A.3 above, to determine
+the colour and intensity of the bundle’s light and we attenuate the beam by the optical
+thickness (cf. Appendix A.4).
+     Volumetric disk : The volumetric accretion disk was built by an artist using SideFX
+Houdini software and stored in a volumetric data structure containing roughly 17 million
+voxels (a fairly typical number). Each voxel describes the optical density and colour of
+the disk in that region.
+#--- end
+#--- begin Appendix A.6 (p. 43), footnote ††: the close-ups' procedural textures
+†† A procedural texture uses an algorithm, such as fractal noise, to generate detail at arbitrary resolution,
+unlike a texture based on an image file, which has a finite resolution.
 #--- end

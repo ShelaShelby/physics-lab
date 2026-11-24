@@ -931,6 +931,13 @@ vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each chan
     return m > 1.0 ? o / m : o;
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
+// 0.81.0, Film: kKerrSkyFS's soft edges and see-through (uFilmSoft; w = 0: off). The table's pass draws no moving gas, so S = 1 here.
+uniform vec4 uFilmSoft;
+float filmCoverAt(float r) {
+    float u = log(r), e1 = clamp((u - uFilmSoft.x) / uFilmSoft.z, 0.0, 1.0), e2 = clamp((uFilmSoft.y - u) / uFilmSoft.z, 0.0, 1.0);
+    float edge = e1 * e1 * (3.0 - 2.0 * e1) * e2 * e2 * (3.0 - 2.0 * e2);
+    return 1.0 - exp(-uFilmSoft.w * edge);
+}
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0);
     vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
@@ -973,6 +980,7 @@ void main() {
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.x, uDR.y);
+        if (uFilmSoft.w > 0.0) cov *= filmCoverAt(rc);       // 0.81.0
         vec3 cr = discColourRaw(rc, shiftKerr(rc, b));
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
@@ -2536,6 +2544,15 @@ vec3 discLightRaw(float r, float g, float gf) {
     return lightOfT(T);
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }
+// 0.81.0, Film (blackhole/looks.h filmEdge, filmTau, filmCover; the lab's own, not the film's): uFilmSoft = (ln rIn, ln rOut, the fade's width in ln r, the
+// tau scale); w = 0: hard edges and an opaque disc (Real). A crossing at r with the streaks' factor S covers cov x (1 - exp(-w S edge)) of the pixel.
+uniform vec4 uFilmSoft;
+uniform int uGasFoot;                                 // 0.81.0 (tests): 0 the streaks read with no footprint (as kLensFS's uGasFoot)
+float filmCoverAt(float r, float S) {
+    float u = log(r), e1 = clamp((u - uFilmSoft.x) / uFilmSoft.z, 0.0, 1.0), e2 = clamp((uFilmSoft.y - u) / uFilmSoft.z, 0.0, 1.0);
+    float edge = e1 * e1 * (3.0 - 2.0 * e1) * e2 * e2 * (3.0 - 2.0 * e2);
+    return 1.0 - exp(-uFilmSoft.w * S * edge);
+}
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0); maskOut = vec4(0.0);
     if (uMode == 12) {                                // 0.70.0: the camera curve on one colour from 10^-3 to 10^4 of it, even in log over the pass's pixels, at uLw
@@ -2594,14 +2611,16 @@ void main() {
         float w = fw[k];
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (probe ? k != first : cov <= 0.0) continue;
-        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0;
+        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0, sk = 1.0;
         if (uGas == 1 && R.tt[k] >= 0.0 && (uMode == 0 || uMode == 5)) {
-            bool fz = uMode == 5;                         // (the probe: no footprint, as gas.cpp's factor)
+            bool fz = uMode == 5 || uGasFoot == 0;        // (the probe: no footprint, as gas.cpp's factor)
             vec2 gl = gasLight(rc, R.ph[k] + uGasCam, uGasTau - R.tt[k], fz ? 0.0 : 0.3 * fw[k] / rk[k], fz ? 0.0 : fph[k]);
             if (uMode == 5) { fragColor = vec4(R.ph[k] + uGasCam, R.tt[k], gl.x, gl.y); return; }
             gf = gl.x * (1.0 + uGasT.w * gl.y);
-            if (isnan(gf) || isinf(gf)) gf = 1.0;
+            sk = gl.x;
+            if (isnan(gf) || isinf(gf)) { gf = 1.0; sk = 1.0; }
         }
+        if (uFilmSoft.w > 0.0 && uMode == 0) cov *= filmCoverAt(rc, sk);   // 0.81.0: Film's soft edges and see-through (the exposure's samples keep the light)
         if (uMode == 5) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
         vec3 raw = discLightRaw(rc, g, gf);
         if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }
