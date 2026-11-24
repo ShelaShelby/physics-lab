@@ -1,22 +1,23 @@
-# 0.78.0: comet tails calculated, the photon's dipole pattern (second job from the outside physics review)
+# 0.78.1: research: a realistic gas disc for the Black Hole Lab (plan and pictures, no change to what the app does)
 
 ## What changed
-- Item 0: run 45269193504 stopped rings at the 300 s part limit (no check failed). That run was about 1.4 times slower in every part (flyby 117 to 168 s). 0.76.0 already took 243 s. Now 0.7 s counted, picture at 0.5 s (was 2.0 and 1.5): 68 s to 30 s here, same checks.
-- Item 1, dust: grains on Kepler orbits around (1 - beta) GM (Finson & Probstein 1968, orbit/comet_tail.h). 40 betas, a release every 6 h, 40 days back: 6,400 a comet. kGrainsCS solves them on the GPU (universal variables, float; the age in double). The CPU double path is the reference and the fallback.
-- Item 1, gas tail: along V r_hat - v, V = 400 km/s (NASA MSFC, saved). CometData::tail is removed. Choices kept and labelled: 4 AU switch-on, beta 0 to 1, release grid, equal grain brightness ("model"), gas tail as long as the dust tail.
-- Item 1: Hard scene orbit.comet_tails (Hale-Bopp at perihelion, zoom 1.00, camera turning, 1 day/s). No response line: the tail appears at once. The rocks' GPU object has 32 slots (was 16).
-- Item 3: a one-electron Cloud-view photon leaves in 3D from p = 3/(8 pi)(1 - |n.u|^2), u = <to|r|from> (Jackson 3rd ed. sect. 9.2), seen from the camera. Absorption the same. "Emission pattern" switch draws the lobe. Orbit view and many-electron atoms keep the old angle and say so. The decay flash is labelled "a drawing".
-- Item 2 skipped (stop rule, 2 tries): no saveable phase table for the main rings over all phase angles.
+- native/PLAN_DISC.md: the plan. Section 0 for the owner, one recommended version and two alternatives, the physics with sources, tests, GPU plan, build steps D1-D5, five questions.
+- Findings: at 0.1 L_Edd the feeding disc is at most 1.8 % of its radius thick (h = kappa F / (2 c Q), Zhu et al. 2012 App. B; their Fig. 3 shows about 2 %). Sagittarius A*'s hot flow (BL06 model) is about 1/560 of the Sun's surface brightness in visible light, near white, a thin ring round the shadow.
+- tools/discproto (new CMake target, not a test): CPU double, the lab's KerrBL paths. Three pictures in docs/blackhole (disc078_*.png with .txt): today beside proposed at the same view and exposure.
+- 24 new source files in the sources repo (commit 13f6d55), 24 lines in data/SOURCES.md. DECISIONS (the owner's words of 24 Nov), ROADMAP, PLAN_BLACKHOLE, PLAN_MOVINGGAS, data/blackhole/README.txt. Changelog entry, VERSION 0.78.1.
 
 ## Tests run
-- orbit_tests: 2599 checks, 0 failed. testCometTail078: beta = 0 on the Kepler orbit 3.2e-12; offset 1/2 beta g t^2 to 6.3e-8, anti-sunward to 1 - cos = 4.7e-9; energy and h kept to 4e-14 (99 grains on hyperbolas); ion tail anti-sunward (5.6e-17) and atan(40/400) = 5.71 deg.
-- atom_tests: 12153 checks, 0 failed. testPhotonPattern078: integrals 1 within 5e-7; chi-squared p 0.815, 0.243, 0.939 (19 dof, 400,000 each); within 3 deg of z: 4 of 2,000,000 (exact share 2.8e-6, P 0.81).
-- vk_compare_tests: 707 checks, 0 failed. Grains GPU vs CPU over 230,400 places: worst 0.00107 points at 300 points to the tail (limit 0.01). Start-up check: 1.4e-5 point.
-- check.sh job: quick 18 of 18, ui_smoke passed. By hand: check_orbit_ui.py rings 4, flyby 2, cardlines 8, planets 25 checks, 0 failed; check_atom_chip.py card 18, 0 failed (it draws atom.jump_all: many-electron, photon unchanged). check_sources.py: ok.
+- check.sh job: quick 18 of 18 passed, ui_smoke passed. check_sources.py on the sources checkout: ok (689 manifest lines, 42 extracts).
+- discproto checks: Sagittarius A*'s model gives 0.195 mJy at 2.2 um at Earth (GRAVITY 2020: median 1.1 +- 0.3, 5 % percentile 0.28). Optical depth at 550 nm at most 5e-13. Thermal light at 550 nm at most 8e-12 of the power-law light.
+- Measured on the build machine: 444 integrator steps and 0.127 ms a ray, 77 ns an emissivity sample (one core, double).
 
 ## Not done
-- Item 2 (Saturn's ring phase law and colour): Déau et al. 2009 (arXiv:0902.0289) fits only the opposition surge. No table over all angles was found. ROADMAP.
-- No published syndyne figure checked: the Finson & Probstein scan (ADS) answered 500 on 2026-11-24. ROADMAP. Dipole pattern for many-electron atoms and polarisation: ROADMAP.
+- No app code (a research job). No M87* picture: no fitted semi-analytic model of its flow was found (source needed, ROADMAP).
+- No GPU prototype: the cost estimate uses the CPU measurement and operation counts, labelled estimates in PLAN_DISC.md section 6.
+- Hot-flow structure not drawn: its strength is not sourced. The Illinois GRMHD data (CC BY 4.0) could give it: step D5.
+- Film's glow: no camera or lens spread function with tabulated values was found (Talvala et al. 2007 gives plots only). Source needed.
+- Doubtful value: Abramowicz & Fragile 2013 (99) prints the inner region's H = [1e5 cm] (mdot) with no power of m, while (97) and (98) carry m. The textbook form scales with M. The lab does not use (99).
+- BL06's "30 % of equipartition" is read through Broderick et al. 2011 (4) as beta^-1 = 0.3. D1 tests it first against the 1.3 mm flux (about 3 Jy).
 
 ## References changed on purpose
-- vk_rocks.inc: "33 sets do not fit in the 32 slots" (was 17 in 16): the slots were raised for the comets' grains. test_app.cpp: 37 Hard scenes, 53 in All, plan up to 318 s. check_6b.py: orbit.comet_tails's zoom. test_shell.inc: the comet card's 4 AU line. No picture reference file changed.
+- None. No test changed.

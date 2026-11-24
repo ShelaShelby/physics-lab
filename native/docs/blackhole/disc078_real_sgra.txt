@@ -1,0 +1,19 @@
+disc078_real_sgra.png (0.78.1 research; native/PLAN_DISC.md), 1448 x 300: three panels of 480 x 300, 2 x 2 rays a pixel
+Made by: build/discproto sgra disc078_real_sgra.png (native/tools/discproto/discproto.cpp; processor, double precision, the lab's ray paths). 62.2 s on
+4 threads. The lab's starting view (as disc078_real_feeding.txt), Sagittarius A* (4.297 million Suns, 8277 pc: presets.h), spin 0 (not measured).
+Left, today: the thin disc the user turns on for this preset ("what a bright disc would look like here", 0.1 L_Edd), as the app draws it, with 0.72's
+pattern and clump at one moment. Brightest 1095 x the Sun's surface in visible light.
+Middle and right, proposed: Sagittarius A*'s real kind of gas, the hot, thick, see-through flow of Broderick & Loeb 2006 (BL06) section 2.2, (4) and
+Table 1 (spin 0): n_e = 3e7 cm^-3 (rho/M)^-1.1 exp(-z^2/2rho^2), T_e = 1.7e11 K (r/M)^-0.84, power-law electrons 8e4 cm^-3 (rho/M)^-2.9 exp(-z^2/2rho^2)
+with spectral index 1.25 and gamma_min 100, a toroidal field at 30 % of equipartition (written as in Broderick et al. 2011 (4): this reading is to be
+confirmed against BL06 Fig. 1), Keplerian outside 6 GM/c^2, free fall inside. Light: synchrotron emissivity of Pandya et al. 2016 (24) thermal and (26)
+power law; I_obs = Int g^2 j(nu / g) dlambda along each ray; absorption (27) checked: largest optical depth at 550 nm 5e-13 (none). At 550 nm the thermal
+electrons give at most 8e-12 of the power-law light (not drawn). The colour of the power law I_nu ~ nu^-1.25 under the CIE 1931 observer: x 0.3135,
+y 0.3165 (white with a faint pink tint); the shift changes only its brightness.
+Middle: at the left panel's exposure: black. The flow's brightest pixel would be 2.5e-6 of the screen's white, below one 8-bit step (1.5e-4).
+Right: the same flow at its own exposure (the screen's white at its brightest pixel, 0.00195 x the Sun's surface). Brightest 0.00179 x the Sun's
+surface: about one six-hundredth. The approaching side (right) is brightest; the light sits in a thin ring hugging the shadow.
+Check against a measurement: the flux of this picture at 2.2 um, moved to Earth by (50 GM/c^2 / 8277 pc)^2, is 0.195 mJy; GRAVITY 2020 measured a median
+of 1.1 +- 0.3 mJy (dereddened), 5 % of the time below 0.28 mJy (Table 1). The model is at the faint end of the measured range. No visible-light
+measurement of Sagittarius A* exists (dust: GRAVITY 2020 corrects even 2.2 um by A_Ks = 2.43 magnitudes).
+LABELLED CHOICES: the flow drawn out to 100 GM/c^2, one still moment, no structure (its strength is not yet sourced: PLAN_DISC.md section 4).

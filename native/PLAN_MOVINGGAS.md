@@ -1,4 +1,5 @@
 Steps 1-3 built (0.56.4: the processor's physics; 0.72.0: the card, the lab, the guide). True at 0.72.0. What is left: section 7 and ROADMAP (Black Hole Lab, Moving gas).
+0.78.1: the owner rejected the look (24 Nov 2026). Section 5's patches are to be replaced by the streaks of native/PLAN_DISC.md section 4; the clocks, the travel time and the clump stay.
 
 # Plan: moving gas in the Black Hole Lab (0.56.3 research, 17 Nov 2026; no app code yet)
 Owner's choice (17 Nov 2026, DECISIONS.md): something must happen; moving gas before flying the camera. Pictures: native/docs/blackhole/moving_clump_strip.png,

@@ -15,6 +15,11 @@ in a denominator where the integral needs a2 (1 - g0 x4(r+-)) (g0 + x4(r+-)) (RE
 [0.70.0] The Real look's camera curve (src/blackhole/tone.h) reads Reinhard, Stark, Shirley & Ferwerda 2002 (University of Utah report UUCS-02-01 of the ACM TOG
 paper) through its extract tone/reinhard2002_uucs-02-01.extract.txt (section 3.1, Equations (1) to (4)); the PDF and its text are in the private sources repo.
 
+[0.78.1] The realistic gas disc research (native/PLAN_DISC.md) saved in the private repo, data/blackhole/: arxiv/ Guan et al. 2009 (0901.0273), Broderick et al.
+2011 (1011.2770), Zhu et al. 2012 (1202.1530), Pandya et al. 2016 (1602.08749), GRAVITY 2020 (2004.07185), Lee & Gammie 2021 (2011.07151), Dhruv et al. 2025
+(2411.12647); glare/ Talvala et al. 2007; web/ the Illinois simulation data pages (CC BY 4.0) and AMD's RX 9060 XT page. Each is one line of native/data/SOURCES.md.
+No test reads them yet (no extract): tools/discproto names them in its comments.
+
 Sources for the Black Hole Lab (0.54.2 research job, 15 Nov 2026; the plan is native/PLAN_BLACKHOLE.md)
 =======================================================================================================
 Nothing here is used by the app yet. Every file was fetched on 2026-11-15 (UTC) and is kept as received, except where "text" is said:

@@ -81,8 +81,9 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   "A feeding black hole (model)"; automatic exposure with a slider and the readout "shown N times dimmer than real"; the Film look gets a simple soft glow
   labelled as the app's own; presets set mass and distance only, spin starts at 0 with "spin not measured"; no new minimum graphics card; the radio-picture
   look stays a roadmap idea; build order: the lab, the disc, spin, the looks.
-- The moving gas (owner, 23 Nov 2026): the owner does not like the current moving gas model of the Black Hole Lab. It will be replaced by a new model; the owner says what
-  he wants (ROADMAP, Waiting for the owner). No Black Hole look work until then.
+- The gas disc (owner, 24 Nov 2026; replaces "The moving gas" of 23 Nov 2026): the gas disc is ugly in both looks, Film worst. All four bother him: it is
+  flat like a sticker, too smooth and plastic, its edges are hard, and its colour and glow look cheap. He wants the most realistic option. Research job
+  0.78.1 wrote the plan (native/PLAN_DISC.md); its questions (section 10) wait for him (ROADMAP, Waiting for the owner).
 - No lower resolution while moving (17 Nov 2026): the picture stays sharp while the user drags. A lower resolution only on a card whose whole picture takes
   over 16.7 ms (fewer than 60 sharp pictures a second); Settings, Performance then says so, with the switch "Lower resolution while moving" (Auto / Off).
 - Something must happen in the lab (17 Nov 2026): moving gas comes before flying the camera. Wishes: true speeds, a bright clump circling the hole, a time

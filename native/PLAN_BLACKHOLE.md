@@ -122,7 +122,7 @@ are not published, so the glow is ours and labelled "our own glow, in place of t
 - The telescope pictures are at 1.3 mm, blurred to 20 μas (ring 42 ± 3 μas for M87*, 51.8 ± 2.3 μas for Sgr A*), colour = brightness temperature (M87-I Fig. 3; Sgr-I Fig. 3); Sgr A* changes within an hour (Sgr-I abstract).
 - Spin: M87*: zero spin is disfavoured by the jet power and the spin points away from Earth (M87-I §6); Sgr A*: models disfavour zero spin, a counter-rotating
   flow and a view more than 50° from the axis; the two best models have a* = 0.5 and 0.94 at 30° (Sgr-I abstract, §6). No measured value. The presets therefore set mass and distance only; spin stays the user's, with this sentence.
-- A picture of the hot flow itself would need a magnetised gas simulation (the EHT model libraries, M87-V): not buildable from closed forms; a ROADMAP idea only.
+- A picture of the hot flow itself: 0.78.1 found a published fitted model that can be drawn (Broderick & Loeb 2006 for Sagittarius A*; native/PLAN_DISC.md section 3) and public simulation data (PLAN_DISC.md section 4).
 
 ## 4. The background sky
 Today: ESA's Gaia map drawn per pixel (render/planet_maps.h Map::Sky, Renderer2D::skyMap, orbit_view.cpp drawSky) and 2,874 catalogue stars as discs (orbit/sky.cpp), all as seen from Earth.

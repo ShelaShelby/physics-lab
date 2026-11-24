@@ -1,0 +1,10 @@
+disc078_film.png (0.78.1 research; native/PLAN_DISC.md), 964 x 300: two panels of 480 x 300, 2 x 2 rays a pixel
+Made by: build/discproto film disc078_film.png (native/tools/discproto/discproto.cpp; processor, double precision, the lab's ray paths). 19.3 s on 4 threads.
+The lab's starting view (as disc078_real_feeding.txt) with the Film look's numbers from James et al. 2015 (looks.h): spin 0.6, disc from 9.26 to 18.70
+GM/c^2, one temperature 4500 K, no colour or brightness shift, white balance at 6500 K.
+Left, today: the app's Film disc (lab.cpp discLight, Film) times 0.72's pattern and clump at one moment; then the lab's own glow (looks.h glowReference,
+strength 0.6). Right, proposed (all LABELLED as the lab's own, none from the film): the edges fade over 0.12 in ln r inside J15's edges (smoothstep);
+the same streak field as the Real picture (seed 78102); the disc is "marginally optically thick" (J15 section 4.1.1): each crossing covers
+1 - exp(-1.5 S x edge) and the crossings are laid front to back, so the far side and the thin rings show through faintly; then the same glow.
+The screen's white: the film disc's own colour (its largest channel, 0.349 x the Sun's surface), both panels.
+Read: the hard rims go, the disc gets long streaks and some depth. The film's real texture and lens flare are not published: they are not copied.

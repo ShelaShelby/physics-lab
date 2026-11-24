@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.78.1", "Research: a realistic gas disc for the Black Hole Lab; no change to the app",
+     "Research for a more realistic gas disc in the Black Hole Lab (PLAN_DISC.md); no change to what the app does. What real gas round a black hole is like, "
+     "from saved papers: a feeding hole's bright disc is truly almost flat (under 2 % of its radius thick at the lab's feeding rate), its gas is streaked into "
+     "trailing spirals by magnetic turbulence, and it fades inside its innermost orbit; Sagittarius A*'s gas is a hot, see-through fog whose visible light, "
+     "worked out from a published model, is about a six-hundredth of the Sun's surface brightness close up, nearly white, and strongest in a thin ring round "
+     "the shadow. Prototype pictures compare today's disc with the proposed one in Real and Film."},
     {"0.78.0", "Comet tails worked out, and the photon's real direction",
      "The comets' tails are now calculated instead of drawn for show. The dust tail is thousands of dust grains, each let go by the comet at a past moment and then "
      "moving on its own orbit round a Sun whose pull is weakened by the push of sunlight (Finson and Probstein 1968); the gas tail points along the solar wind, about "

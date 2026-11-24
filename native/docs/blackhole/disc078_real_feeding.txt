@@ -1,0 +1,21 @@
+disc078_real_feeding.png (0.78.1 research; native/PLAN_DISC.md), 964 x 300: two panels of 480 x 300, 2 x 2 rays a pixel
+Made by: build/discproto real disc078_real_feeding.png (native/tools/discproto/discproto.cpp; processor, double precision; the lab's own ray paths:
+geodesic.h KerrBL and trace with every accepted state kept, rtol 1e-11). No sky (the lab's black background). 21.8 s on 4 threads of the build machine.
+The view: the lab's starting view (lab.h): camera hovering at 50 GM/c^2, 100 degrees from the disc's axis (10 degrees below its plane, screen up to -z, so
+the disc is under the hole as in the lab), 45 degrees across the picture's height, the lab's equidistant projection. Preset "A feeding black hole (model)":
+10^8 Suns, 0.1 L_Edd, spin 0, disc from 6 to 2000 GM/c^2. Hottest ring 70,122 K at 9.55 GM/c^2.
+Left, today: what the app draws (lab.cpp discLight at the first crossing of the equator: Page-Thorne flux, black body at g T, CIE 1931 into sRGB) times
+0.72's moving-gas pattern and clump (gas.h GasPattern::reduced, Clump) at one moment, without the light's travel time.
+Right, proposed: (1) the disc's true thickness: an opaque surface at |z| = h(R), h = kappa F / (2 c Q) (radiation pressure, one-zone vertical structure of
+Zhu et al. 2012 App. B, (B1a), (B1b), (B1f); Q = Omega_k^2 R_z their (5)-(6) at spin 0), the same Page-Thorne flux; largest h/R = 0.0177 at R = 20.5
+GM/c^2 (their Fig. 3, TLUSTY at L/L_Edd = 0.1: about 0.02 near 20 GM/c^2, read from the plot). h goes to 0 at the innermost stable orbit with the flux.
+(2) streaks: the light times S = exp(0.6 f - 0.18), f a Gaussian random field of unit variance in (ln R, phi) with Lee & Gammie 2021's spectrum
+(1 + k.Lambda k)^-2 (their (13)), its long axis 15 degrees from the orbit, trailing (Guan et al. 2009 Table 2), long length 25 degrees x R (Schnittman,
+Krolik & Hawley 2006's patch size), short length 0.18 x the long (Guan et al. 2009 Table 2, y256a). The mean of S is exactly 1: light is moved, not added.
+LABELLED CHOICES of this prototype: the strength 0.6 (the build job calibrates it to SKH06 Table 2's 43.8 % rms), which length is the knee, one still
+moment, the gas at the surface moving as at the plane (h/R < 0.02), no limb darkening (ROADMAP), no light from inside the ISCO (Zhu et al. 2012: about
+4 % in their simulations at 0.3-0.7 L_Edd; not drawn).
+Exposure: the lab's camera curve (tone.h, Reinhard et al. 2002) made from today's 123,428 disc samples (k 0.004304, log-average 41.82, brightest
+474.3 x the Sun's surface in visible light) and used for both panels.
+Read: at this feeding rate the real disc is very nearly flat; its thickness shows only as a slightly fuller inner rim. The look changes mostly through the
+streaks: long trailing filaments in place of round patches.

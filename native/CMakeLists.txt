@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.78.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.78.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -257,6 +257,10 @@ if(PL_BUILD_TESTS)
   target_link_libraries(movinggas PRIVATE blackhole_core)
   target_compile_options(movinggas PRIVATE ${PL_WARNINGS})
   add_test(NAME movinggas_physics COMMAND movinggas --check)
+  # 0.78.1 research: prototype pictures of a realistic gas disc (PLAN_DISC.md; not a test)
+  add_executable(discproto tools/discproto/discproto.cpp)
+  target_link_libraries(discproto PRIVATE blackhole_core app_core)
+  target_compile_options(discproto PRIVATE ${PL_WARNINGS})
   add_executable(density_tests tests/test_density.cpp)   # 0.21: the Realistic style (electron counts, dipoles, symmetry, dots, the surface)
   target_link_libraries(density_tests PRIVATE molecule_core)
   target_compile_options(density_tests PRIVATE ${PL_WARNINGS})

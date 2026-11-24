@@ -76,7 +76,10 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - The GPU sky pass per new picture, faster: one duplication shared by the two R_J of the same amplitude, Carlson's stop at 0.03.
 - Quality levels High and Ultra (only Basic exists).
 - Real light: the stars' own glare, colour and adaptation in the glare, a calibrated sky map (**source needed**).
-- Moving gas, what is left: the CPU path for a spinning hole, the full pattern per pixel (a faster pattern first), a check of the clump's light curve against a published curve.
+- A realistic gas disc (native/PLAN_DISC.md, after the owner's answers): D1 the physics on the CPU (thickness, streak field, Sagittarius A*'s hot flow, tests first); D2 Real feeding disc on the GPU (streaks replace the patches, thinning inner rim); D3 the hot flow for Sagittarius A* ("shown N times brighter than real"); D4 Film (soft edges, streaks, partly see-through, labelled); D5 the owner's choice of simulation data.
+- Moving gas, what is left: the CPU path for a spinning hole, a check of the clump's light curve against a published curve. (The full SKH06 pattern per pixel is replaced by PLAN_DISC.md's streaks.)
+- **fix**: BL06's "30 % of equipartition" is read in the prototype as beta^-1 = 0.3 in Broderick et al. 2011 (4). D1 tests it against the 1.3 mm flux (about 3 Jy) before use.
+- **source needed**: a semi-analytic model of M87*'s flow with fitted numbers (Broderick & Loeb 2009, ApJ 697, 1164, is a candidate). T_eff inside the ISCO at 0.1 L_Edd. The hot flow's structure strength (to measure from the Illinois GRMHD data, CC BY 4.0). A camera or lens spread function with tabulated values for Film's glow.
 - Next, after the moving gas: moving cameras (orbiting, falling in; **source needed** the ray equations in ingoing Kerr coordinates), the Data panel's tables, the skin. A "1979 paper" view of Luminet's figures.
 - **source needed**: L79 Fig. 10's 2.62 F_S max at 10 degrees (the lab gives 2.81). The disc's total light needs Thorne 1974 (ApJ 191, 507).
 - Spin, what is left: "Show special radii", spins above 0.99, a counter-rotating, tilted or warped disc, the sky's turning for the dragged camera.
@@ -99,7 +102,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 
 ## Waiting for the owner
 - Camera part 3, free flight (WASD or arrows, mouse look, speed scaling with distance). Not now (23 Nov 2026).
-- The moving gas: a new model. The owner says what he wants.
+- The gas disc: the five questions of native/PLAN_DISC.md section 10 (version, thickness, Sagittarius A*'s colour, streaks for patches, Film's glow).
 - After the owner's 0.63.1 benchmark: the three worst frames of blackhole.film_tilt (969 ms), orbit.heaviest (20.7 ms) and atom.nucleus_zoom (19.1 ms).
 - Paused (14 Nov 2026): element jumps with every electron for the other atoms (native/PLAN_JUMPS.md).
 - "Far labels" in the Orbit Lab: the owner describes what is wrong. Photon jumps from a complex state: the owner picks an option.
