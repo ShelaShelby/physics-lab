@@ -424,6 +424,65 @@ def hottest_k(mass, feed):
     rg = GM / c ** 2
     return (mdot * c * c / rg ** 2 * fmax / sigma) ** 0.25
 
+# 0.82.1, bugs the owner saw (a bug the owner has seen: the new checks are parts of "disc", the group ui_blackhole)
+def part_gasrow(binary, work):
+    # 1. the moving gas's row says Off or On, and the picture changes when it is clicked. (0.72.0 to 0.82.0 a button "Moving gas" that did not look like a switch:
+    #    the owner thought his gas models were gone.) The picture of a click on Off is the picture of the setting gas=off, to the pixel; the On picture has the streaks.
+    GAS = dict(BASE, PL_BH_GAS=None, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_GAST="3000", PL_BH_SETTLE="16:6")   # (the same clock, and the run ends once the picture has settled)
+    st = "preset=feeding;glare=off;look=film"
+    on = run_app(binary, work, "bh_gas_on", dict(GAS, PL_BH_SET=st), frames=80)
+    off = run_app(binary, work, "bh_gas_off", dict(GAS, PL_BH_SET=st, PL_SCRIPT="6:click=blackhole.gas.off"), frames=80)
+    ref = run_app(binary, work, "bh_gas_ref", dict(GAS, PL_BH_SET=st + ";gas=off"), frames=80)
+    back = run_app(binary, work, "bh_gas_back", dict(GAS, PL_BH_SET=st, PL_SCRIPT="6:click=blackhole.gas.off;12:click=blackhole.gas.on"), frames=80)
+    for r, n in ((on, "on"), (off, "off"), (back, "back")):
+        check(not r.scripted_missing(), f"gas row, {n}: the buttons were there ({r.scripted_missing()})")
+    s = {n: bh(r) for n, r in (("on", on), ("off", off), ("ref", ref), ("back", back))}
+    check(all(v is not None for v in s.values()) and s["on"]["gasshown"] == "1" and s["off"]["gasshown"] == "0" and s["ref"]["gasshown"] == "0" and s["back"]["gasshown"] == "1",
+          f"the row reads On, Off after a click, Off for gas=off, On after On again ({ {n: v and v['gasshown'] for n, v in s.items()} })")
+    check(texts_has(on, "Streaks and clump") and any(k.startswith("seg.blackhole.gas.") for k in on.rects), "the row is named and drawn")
+    check(any(t_[2] == "Pause" for t_ in on.texts) and not any(t_[2] in ("Pause", "Play") for t_ in ref.texts) and "seg.blackhole.gas.sel1" in on.rects and "seg.blackhole.gas.sel0" in ref.rects, "Pause / Play and the rate are drawn only while it is On")
+    def diff(a, b):                                                    # (the picture: left of the Controls panel, below the top bar, above the bar)
+        A, B = Bmp(a.bmp), Bmp(b.bmp)
+        return sum(1 for y in range(48, 740) for x in range(0, 930) if sum(abs(p - q) for p, q in zip(A.px(x, y), B.px(x, y))) > 6)
+    if all(os.path.exists(r.bmp) for r in (on, off, ref, back)):
+        check(diff(on, off) > 2000, f"the picture changes when the row is set to Off ({diff(on, off)} pixels)")
+        check(diff(off, ref) == 0, f"a click on Off gives the picture of gas=off ({diff(off, ref)} pixels differ)")
+        check(diff(back, on) == 0, f"Off, then On gives the streaks back ({diff(back, on)} pixels differ)")
+    # Most realistic turns the clump and the streaks off: the row reads Off (it read On before), and On sets them back
+    mr = run_app(binary, work, "bh_gas_real", dict(GAS, PL_BH_SET="preset=feeding;gasclump=off;gaspattern=off", PL_SCRIPT="6:click=blackhole.gas.on"), frames=24)
+    m0 = run_app(binary, work, "bh_gas_real0", dict(GAS, PL_BH_SET="preset=feeding;gasclump=off;gaspattern=off"), frames=14)
+    a, b = bh(m0), bh(mr)
+    check(a is not None and b is not None and a["gasshown"] == "0" and b["gasshown"] == "1" and b["gasclump"] == "1" and b["gaspattern"] == "1",
+          f"with the clump and the streaks both off the row reads Off, and On sets them on ({a and a['gasshown']}, {b and (b['gasshown'], b['gasclump'], b['gaspattern'])})")
+    # 3. Film: a control that does nothing in Film is not drawn; one plain line stands in its place (0.82.0 drew them greyed, with no reason)
+    f = run_app(binary, work, "bh_film_ctl", dict(BASE, PL_BLACKHOLE="1", PL_BH_SET="preset=feeding;look=film", PL_PANELS="blackhole.card=c"), frames=14)
+    check(not any(k.startswith("slider.blackhole.spin") for k in f.rects) and not any(k.startswith("seg.blackhole.disc.") for k in f.rects),
+          f"Film: no Spin slider and no Gas disc Off / On ({[k for k in f.rects if 'blackhole.spin' in k or 'blackhole.disc.' in k]})")
+    lines = [t_[2] for t_ in f.texts if t_[2].startswith("Film always draws")]
+    check(len(lines) >= 2, f"Film: one plain line for the disc and one for the spin ({lines})")
+    g = run_app(binary, work, "bh_real_ctl", dict(BASE, PL_BLACKHOLE="1", PL_BH_SET="preset=feeding", PL_PANELS="blackhole.card=c"), frames=14)
+    check(any(k.startswith("slider.blackhole.spin") for k in g.rects) and any(k.startswith("seg.blackhole.disc.") for k in g.rects), "Real: the Spin slider and the Gas disc row are drawn")
+
+# 0.82.1: the disc seen nearly edge on, static (REPORT 0.82.1): the Real look's disc surface (spin 0). Hook 2e of the comparison (blackhole_view.cpp, PL_BH_COMPARE_VIEWS):
+# the card against the double lookup at every pixel (the order and the radius within 3 %), and in the picture as the app draws it no pixel of the smooth disc may
+# differ from the mean of its four neighbours by over 8 levels of 255 (at most 1 % of them: the Vulkan limit). Sagittarius A* with the disc, feeding 0.11, the
+# two views the owner saw (57.5 at pitch 1.575; 1000), the plane (pitch pi/2) and a sweep of 0.2 degrees either side of it at 57.5 and 1000 GM/c^2.
+def part_edgeon(binary, work):
+    views = [(57.5, 1.575), (1000, 1.575), (1000, math.pi / 2), (57.5, math.pi / 2)]
+    for d in (57.5, 1000):
+        for o in (-0.0035, -0.0018, -0.0007, 0.0007, 0.0018, 0.0035):
+            views.append((d, math.pi / 2 + o))
+    spec = ";".join(f"{d},{p:.7f},0.11" for d, p in views)
+    r = run_app(binary, work, "bh_edgeon", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="1", PL_BH_COMPARE_VIEWS=spec), frames=3, timeout=3000)
+    rows = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHEDGEON ")]
+    for x in rows: print("PLBHEDGEON", x)
+    check(len(rows) == len(views), f"the edge-on views were compared ({len(rows)} of {len(views)})")
+    for x in rows:
+        w = f"edge on, {x['dist']} GM/c^2 at pitch {x['pitch']}"
+        n, sm = int(x["pixels"]), int(x["smooth"])
+        check(int(x["bad"]) <= 0.001 * n and int(x["badorder"]) <= 0.001 * n, f"{w}: the card = the double lookup ({x['bad']} of {n} pixels differ, {x['badorder']} in the order)")
+        check(sm > 100000 and int(x["over8"]) <= 0.01 * sm, f"{w}: the near disc is smooth in the picture ({x['over8']} of {sm} pixels over 8 levels; the lookup's own isolated pixels {x['isolated']})")
+
 def part_disc(binary, work):
     # the presets: the two real holes open with the disc off, the feeding one with it on
     for key, want in (("m87", "0"), ("feeding", "1"), ("sgra", "0")):
@@ -669,7 +728,7 @@ def part_whiteout(binary, work):
               f"over: {bad[:5]}, missing clicks: {r.scripted_missing()})")
 
 PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
-         "settings": part_settings, "precision": part_precision, "precisioncard": precision_card, "disc": part_disc, "spin": part_spin, "alllight": part_alllight, "whiteout": part_whiteout}
+         "settings": part_settings, "precision": part_precision, "precisioncard": precision_card, "disc": part_disc, "gasrow": part_gasrow, "edgeon": part_edgeon, "spin": part_spin, "alllight": part_alllight, "whiteout": part_whiteout}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]

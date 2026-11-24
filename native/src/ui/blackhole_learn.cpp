@@ -112,7 +112,7 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         v.push_back({"film", "🎬 What the film changed", h});
     }
     v.push_back({"moving", "⏱️ Moving gas",
-        p("With the disc on, the gas moves (Controls › Gas disc: <b>Moving gas</b>, <b>Pause</b> and the rate; the rest under More settings › Moving gas). "
+        p("With the disc on, the gas moves (Controls › Gas disc: <b>Streaks and clump</b> Off or On, then <b>Pause</b> and the rate; the rest under More settings › Moving gas). "
           "Each ring goes round at its true speed, Ω = 1 / (r^3/2 + a) in the hole's units (Bardeen, Press and Teukolsky 1972): near the hole more than half "
           "the speed of light. One turn of the innermost gas takes about half an hour round Sagittarius A*, about a month round M87* and a few thousandths "
           "of a second round a hole of 10 Suns; the rate sets how fast the film runs, from real time to much faster or slower.") +

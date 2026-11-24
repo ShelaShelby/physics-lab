@@ -1,22 +1,21 @@
-# 0.82.0: the Black Hole Lab's camera handles like the Orbit Lab's
+# 0.82.1: the Black Hole Lab's bugs the owner saw
 
 ## What changed
-- Read: CLAUDE.md, REPORT 0.81.0, ROADMAP (Black Hole Lab); by grep and line ranges main.cpp (key, wheel, mouse down, motion, up; the Black Hole tick), lab.h/.cpp (turn, kPitchMin/Max, setDistance, resetView), orbit_view.h/.cpp (drag, grab, release, tick, the momentum constants), orbit_panel.h/.cpp (zoomBy, glideZoom, cameraTick), shell.cpp (Escape), shell_blackhole.cpp (Camera section, Reset view), blackhole_view.cpp (ensureSpinTable, spinMatches, settled), gpu_guard.h, bench_scenes.cpp, benchmark.cpp (scenes, waitDefs), test_blackhole.cpp, test_app.cpp, check_blackhole.py, DECISIONS (Orbit Lab camera, the camera after the disc).
-- New orbit/camera_motion.h holds 0.74.0's numbers and steps (0.01 rad a point, fade 7.5 /s, stop 0.05 rad/s, at most 2.5 rad/s, 0.15 s wheel step). OrbitView uses them with the same arithmetic. The Black Hole Lab uses them through lab.h CameraMotion: drag, glide on release (none with Reduce motion), a press stops it, eased wheel and + - in ln distance, Escape stops a glide, Reset view as before.
-- Direction, read from the code: both labs put the camera at (sin yaw sin pitch, cos yaw sin pitch, cos pitch). The Orbit Lab's picture uses yaw + pi and -pitch (orbit_view.cpp), so it is half a turn from the Black Hole Lab's. So the Black Hole Lab takes the negative angles. In both, a right drag moves the camera to its left (the near side follows the pointer) and a down drag moves the camera down. test_app checks this in both frames.
-- The pitch limit (0.01 rad from each pole) is unchanged. The Camera caption and the guide say how to circle and that the camera hovers at each place.
-- Speed (feasibility, before the drag change): 0.81.0's real_move on the CPU table (GPU light paths and sky off, build machine, 4 cores), tilting at spin 0.9 with the disc: frame thread 0.02 ms, coarse table 27 ms a fill (47 worst), about 8 new pictures a second, no fine picture within 0.9 s. The coarse table already serves the motion and the fine one comes at rest. No small fix is left, so nothing was changed (ROADMAP).
-- Benchmark: Hard scene blackhole.circle_spin (spin 0.9, disc on, 45 degrees, 5.9 GM/c^2 at 1280 x 800: the closest where the shadow does not fill the picture). On the CPU table it makes 7.3 new pictures a second while moving. New wait response.blackhole_tilt: the fine picture 2188 ms after a tilt (worst 2191).
+- Read: CLAUDE.md, REPORT 0.82.0, ROADMAP (Black Hole Lab); by grep and line ranges shell_blackhole.cpp (Controls, More settings, every BeginDisabled), lab.h/.cpp (Settings, shown, gasOn, save and load), realest.cpp, main.cpp (PL_BH_SET, PL_BH_GAS), disc.h/.cpp (surface, discRayTable), shaders.h (kLensFS, kKerrSkyFS), blackhole_view.cpp (compareHook), check_blackhole.py.
+- Static near the disc's plane. Cause: kLensFS made a disc's coverage from the window w = fwidth(r) as min(r + w/2, r_out) - max(r - w/2, r_in). Seen nearly edge on, r hardly changes from pixel to pixel, w falls below the float's steps in r, and the difference is rounding noise, so disc and sky mix one pixel at a time. kKerrSkyFS already had a guard for this. kLensFS now has the same one (shaders.h).
+- Ruled out with the CPU reference at the same settings: the CPU lookup (discPixel, with the surface) has no static (24 isolated pixels of 638,000 at 57.5 GM/c², 0 at 1000), and the card's order and radius equal it (0 differ). The camera inside the thickness is not the cause: 57.5 GM/c² at pitch 1.2 and views outside it were noisy too, and the fix clears the views inside it. Nothing was restricted. Not ruled in: grazing rays.
+- The Moving gas button is now a row "Streaks and clump" with Off / On. Pause and the rate show only while it is on. Nothing but the user turns it off: presets, Reset view, the look and the saved settings leave it alone. Most realistic turns the clump and the streaks off, and the old button then still read On while the disc was flat. The row now reads Off then, and On sets the two models back.
+- Film: the Gas disc Off / On row, the Spin slider and More settings' typed spin are not drawn. A line says "Film always draws the film's disc / spin." The other BeginDisabled (the rate while the gas is off) is gone the same way.
+- New hook 2e (PL_BH_COMPARE_VIEWS) in blackhole_view.cpp; check_blackhole.py parts gasrow and edgeon (ui_blackhole). VERSION 0.82.1, changelog, TESTS.md, ROADMAP.
 
 ## Tests run
-- blackhole_physics: 1111 checks, 0 failed. New testCameraMotion (28 checks): rate, fade and stop (26 frames at 60 Hz), a flick coasts 0.327 rad at 255, 60 and 20 Hz (at most 2.5 / 7.5), glide stays inside the pitch limits, eased steps end bit-exactly at 0.81.0's jumps (8 cases), readout after a glide.
-- app_settings: 202,316 checks, 0 failed. New testBlackHoleCamera (8 checks): the same 0.3 rad for 30 points and the same way in both labs.
-- The new unit tests do not compile on 0.81.0 (the functions are new). check_blackhole.py open fails on 0.81.0 (-0.0997 rad) and passes on 0.82.0.
-- check.sh job: quick 18 of 18, ui_smoke passed. By hand: check_blackhole.py open (8/0) and whiteout (4/0), check_022.py keys (6/0). Bench runs of circle_spin on both paths and of the new wait work.
+- edgeon (33 checks, 0 failed): 16 views (57.5 and 1000 GM/c², the owner's pitch 1.575, the plane, 0.2 degrees either side in 6 steps). Card = lookup in every one. Over 8 levels: at most 66 of 574,000 pixels. On 0.82.0 it fails 15 checks (61 % of the near disc over 8 levels at 57.5 and 1.575, 81 % at 1000 and the plane).
+- gasrow (13 checks, 0 failed): the row reads On, Off after a click, Off for gas=off, On again; the click on Off equals gas=off to the pixel; Off then On equals the start; Most realistic's both models off reads Off. Film: no Spin slider and no disc row, two plain lines. Real: both drawn.
+- check.sh job: quick 18 of 18 passed, ui_smoke passed.
 
 ## Not done
-- A faster tilt on the CPU table (above, and ROADMAP). The Orbit Lab's flick coasts up to 6 % past 0.33 rad (it steps before the fade). It was kept by the stop rule (ROADMAP **fix**). The Black Hole Lab uses the exact step.
+- No Radeon here: the owner's 1000 GM/c² view was checked on lavapipe at pitch 1.575 and the plane (clean after the fix, 17 pixels before at 1.575). His next run decides (ROADMAP).
+- What is seen from inside the disc's thickness is not modelled (ROADMAP, owner decides).
 
 ## References changed on purpose
-- check_blackhole.py open: a right drag now lowers the yaw by 1.0 rad for 100 points plus at most 0.333 of glide (was: raises it over 0.05).
-- Benchmark: 40 Hard scenes, 56 in All, 39 waits. Planned 346.4 s, so the limit is 5.8 minutes (static_assert; test_app 347 s).
+- None. A new GLSL line only; no test's expected value changed.

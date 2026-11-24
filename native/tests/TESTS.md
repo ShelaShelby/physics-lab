@@ -109,6 +109,8 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_5m2.py:popups | 55 | DELETE | - | pop-ups inside the window at two sizes: pixel layout |
 | check_024.py:densvib | 54 | DELETE | - | the vibrating density: unit-tested (test_density.cpp) |
 | check_blackhole.py:disc | 50 | KEEP | ui_blackhole | the gas disc's controls and the papers' hottest ring |
+| check_blackhole.py:gasrow | 35 | KEEP | ui_blackhole | 0.82.1, a bug the owner saw: the Streaks and clump row reads Off or On and the picture changes; Film draws no locked controls |
+| check_blackhole.py:edgeon | 54 | KEEP | ui_blackhole | 0.82.1, a bug the owner saw, GPU vs CPU: the disc seen nearly edge on is smooth (57.5 and 1000 GM/c^2, 0.2 degrees round the plane) |
 | check_orbit_ui.py:time | 45 | DELETE | - | the Time panel's fit: pixel layout |
 | check_realistic.py | 44 | DELETE | - | the Realistic style's colours and draw counts: the Density pictures are compared with the processor in check_molecule card |
 | check_5g.py:toolbar | 44 | DELETE | - | the toolbar's place: pixel layout |

@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.82.1", "Black Hole Lab: the gas switch, the grainy disc, and controls Film does not use",
+     "The moving gas now has its own row, Streaks and clump, with Off and On, so you can see whether it is on. It used to be a button called Moving gas that "
+     "looked like a label, and turning it off left a flat band. Pause and the rate show only while it is on. Most realistic turns the streaks and the clump off, "
+     "so the row reads Off after it, and On sets them back. Fixed: the near half of the disc, seen almost edge on, was pixel noise (disc and sky mixed one "
+     "pixel at a time); it is smooth now, also at 1000 GM/c\xC2\xB2 and for views a fraction of a degree above or below the disc's plane. In the Film look the "
+     "Gas disc Off / On row and the Spin slider are no longer drawn greyed: a line says that Film always draws the film's disc and spin."},
     {"0.82.0", "Black Hole Lab: circle the hole as you circle a planet",
      "Dragging in the Black Hole Lab now takes the camera round the black hole the way the Orbit Lab's camera goes round a planet: the same speed for the "
      "same drag, the same way, and the same little glide when you let go (none with Reduce motion; a click stops it). Before, the sky stuck to the "

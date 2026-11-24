@@ -2101,6 +2101,87 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         std::printf("PLBHGAS0 dist=%g incl=%g px=%ld phi=%.3g t=%.3g refpx=%ld tref=%.3g gaspx=%ld gas=%.3g bad=%ld dr=%.3g rbad=%ld\n", dc[0], dc[1], n, dphi, dt, nRef, dtr, nGas, dgas, bad, dsr, rBad);
     }
     view.gasT = 0;
+    // 2e. 0.82.1, the disc seen nearly edge on (PL_BH_COMPARE_VIEWS="dist,pitch,feed;..." in GM/c^2, radians, L/L_Edd; the Sagittarius A* preset with its disc, spin 0,
+    //     the surface on): the card against the double lookup at every pixel where the lookup sees the disc (the order or the radius off by 3 % = about 8 levels
+    //     of 255 in the colour), and the lookup's own pixel-to-pixel spread: pixels whose order differs from all four neighbours (isolated), and radii that differ
+    //     from the mean of their two row neighbours by 3 %. A rough lookup means the model is at fault, not the card.
+    if (const char* vs = std::getenv("PL_BH_COMPARE_VIEWS")) {
+        const std::string list = vs;
+        for (std::size_t a = 0; a < list.size();) {
+            std::size_t e = list.find(';', a);
+            if (e == std::string::npos) e = list.size();
+            double dist = 0, pitch = 0, feed = 0.11;
+            std::sscanf(list.substr(a, e - a).c_str(), "%lf,%lf,%lf", &dist, &pitch, &feed);
+            a = e + 1;
+            Settings s = settingsDefaults();
+            applyPreset(s, "sgra");
+            s.disc = true; s.feed = feed;
+            setDistance(s, dist);
+            s.pitch = pitch;
+            view.ensureTable(s.dist);
+            view.ensureDisc(s.dist);
+            HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+            view.st_.look = discLook(*view.discTable(), s, v, W, H);
+            render::Renderer2D::LensSky L = view.lensFor(s, v);
+            L.debugDisc = true;
+            std::vector<float> po(static_cast<std::size_t>(W) * H * 4);
+            R.lensFloat(L, W, H, po);
+            po.resize(static_cast<std::size_t>(W) * H * 4);
+            const DiscTable& T = *view.discTable();
+            std::vector<int> ko(static_cast<std::size_t>(W) * H, -1);
+            std::vector<double> ro(ko.size(), 0);
+            long n = 0, bad = 0, badOrder = 0;
+            for (int j = 0; j < H; j++)
+                for (int i = 0; i < W; i++) {
+                    const std::size_t at = static_cast<std::size_t>(j) * W + i;
+                    const DiscPixel q = discPixel(T, s, v, i + 0.5, H - 1 - j + 0.5, false);
+                    ko[at] = q.hit.order; ro[at] = q.hit.r;
+                    if (q.hit.order < 0) continue;
+                    n++;
+                    const float* o = &po[at * 4];
+                    const bool ord = static_cast<int>(std::lround(o[0])) != q.hit.order, rad = !ord && std::fabs(o[1] / q.hit.r - 1) > 0.03;
+                    if (ord || rad) { bad++; if (ord) badOrder++; }
+                }
+            // the picture as the app draws it (8 bit, the lens pass): where the lookup's disc is smooth (this pixel and its four neighbours on the disc, the
+            // radius within 1 % of its neighbours'), no pixel may differ from the mean of its four neighbours by over 8 levels of 255: the limit of the Vulkan
+            // pictures (at most 1 % of such pixels)
+            long smooth = 0, over8 = 0;
+            {   render::Renderer2D::LensSky L2 = view.lensFor(s, v);
+                L2.white = 1; L2.whiteMode = 0;
+                Fbo f = makeFbo(W, H, false);
+                R.begin(W, H); R.lensSky(L2); endFbo(R, W, H, f);
+                const auto px = [&](int i, int j, int c) { return static_cast<int>(f.px[(static_cast<std::size_t>(j) * W + i) * 4 + c]); };   // (rows from the bottom, as the lookup's here)
+                for (int j = 1; j + 1 < H; j++)
+                    for (int i = 1; i + 1 < W; i++) {
+                        const std::size_t at = static_cast<std::size_t>(j) * W + i;
+                        if (ko[at] < 0 || f.px.size() < static_cast<std::size_t>(W) * H * 4) continue;
+                        bool ok = true;
+                        for (const std::size_t nb : {at - 1, at + 1, at - W, at + W}) ok = ok && ko[nb] == ko[at] && std::fabs(ro[nb] - ro[at]) < 0.01 * ro[at];
+                        if (!ok) continue;
+                        smooth++;
+                        int worst = 0;
+                        for (int c = 0; c < 3; c++) worst = std::max(worst, std::abs(px(i, j, c) - (px(i - 1, j, c) + px(i + 1, j, c) + px(i, j - 1, c) + px(i, j + 1, c) + 2) / 4));
+                        if (worst > 8) over8++;
+                    }
+            }
+            long iso = 0, rough = 0, ciso = 0, crough = 0;
+            for (int j = 1; j + 1 < H; j++)
+                for (int i = 1; i + 1 < W; i++) {
+                    const std::size_t at = static_cast<std::size_t>(j) * W + i;
+                    {   const auto kc = [&](std::size_t x) { return static_cast<int>(std::lround(po[x * 4])); };       // the card's own spread, the same measures
+                        const auto rc = [&](std::size_t x) { return static_cast<double>(po[x * 4 + 1]); };
+                        if (kc(at) >= 0 && kc(at - 1) != kc(at) && kc(at + 1) != kc(at) && kc(at - W) != kc(at) && kc(at + W) != kc(at)) ciso++;
+                        if (kc(at) >= 0 && kc(at - 1) == kc(at) && kc(at + 1) == kc(at) && std::fabs(rc(at) - 0.5 * (rc(at - 1) + rc(at + 1))) > 0.03 * rc(at)) crough++; }
+                    if (ko[at] < 0) continue;
+                    if (ko[at - 1] != ko[at] && ko[at + 1] != ko[at] && ko[at - W] != ko[at] && ko[at + W] != ko[at]) iso++;
+                    if (ko[at - 1] == ko[at] && ko[at + 1] == ko[at] && std::fabs(ro[at] - 0.5 * (ro[at - 1] + ro[at + 1])) > 0.03 * ro[at]) rough++;
+                }
+            const HeightTable* ht = discGeom(s).height;
+            std::printf("PLBHEDGEON dist=%g pitch=%.6f feed=%g height=%.4g camz=%.4g pixels=%ld bad=%ld badorder=%ld isolated=%ld rough=%ld cardisolated=%ld cardrough=%ld smooth=%ld over8=%ld\n", dist, pitch, feed,
+                        ht && ht->on() ? ht->at(dist) : 0.0, dist * std::cos(pitch), n, bad, badOrder, iso, rough, ciso, crough, smooth, over8);
+        }
+        return;
+    }
     // 2b. 0.55.1, the disc: the card against the double-precision table lookup (DiscTable in double: lab.h discPixel) at every pixel, and against the reference
     //     (Binet by Dormand-Prince: disc.h discRay) at every 16th pixel in each direction; two distances, two inclinations (a disc of 6 to 30 M, the feeding preset)
     for (double dist : {27.0, 4.0})

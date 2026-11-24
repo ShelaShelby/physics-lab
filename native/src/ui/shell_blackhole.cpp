@@ -275,11 +275,11 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
     }
     char b[640];
     const blackhole::Settings v = blackhole::shown(s);
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d light=%s gasclump=%d gaspattern=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d light=%s gasclump=%d gaspattern=%d gasshown=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
                   s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expEV, 6).c_str(), s.spin,
                   app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0, s.trueSky ? "true" : "shown", s.glare ? "eye" : "off",
                   blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0, s.allLight ? "all" : "eye",
-                  s.gasClump ? 1 : 0, s.gasPattern ? 1 : 0);   // (0.77.0: the moving gas's two models, for check_blackhole.py realest)
+                  s.gasClump ? 1 : 0, s.gasPattern ? 1 : 0, s.gasMoving && (s.gasClump || s.gasPattern) ? 1 : 0);   // (0.77.0: the moving gas's two models, for check_blackhole.py realest; 0.82.1: gasshown, what the Streaks and clump row reads)
     auditNote(b);
     return r;
 }
@@ -346,10 +346,11 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (pSegmented(p, "blackhole.look", {"Real", "Film"}, &cur, &ln)) blackhole::setLook(s, cur == 1 ? blackhole::Look::Film : blackhole::Look::Real);
         if (s.look == blackhole::Look::Film) auditNote("bhfilm labels=5");
         pStat(p, "Spin", shownSpin > 0 ? sig(shownSpin, 3) + " of the largest possible" + std::string(film ? " (the film's)" : "") : std::string("0: the hole does not spin"));   // 0.55.2
-        if (film) ImGui::BeginDisabled();
-        float t = static_cast<float>(shownSpin);
-        if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop)) && !film) blackhole::setSpin(s, std::round(t * 100) / 100);
-        if (film) ImGui::EndDisabled();
+        if (film) pCaption(p, "Film always draws the film's spin.", false);                // 0.82.1: a control that does nothing in Film is not drawn
+        else {
+            float t = static_cast<float>(shownSpin);
+            if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop))) blackhole::setSpin(s, std::round(t * 100) / 100);
+        }
         if (shownSpin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
         if (pButton(p, "blackhole.guide", "What is real in this picture")) { app.bhLearn = 1; app.bhLearnJump = "top"; }
     }
@@ -378,11 +379,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
     if (section("disc", "Gas disc (model)", true)) {                       // 0.55.1
         int on = (s.disc || film) ? 1 : 0;
         const std::vector<std::string> dn{"blackhole.disc.off", "blackhole.disc.on"};
-        if (film) {                                                         // 0.55.3: the film's disc, locked (why: More settings)
-            ImGui::BeginDisabled();
-            pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn);
-            ImGui::EndDisabled();
-        } else if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) blackhole::setDisc(s, on == 1);
+        if (film) pCaption(p, "Film always draws the film's disc.", false);          // 0.82.1: (until 0.82.0 the row was drawn greyed)
+        else if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) blackhole::setDisc(s, on == 1);
         const blackhole::Readout r = blackhole::readout(s, true);
         if (s.disc && r.realPreset && !film) pCaption(p, kWhatIf, false);
         if (!film && s.disc) {
@@ -395,26 +393,31 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 blackhole::setFeed(s, std::round(v / q) * q);
             }
         }
-        if (s.disc || film) {                                               // 0.72.0: the moving gas, one row: Moving gas (on / off), Pause / Play, the rate
-            const ImVec2 a = here(p);
-            const float ch = static_cast<float>(m.control), gap = static_cast<float>(m.s8);
-            const char* mv = "Moving gas";
-            const char* pl = s.gasRun ? "Pause" : "Play";
-            const float mw = static_cast<float>(sh::width(Type::Body, false, mv) + 2.0 * m.s12), pw = static_cast<float>(sh::width(Type::Body, false, "Pause") + 2.0 * m.s12);
-            if (toolToggle("blackhole.gas.moving", a, ImVec2(mw, ch), mv, s.gasMoving)) s.gasMoving = !s.gasMoving;
-            if (ImGui::IsItemHovered()) ui::SetTooltip("%s", s.gasMoving ? "The gas turns at its true speeds (on). Off: the still disc." : "Off: the still disc. Click to set the gas moving.");
-            if (!s.gasMoving) ImGui::BeginDisabled();
-            if (button("blackhole.gas.play", ImVec2(a.x + mw + gap, a.y), ImVec2(pw, ch), pl, Face::Quiet)) s.gasRun = !s.gasRun;
-            if (ImGui::IsItemHovered()) ui::SetTooltip("%s", s.gasRun ? "Pause the gas (the clocks stop too)" : "Let the gas move again");
-            const float sx = a.x + mw + pw + 2 * gap, sw = std::max(40.0f, a.x + p.w - sx);
-            float t = static_cast<float>(blackhole::gasRateToSlider(blackhole::gasRateOf(s)));
-            if (slider("blackhole.gas.rate", ImVec2(sx, a.y + (ch - static_cast<float>(m.row)) / 2), sw, &t, 0.0f, 1.0f) && s.gasMoving) {
-                const double v = blackhole::sliderToGasRate(t), q = std::pow(10.0, std::floor(std::log10(v)) - 1);   // two significant digits
-                blackhole::setGasRate(s, std::round(v / q) * q);
+        if (s.disc || film) {                                               // 0.82.1: the moving gas. 0.72.0 to 0.82.0 had a "Moving gas" button that looked like a label (the owner took his gas models for gone)
+            const bool gasShown = s.gasMoving && (s.gasClump || s.gasPattern);   // what blackhole::gasOn asks of the settings (Most realistic turns the clump and the streaks off)
+            int gv = gasShown ? 1 : 0;
+            pCaption(p, "Streaks and clump: the moving gas", false);
+            const std::vector<std::string> gn{"blackhole.gas.off", "blackhole.gas.on"};
+            if (pSegmented(p, "blackhole.gas", {"Off", "On"}, &gv, &gn)) {
+                s.gasMoving = gv == 1;
+                if (gv == 1 && !s.gasClump && !s.gasPattern) s.gasClump = s.gasPattern = true;   // On with both models off (Most realistic): the user asks for them
             }
-            if (ImGui::IsItemHovered()) ui::SetTooltip("How fast the film runs: %s (More settings: real time, the clump, the streaks)", rateText(blackhole::gasRateOf(s)).c_str());
-            if (!s.gasMoving) ImGui::EndDisabled();
-            p.y += ch + static_cast<float>(m.s4); p.gap = static_cast<float>(m.s4);
+            if (gasShown) {                                                 // Pause / Play and the rate (they do nothing while it is off: not drawn then)
+                const ImVec2 a = here(p);
+                const float ch = static_cast<float>(m.control), gap = static_cast<float>(m.s8);
+                const char* pl = s.gasRun ? "Pause" : "Play";
+                const float pw = static_cast<float>(sh::width(Type::Body, false, "Pause") + 2.0 * m.s12);
+                if (button("blackhole.gas.play", a, ImVec2(pw, ch), pl, Face::Quiet)) s.gasRun = !s.gasRun;
+                if (ImGui::IsItemHovered()) ui::SetTooltip("%s", s.gasRun ? "Pause the gas (the clocks stop too)" : "Let the gas move again");
+                const float sx = a.x + pw + gap, sw = std::max(40.0f, a.x + p.w - sx);
+                float t = static_cast<float>(blackhole::gasRateToSlider(blackhole::gasRateOf(s)));
+                if (slider("blackhole.gas.rate", ImVec2(sx, a.y + (ch - static_cast<float>(m.row)) / 2), sw, &t, 0.0f, 1.0f)) {
+                    const double v = blackhole::sliderToGasRate(t), q = std::pow(10.0, std::floor(std::log10(v)) - 1);   // two significant digits
+                    blackhole::setGasRate(s, std::round(v / q) * q);
+                }
+                if (ImGui::IsItemHovered()) ui::SetTooltip("How fast the film runs: %s (More settings: real time, the clump, the streaks)", rateText(blackhole::gasRateOf(s)).c_str());
+                p.y += ch + static_cast<float>(m.s4); p.gap = static_cast<float>(m.s4);
+            } else pCaption(p, s.gasMoving ? "Off: the clump and the streaks are both off in More settings, so the disc is still." : "Off: the disc is still. On sets the streaks and the clump moving.");
         }
     }
     if (section("more", "More settings", false)) {                         // 0.71.0: everything else, with its full explanations, grouped by what the user wants to do
@@ -467,18 +470,18 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pCaption(p, "Drag to go round the hole (it stays in the middle; the sky behind it changes); the wheel or + − move you closer or farther; R resets the view; 1 2 3 4 switch lab. You hover in place.");
         }
         pHeading(p, "Spin");
-        {   if (film) pCaption(p, "Locked while the Film look is chosen: the film drew its black hole at this spin. The Real look gives your own spin back.", false);
+        {   if (film) pCaption(p, "Film always draws the film's spin: the film drew its black hole at this spin. The Real look gives your own spin back.", false);
             else pCaption(p, "How fast the hole turns, as a share of the largest spin possible.");
             char hint[160];
             std::snprintf(hint, sizeof hint, "0 to %.2g of the largest spin a black hole can have (its angular momentum over GM²/c). Or type one:", blackhole::kSpinTop);
             pCaption(p, hint);
-            if (film) ImGui::BeginDisabled();
-            static char typed[32] = "";
-            ImGui::SetCursorScreenPos(here(p));
-            double v;
-            if (typedNumber("##blackhole.spin.text", typed, sizeof typed, "e.g. 0.9", p.w, 0, blackhole::kSpinTop, v) && !film) blackhole::setSpin(s, v);
-            p.y += m.control + m.s4;
-            if (film) ImGui::EndDisabled();
+            if (!film) {                                                    // 0.82.1: not drawn in Film (it does nothing there)
+                static char typed[32] = "";
+                ImGui::SetCursorScreenPos(here(p));
+                double v;
+                if (typedNumber("##blackhole.spin.text", typed, sizeof typed, "e.g. 0.9", p.w, 0, blackhole::kSpinTop, v)) blackhole::setSpin(s, v);
+                p.y += m.control + m.s4;
+            }
             char top[400];
             std::snprintf(top, sizeof top, "The spin of the two real holes is not measured: the control is yours, and every preset starts at 0. The top, %.2g, is where this lab's tests "
                                            "of its light paths stop (higher spins need finer tables than it makes). The gas orbits with the spin; a disc orbiting against it, a tilted "
@@ -493,7 +496,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         }
         pHeading(p, "Gas disc");
         {   const blackhole::Readout r = blackhole::readout(s, true);
-            if (film) pCaption(p, "Locked while the Film look is chosen: the film's disc is shown. The Real look gives your own disc settings back.", false);
+            if (film) pCaption(p, "Film always draws the film's disc. The Real look gives your own disc settings back.", false);
             if (film) {
                 pStat(p, "The film's disc", filmDiscText());
                 pStat(p, "Feeding rate", "none: the film's disc is not feeding (James et al. 2015, section 4.1.1)");

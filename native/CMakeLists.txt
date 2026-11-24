@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.82.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.82.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -613,8 +613,8 @@ if(PL_BUILD_APP)
       # ui_blackhole: the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, the disc, spin, all light; the card's bent sky against the double-precision reference
       add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole
                check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:realest check_blackhole.py:orbitcard
-               check_blackhole.py:settings check_blackhole.py:disc check_blackhole.py:spin check_blackhole.py:alllight check_blackhole.py:precision)
-      set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 900 COST 243)
+               check_blackhole.py:settings check_blackhole.py:disc check_blackhole.py:gasrow check_blackhole.py:edgeon check_blackhole.py:spin check_blackhole.py:alllight check_blackhole.py:precision)
+      set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 900 COST 340)
       # ui_blackhole_sky: the Black Hole Lab's sky per pixel and the card's light paths against the double-precision reference, and no white-outs against the processor's settled picture
       add_test(NAME ui_blackhole_sky COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole_sky
                check_blackhole.py:sky check_blackhole.py:precisioncard check_blackhole.py:whiteout)

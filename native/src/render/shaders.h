@@ -772,7 +772,7 @@ void main() {
     float tr = 1.0;
     for (int k = 0; k < 4; k++) {
         float w = max(fw[k], 1e-7);
-        float cov = clamp((min(rk[k] + 0.5 * w, uDR.w) - max(rk[k] - 0.5 * w, uDR.z)) / w, 0.0, 1.0);
+        float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.w) - max(rk[k] - 0.5 * w, uDR.z)) / w, 0.0, 1.0) : ((rk[k] >= uDR.z && rk[k] <= uDR.w) ? 1.0 : 0.0);   // 0.82.1: a window below the float's steps in r (a disc seen nearly edge on: r hardly changes from pixel to pixel) is not a difference of two big numbers (static); as kKerrSkyFS
         if (uDebug == 3 ? k != first : cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.z, uDR.w);           // (a pixel that only partly covers the disc: its colour at the nearest radius on it)
         float g = sqrt(1.0 - 3.0 / rc) / (1.0 - pow(rc, -1.5) * b * LzB), gf = 1.0;
