@@ -1,21 +1,21 @@
-# 0.82.1: the Black Hole Lab's bugs the owner saw
+# 0.83.0: the benchmark cleaned and renewed
 
 ## What changed
-- Read: CLAUDE.md, REPORT 0.82.0, ROADMAP (Black Hole Lab); by grep and line ranges shell_blackhole.cpp (Controls, More settings, every BeginDisabled), lab.h/.cpp (Settings, shown, gasOn, save and load), realest.cpp, main.cpp (PL_BH_SET, PL_BH_GAS), disc.h/.cpp (surface, discRayTable), shaders.h (kLensFS, kKerrSkyFS), blackhole_view.cpp (compareHook), check_blackhole.py.
-- Static near the disc's plane. Cause: kLensFS made a disc's coverage from the window w = fwidth(r) as min(r + w/2, r_out) - max(r - w/2, r_in). Seen nearly edge on, r hardly changes from pixel to pixel, w falls below the float's steps in r, and the difference is rounding noise, so disc and sky mix one pixel at a time. kKerrSkyFS already had a guard for this. kLensFS now has the same one (shaders.h).
-- Ruled out with the CPU reference at the same settings: the CPU lookup (discPixel, with the surface) has no static (24 isolated pixels of 638,000 at 57.5 GM/c², 0 at 1000), and the card's order and radius equal it (0 differ). The camera inside the thickness is not the cause: 57.5 GM/c² at pitch 1.2 and views outside it were noisy too, and the fix clears the views inside it. Nothing was restricted. Not ruled in: grazing rays.
-- The Moving gas button is now a row "Streaks and clump" with Off / On. Pause and the rate show only while it is on. Nothing but the user turns it off: presets, Reset view, the look and the saved settings leave it alone. Most realistic turns the clump and the streaks off, and the old button then still read On while the disc was flat. The row now reads Off then, and On sets the two models back.
-- Film: the Gas disc Off / On row, the Spin slider and More settings' typed spin are not drawn. A line says "Film always draws the film's disc / spin." The other BeginDisabled (the rate while the gas is off) is gone the same way.
-- New hook 2e (PL_BH_COMPARE_VIEWS) in blackhole_view.cpp; check_blackhole.py parts gasrow and edgeon (ui_blackhole). VERSION 0.82.1, changelog, TESTS.md, ROADMAP.
+- Read: CLAUDE.md, REPORT 0.82.1, ROADMAP, DECISIONS (benchmark rules); by grep and line ranges bench_scenes.h/.cpp, bench.h/.cpp (BenchBhMove, behindWorst), ui/benchmark.cpp (set-ups, frames, waitDefs, the table, the saved text), blackhole/lab.h, blackhole_view.h/.cpp (behind, keyOf), atom_bench.cpp, atom_sim (bfield, emit, absorb), shell_atom.cpp (Photons), shell_molecule.cpp (Live), molecule_view.h (liveOn), main.cpp (Settings, liveFrame, the window), test_app, check_6b.py, TESTS.md.
+- Hard list: the 23 scenes of the job moved to All scenes (ids and set-ups the same). 17 kept + 9 new = 26 scenes, 42 waits: 260.2 s planned. The limit is kBenchLimitS = 4.5 minutes. The 3.5-minute floor stays.
+- New: blackhole.dolly_spin, over_poles, everything, edge_on, orbit.saturn_real_fast, atom.emit_all, molecule.live_hot, ui.settings_over_blackhole, ui.resize_blackhole; wait response.blackhole_dolly. Black Hole settings in blackhole/bench_settings.cpp. Dropped: atom.bfield_drag. setParam("bfield") changes only the readout, the spectrum's lines and the Zeeman tables.
+- Tried on the build machine: everything with the glare 4.97 fps, with All light 5.46 (glare kept). live_hot Space-filling 4.8 fps, Ball and stick 14.6 (Space-filling kept; Density does not offer Live). Settings does not pause the Black Hole picture (only a tab page does). emit_all ends a flight still going and lands an absorbed photon at once, so each press starts a jump (7 presses, 7 jumps).
+- Lag column and rule (bench.cpp benchReaches, the table, the in-app table, the rule under it). Lag is NOT behindWorst. behindMs counts from the first frame behind. A moving view asks for a new view every frame, so it never catches up and behindMs grows for the whole movement (9.2 s in edge_on here) on any PC. New: lagMs (blackhole_view.h), how long ago the shown picture's view was the one asked for. Owner decides (ROADMAP).
+- ui.resize_blackhole: SDL_SetWindowSize every 4 frames, from the start size down to the minimum window and back. A maximised window is restored first and maximised again after. Full screen is not resized (its line says so). Put back exactly here (1280 x 800 and 880 x 560). Not tried on Windows.
 
 ## Tests run
-- edgeon (33 checks, 0 failed): 16 views (57.5 and 1000 GM/c², the owner's pitch 1.575, the plane, 0.2 degrees either side in 6 steps). Card = lookup in every one. Over 8 levels: at most 66 of 574,000 pixels. On 0.82.0 it fails 15 checks (61 % of the near disc over 8 levels at 57.5 and 1.575, 81 % at 1000 and the plane).
-- gasrow (13 checks, 0 failed): the row reads On, Off after a click, Off for gas=off, On again; the click on Off equals gas=off to the pixel; Off then On equals the start; Most realistic's both models off reads Off. Film: no Spin slider and no disc row, two plain lines. Real: both drawn.
-- check.sh job: quick 18 of 18 passed, ui_smoke passed.
+- test_app: 202,363 checks, 0 failed. New: the Hard list's ids in the written order, every moved id in All only, each new Black Hole scene's settings read back, emit_all's atom and a started jump, the 4.5-minute limit, the lag rule (7.9 ms at 255 Hz reads no, 7.8 yes), the lag column and its rule text. They do not build on 0.82.1 (benchReaches has no lag, no bench_settings.h). The old test binary on the new lists failed 5 checks.
+- Each new scene and the new wait ran once here (lavapipe, numbers not the owner's): all started, moved and ended cleanly. The wait took 11 to 14 s here.
+- check_6b.py benchrestore by hand (now with ui.resize_blackhole): 4 checks, 0 failed, 67 s. check.sh job: quick 18 of 18, ui_smoke passed.
 
 ## Not done
-- No Radeon here: the owner's 1000 GM/c² view was checked on lavapipe at pitch 1.575 and the plane (clean after the fix, 17 pixels before at 1.575). His next run decides (ROADMAP).
-- What is seen from inside the disc's thickness is not modelled (ROADMAP, owner decides).
+- The 1 % lows of the job were not checked against the owner's 0.82.0 file. It is not in the repo. The list follows the job.
+- The Orbit, Molecule and Settings set-ups are not read back in test_app (it links no Orbit or Molecule Lab). Their report lines say what ran.
 
 ## References changed on purpose
-- None. A new GLSL line only; no test's expected value changed.
+- test_app: the list's counts (26 / 65), the ids, the planned time (at most 270 s), kBenchAtomScenes 47 (atom.emit_all), the report row (a "-" lag column), the texts' check by id instead of index.

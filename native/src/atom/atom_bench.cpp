@@ -84,7 +84,8 @@ double benchZoom(int which) {
         case kBenchAllTrueZoomed: return 2.5;      // tried 0.8 to 4.0: below 2.5 the inner shells are a dot; from 3.0 the view passes into the nucleus
         case kBenchAllOneOrbital: return 0.3;      // tried 0, 0.3, 0.6, 0.9
         case kBenchAllClassic: return 0.5;         // tried 0, 0.5, 1.0, 1.5: 0 does not fill the picture
-        case kBenchJumpAll: return 0.0;            // tried 0, 0.3, 0.6, 0.9 (Shells enlarged: at True scale the cloud is a dot at all four)
+        case kBenchJumpAll: case kBenchEmitAll: return 0.0;   // (0.83.0: atom.emit_all as jump_all)
+                  // tried 0, 0.3, 0.6, 0.9 (Shells enlarged: at True scale the cloud is a dot at all four)
         case kBenchNucleusDensity: return 0.3;     // (0.56.1-0.68.0, relative to zoomForNucleus(): 0.3; not used since 0.68.1, which sets the zoom from the nucleon's size in points, see the scene)
         case kBenchSliceAll: return -0.5;          // 0.64.0: each tried at -0.5, 0, 0.5, 1.0 (1 % low here, REPORT 0.64.0): the slowest kept
         case kBenchSliceDirac: return 0.0;
@@ -111,13 +112,13 @@ std::string oneOrbitalPick(int Z) {
 void fill(AtomLab& L, int most = 2000000) { for (int i = 0; i < most && L.s.k < L.cloudCap(); i++) L.step(1.0 / 240); }
 // the every-electron scenes of 0.56.1
 void manyScene(AtomLab& L, int which, double w, double h) {
-    const int Z = which == kBenchJumpAll ? heaviestLevelAtom() : heaviestAll();
+    const int Z = which == kBenchJumpAll || which == kBenchEmitAll ? heaviestLevelAtom() : heaviestAll();
     fresh(L, Z, defaultN(Z), w, h);
     L.p.elec = "All"; L.p.mrel = "Relativistic"; L.p.show = "Whole atom"; L.p.cdens = "Ultra"; L.p.cstyle = "Glow";
     L.p.rscale = which == kBenchAllTrueZoomed ? "True scale" : "Shells enlarged";   // (the jump's cloud at True scale is a dot of a few pixels at every zoom tried: REPORT 0.56.1)
     if (which == kBenchAllClassic) { L.p.cstyle = "Classic"; L.p.phase = "Wheel"; }
     if (which == kBenchAllOneOrbital) { L.p.show = "One orbital"; L.p.orb = oneOrbitalPick(Z); }
-    if (which == kBenchJumpAll) {                       // the atom put in the upper level of its first line on offer; the jump starts in benchFrame
+    if (which == kBenchJumpAll || which == kBenchEmitAll) {   // the atom put in the upper level of its first line on offer; the jump starts in benchFrame
         const std::vector<JLine>& ln = jumpLines(Z);
         for (int k = 0; k < int(ln.size()); k++) if (jumpOffered(Z, k)) { L.s.lvl = ln[std::size_t(k)].hi; break; }
     }
@@ -130,7 +131,7 @@ void manyScene(AtomLab& L, int which, double w, double h) {
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
-    if (which >= kBenchAllEnlarged && which <= kBenchJumpAll) { manyScene(L, which, w, h); still(L); return; }
+    if ((which >= kBenchAllEnlarged && which <= kBenchJumpAll) || which == kBenchEmitAll) { manyScene(L, which, w, h); still(L); return; }
     if (which >= kBenchSliceAll && which <= kBenchSliceClassicUltra) {   // 0.64.0: the heavy views the benchmark missed (atom_bench.h)
         const bool many = which == kBenchSliceAll || which == kBenchSideAll || which == kBenchSideAllClassic;
         const int Z = many ? heaviestAll() : 92;
@@ -306,11 +307,13 @@ const BenchInfo& benchSceneInfo(int which) {
         {"The side view with every electron, Classic", "0.64.0"},
         {"The Slice of one state dragged, Glow, Ultra", "0.64.0"},
         {"The Slice of one state dragged, Classic, Ultra", "0.64.0"},
+        {"Emit and Absorb in turn with every electron, the heaviest level atom, Ultra", "0.83.0"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
 
 void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
+    if (which == kBenchEmitAll) return;                  // 0.83.0: atom.emit_all presses Emit and Absorb by the scene's clock (ui/benchmark.cpp)
     if (which == kBenchJumpAll) {                        // 0.56.1: a jump between two levels held half way in flight (the emitted photon is not part of it)
         if (L.s.trans) { L.s.trans->t = std::min(L.s.trans->t, 0.5 * L.s.trans->dur); return; }
         if (L.s.photon) { L.s.photon.reset(); return; }

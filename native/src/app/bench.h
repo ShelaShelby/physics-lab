@@ -60,6 +60,7 @@ struct BenchScene {
     std::vector<std::string> notes;   // 0.55.5: lines of the scene's own (the Black Hole Lab's: benchBlackHoleLines), printed after its numbers
     double waitAvgMs = -1;       // 0.63.1: the frame thread's waits for the card a frame (fence, acquire, batches read back), not in cpuAvgMs; < 0 not measured
     std::vector<BenchFrameCost> worst;   // 0.63.1: the three worst counted frames, worst first, with where their time went
+    double lagMs = -1;           // 0.83.0: a Black Hole Lab scene: the worst time the shown picture was behind the settings while counted (ms; behindMs); < 0 not such a scene
     // 0.67.0: over the time the view moved (picturesS) where the scene has rests: a frame at rest needs no new picture (blackhole.film_tilt rests 40 % of its
     // counted time, real_move about a third: until 0.67.0 their pictures were divided by the whole time, so they could never reach the frames' rate)
     double picturesPerS() const { const double t = picturesS > 0 ? picturesS : frames.totalS; return pictures < 0 ? frames.avgFps : t > 0 ? pictures / t : 0; }
@@ -72,8 +73,11 @@ struct BenchScene {
 //     reliable GPU time "processor?" when c is at least 80 % of the frame time, else "not known". Where the new pictures a second are under 90 % of the frames a
 //     second, the pictures are made off the frame and the scene names what makes them (BenchScene::picturesBy) instead.
 //   order: slowest first by the lower of the 1 % low and the new pictures a second.
-struct BenchSummaryRow { std::string id, name; double avgFps = 0, low1Fps = 0, picsPerS = 0; int reaches = -1; std::string limitedBy; };   // reaches: 1 yes, 0 no, -1 not known
-int benchReaches(double low1Fps, double picsPerS, double refreshHz);
+//   0.83.0 (the owner, 24 Nov 2026): a Black Hole Lab scene also needs its lag (the worst time the picture was behind the settings) at most kBenchLagFrames
+//     frames at the display's rate (his PC: 2 / 255 s = 7.8 ms); lagMs < 0: no lag measured (not a Black Hole Lab scene), the rule does not apply.
+constexpr double kBenchLagFrames = 2;
+struct BenchSummaryRow { std::string id, name; double avgFps = 0, low1Fps = 0, picsPerS = 0, lagMs = -1; int reaches = -1; std::string limitedBy; };   // reaches: 1 yes, 0 no, -1 not known
+int benchReaches(double low1Fps, double picsPerS, double refreshHz, double lagMs = -1);
 std::string benchLimitedBy(const BenchScene& s, bool gpuReliable);
 std::vector<BenchSummaryRow> benchSummary(const std::vector<BenchScene>& scenes, double refreshHz, bool gpuReliable);
 

@@ -142,7 +142,7 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_022.py:axes | 23 | DELETE | - | no ring label on the axes: one old fixed bug |
 | check_6c.py:nucdenscard | 20 | KEEP | ui_atom_card | GPU vs CPU: the same on the card |
 | check_5k.py:matrix | 20 | DELETE | - | matrix layout at two sizes: pixel layout |
-| check_6b.py:benchrestore | 20 | KEEP | ui_screens | after the run every lab, page and panel is as it was |
+| check_6b.py:benchrestore | 67 | KEEP | ui_screens | after the run every lab, page and panel is as it was, and the window ui.resize_blackhole resized is put back exactly (0.83.0; 67 s on the build machine) |
 | check_022.py:stage6 | 18 | DELETE | - | the owner's second look-through of 0.22: old fixed bugs |
 | check_shell.py:guardturn | 18 | KEEP | ui_shell | a GPU program that crashes the driver is switched off at the next start, the others stay on |
 | check_orbit_ui.py:links | 18 | DELETE | - | a link's underline: pixel detail |

@@ -2,7 +2,7 @@
 # 0.16 stage 2 and 0.56.1: the Benchmark window, in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU). tests/TESTS.md lists the parts kept and why.
 #   bench:        the Benchmark window with both extra-scene boxes ticked stays inside 92 % of the window height, Start in view
 #   benchrest:    a lab made busy on purpose (PL_BENCH_BUSY) is said to be busy at rest
-#   benchrestore: after the run every lab, page and panel is as it was
+#   benchrestore: after the run every lab, page and panel is as it was (0.83.0: and the window ui.resize_blackhole resized)
 #   check_6b.py <PhysicsLab binary> <work folder> bench|benchrest|benchrestore
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -64,13 +64,15 @@ def part_benchrest(binary, work):
     check("AT REST" in t and "rest.molecule  busy" in t, "the report's rest table says busy")
 
 def part_benchrestore(binary, work):
-    ids = "ui.settings_open,ui.data_plot,ui.guide_scroll,molecule.vib_density,atom.jump_all,orbit.journey,orbit.earth,blackhole.extreme,response.lab_switch.orbit_atom,rest.blackhole_glare"
+    ids = "ui.settings_open,ui.data_plot,ui.guide_scroll,molecule.vib_density,atom.jump_all,orbit.journey,orbit.earth,blackhole.extreme,ui.resize_blackhole,response.lab_switch.orbit_atom,rest.blackhole_glare"
     r = run_app(binary, work, "b_restore", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.2", PL_BENCH_MEASURE="0.4", PL_OPEN="settings"), frames=100000, size="880x560", timeout=1200)
     st = {l.split()[1]: l.split(" ", 2)[2] for l in r.out.splitlines() if l.startswith("PLBENCH-STATE ")}
     check("before" in st and "after" in st, "the state was printed before and after")
     if "before" in st and "after" in st:
         check(st["before"] == st["after"], f"every lab, page and panel is as it was:\n    before {st['before']}\n    after  {st['after']}")
         check("settings=1" in st["after"], "the Settings page that was open is open again")
+    rs = [l for l in r.out.splitlines() if l.startswith("PLBENCH-RESIZE ")]   # 0.83.0: ui.resize_blackhole puts the window back exactly
+    check(len(rs) == 1 and "exactly as at the start: 880 x 560" in rs[0], f"the window resized by ui.resize_blackhole is put back exactly ({rs})")
 
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]

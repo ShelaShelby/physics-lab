@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.83.0", "The benchmark renewed",
+     "The benchmark tests the hardest things in every lab again; scenes that run with room to spare moved to All scenes. New: the Black Hole Lab with the wheel "
+     "moving in and out, dragged over both poles, every heavy option at once, and Sagittarius A*'s disc edge on; a fly-by of Saturn with Real physics at the "
+     "fastest time; Emit and Absorb in turn with every electron; the largest molecule live at 1,500 K; Settings over the moving gas; and the window resized "
+     "over the Black Hole Lab. The results have a new column, lag: how far the Black Hole Lab's picture was behind what you asked for. A scene reaches the "
+     "screen's rate only if the lag is at most 2 frames. A new wait: the sharp picture after one wheel step."},
     {"0.82.1", "Black Hole Lab: the gas switch, the grainy disc, and controls Film does not use",
      "The moving gas now has its own row, Streaks and clump, with Off and On, so you can see whether it is on. It used to be a button called Moving gas that "
      "looked like a label, and turning it off left a flat band. Pause and the rate show only while it is on. Most realistic turns the streaks and the clump off, "

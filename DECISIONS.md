@@ -148,6 +148,13 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   the owner's benchmark of the previous version" (Workflow).
 - Order: finish Vulkan fully, then all the speed work on Vulkan, slowest scene first; the outside review, the Black Hole Lab's look and new features are talked about after that (owner decision 18 Nov 2026).
 
+- Order of the next jobs (24 Nov 2026): this benchmark job (0.83.0), then the Black Hole Lab's camera, then the rest.
+- The Hard list's rule (24 Nov 2026): a scene leaves the Hard list when, in the owner's latest benchmark, its 1 % low is at least 1.5 x the display's refresh
+  rate (his PC: 1.5 x 255 = 382.5 fps). It stays in All scenes. Every later benchmark job applies the same rule.
+- The run's limit (24 Nov 2026): fixed at 4.5 minutes. A new scene replaces one, or the rule above makes room. The limit is not raised again.
+- The picture keeps up (24 Nov 2026): in a moving Black Hole scene the results have a column "lag", the worst time the shown picture was behind the settings.
+  "Reaches" also needs the lag at most 2 frames at the display's rate (his PC: 2 / 255 s = 7.8 ms). The rule is written under the table.
+
 ## Look and interface
 - The 0.38 look (6 Nov 2026): sharp corners, flat surfaces with a 1 px edge, a chosen option as a soft accent tint, the labs as tabs in the top bar; in every theme.
 - The 0.15 layout (5 Oct 2026): the picture fills the window; a slim top bar, floating cards, a toolbar bottom centre, a reading view for pages; body text never

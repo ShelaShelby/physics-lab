@@ -47,6 +47,7 @@
 #include "orbit/camera.h"
 #include "orbit/camera_motion.h"
 #include "blackhole/lab.h"
+#include "blackhole/bench_settings.h"
 
 
 // Orbit Lab texts (the guide, the timeline, the far-away things)
@@ -1097,21 +1098,62 @@ static void testBenchBlackHole() {
     const std::string t = benchResultText(BenchEnv(), {s});
     checkTrue("black hole lines: printed in the report under their scene", t.find("  Black Hole Lab, spin 0.9, tilting: frame thread 1.50 ms average") != std::string::npos);
 }
+// ---- 0.83.0: the new hard scenes set what the job says (the lab's settings read back) ----
+static void testBenchNewScenes() {
+    namespace bh = blackhole;
+    bool ok = false;
+    const bh::Settings d = bh::benchSettings("blackhole.dolly_spin", false, ok);
+    checkTrue("blackhole.dolly_spin: a feeding hole at spin 0.9, the disc on, Real, starting at kDistMax", ok && d.preset == bh::kFeedingKey && d.disc && d.look == bh::Look::Real && near(d.spin, 0.9) && near(d.dist, bh::kDistMax));
+    const bh::Settings p = bh::benchSettings("blackhole.over_poles", false, ok);
+    checkTrue("blackhole.over_poles: spin at kSpinTop, the disc on, Real", ok && p.disc && p.look == bh::Look::Real && near(p.spin, bh::kSpinTop));
+    const bh::Settings e = bh::benchSettings("blackhole.everything", false, ok), ea = bh::benchSettings("blackhole.everything", true, ok);
+    checkTrue("blackhole.everything: kSpinTop, the streaks and clump at kGasRateMax, kOuterMax, kDistMin, kFovMax, Real, the glare (All light the other choice)",
+              ok && near(e.spin, bh::kSpinTop) && e.gasMoving && e.gasRun && e.gasClump && e.gasPattern && near(bh::gasRateOf(e), bh::kGasRateMax) && near(e.outer, bh::kOuterMax) &&
+              near(e.dist, bh::kDistMin) && near(e.fovDeg, bh::kFovMax) && e.look == bh::Look::Real && bh::glareOn(e) && !bh::allLightOn(e) && bh::allLightOn(ea) && !bh::glareOn(ea));
+    const bh::Settings g = bh::benchSettings("blackhole.edge_on", false, ok);
+    checkTrue("blackhole.edge_on: Sagittarius A*, the disc on, feeding 0.11, 57.5 GM/c^2, in the disc's plane (pitch 1.575), the streaks and the clump on",
+              ok && g.preset == "sgra" && g.disc && near(g.feed, 0.11) && near(g.dist, 57.5) && near(g.pitch, 1.575) && std::fabs(g.pitch - 1.5707963) < 0.01 && bh::gasOn(g) && g.gasClump && g.gasPattern);
+    const bh::Settings r = bh::benchSettings("ui.resize_blackhole", false, ok);
+    checkTrue("ui.resize_blackhole: spin 0.9, the disc on, the moving gas", ok && near(r.spin, 0.9) && r.disc && bh::gasOn(r));
+    bh::benchSettings("no.such", false, ok);
+    checkTrue("benchSettings: an unknown id says so", !ok);
+    // atom.emit_all: radium-226 (the heaviest with level clouds), every electron, Glow, Ultra, Cloud 3D, Emit and Absorb on offer (level clouds)
+    atom::AtomLab L;
+    atom::benchSetup(L, atom::kBenchEmitAll, 1040, 713);
+    checkTrue("atom.emit_all: radium-226, every electron, Glow, Ultra, Cloud 3D, level clouds (Emit and Absorb on offer)",
+              L.p.Z == 88 && L.p.Z == atom::heaviestLevelAtom() && L.p.N == 138 && L.p.elec == "All" && L.p.cstyle == "Glow" && L.p.cdens == "Ultra" && L.p.view == "Cloud 3D" && L.levelOn());
+    L.emit();
+    checkTrue("atom.emit_all: Emit starts a jump from the scene's start", L.s.trans.has_value() || L.s.photon.has_value());
+    // the texts name what each new scene sets (the Orbit, Molecule and Settings scenes are set in ui/benchmark.cpp: their lines in the report say what ran)
+    const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
+    const auto what = [&](const char* id) { const int i = app::benchSceneIndex(id); return i < 0 ? std::string() : v[std::size_t(i)].what; };
+    checkTrue("orbit.saturn_real_fast's text: orbit.flyby, Real, relativity, the fastest time", what("orbit.saturn_real_fast").find("orbit.flyby") != std::string::npos && what("orbit.saturn_real_fast").find("Real") != std::string::npos &&
+              what("orbit.saturn_real_fast").find("relativity") != std::string::npos && what("orbit.saturn_real_fast").find("fastest time") != std::string::npos);
+    checkTrue("molecule.live_hot's text: Live at 1,500 K", what("molecule.live_hot").find("Live at 1,500 K") != std::string::npos);
+    checkTrue("ui.settings_over_blackhole's text: blackhole.moving_gas's view with Settings", what("ui.settings_over_blackhole").find("blackhole.moving_gas") != std::string::npos && what("ui.settings_over_blackhole").find("Settings") != std::string::npos);
+}
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas, 0.73.0 orbit.alphacen, 0.75.0 orbit.flyby, 0.77.0 orbit.earth_clouds, 0.78.0 orbit.comet_tails, 0.79.0 blackhole.disc_streaks, 0.81.0 blackhole.film_soft, 0.82.0 blackhole.circle_spin): 40 Hard scenes first, 56 in All", app::kBenchHardScenes == 40 && app::kBenchAllScenes == 56 && int(v.size()) == 56);
+    // 0.83.0 (on purpose, the owner's rule of 24 Nov 2026): 23 scenes whose 1 % low in his 0.82.0 run was at least 1.5 x 255 Hz moved to All scenes; 9 new hard
+    // scenes (atom.bfield_drag dropped: a field change remakes nothing heavy). REPORT 0.83.0.
+    checkTrue("benchmark lists (on purpose, 0.83.0: the Hard list cleaned and renewed): 26 Hard scenes first, 65 in All", app::kBenchHardScenes == 26 && app::kBenchAllScenes == 65 && int(v.size()) == 65);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[56] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
-        "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.slice_super_drag",
-        "atom.slice_all_drag", "atom.slice_dirac_drag", "atom.side_all_glow", "atom.side_all_classic", "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
-        "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas", "blackhole.disc_streaks",   // 0.79.0, on purpose
-        "blackhole.film_soft",   // 0.81.0, on purpose
-        "blackhole.circle_spin",   // 0.82.0, on purpose
-        "ui.guide_scroll", "ui.data_plot", "ui.settings_open", "orbit.alphacen", "orbit.flyby", "orbit.earth_clouds", "orbit.comet_tails",   // 0.77.0, 0.78.0, on purpose
+    static const char* const ids[65] = {
+        // the Hard list (0.83.0): the 17 kept, in the owner's order, then the new ones a to j of the job (f dropped)
+        "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas", "blackhole.film_soft", "blackhole.circle_spin",
+        "atom.nucleus_zoom", "atom.nucleon", "molecule.vib_density", "atom.slice_dirac_drag", "atom.jump_all", "ui.settings_open", "atom.side_all_glow", "orbit.real_fast",
+        "orbit.heaviest", "atom.all_enlarged",
+        "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "blackhole.edge_on", "orbit.saturn_real_fast", "atom.emit_all", "molecule.live_hot",
+        "ui.settings_over_blackhole", "ui.resize_blackhole",
+        // moved to All scenes in 0.83.0 (their ids and set-ups the same)
+        "orbit.saturn", "orbit.earth", "orbit.sky", "orbit.journey", "atom.slice_drag", "atom.slice_super_drag", "atom.slice_all_drag", "atom.side_all_classic",
+        "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.nucleus_density", "molecule.density",
+        "molecule.spacefill_vib", "blackhole.disc_streaks", "ui.guide_scroll", "ui.data_plot", "orbit.alphacen", "orbit.flyby", "orbit.earth_clouds", "orbit.comet_tails",
+        // All scenes before 0.83.0
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
         "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};
     bool same = true, unique = true, form = true;
@@ -1127,6 +1169,13 @@ static void testBenchSceneNumbers() {
     }
     checkTrue("benchmark ids: the stable list, in order", same);
     checkTrue("benchmark ids: unique, lab.what in small letters, digits and _", unique && form && app::benchSceneIndex("no.such") == -1);
+    // 0.83.0: the 23 moved scenes are in All scenes only, each still there with its id
+    for (const char* id : {"orbit.saturn", "orbit.earth", "orbit.sky", "orbit.journey", "atom.slice_drag", "atom.slice_super_drag", "atom.slice_all_drag", "atom.side_all_classic",
+                           "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.nucleus_density",
+                           "molecule.density", "molecule.spacefill_vib", "blackhole.disc_streaks", "ui.guide_scroll", "ui.data_plot", "orbit.alphacen", "orbit.flyby",
+                           "orbit.earth_clouds", "orbit.comet_tails"})
+        checkTrue(std::string("benchmark lists (0.83.0): ") + id + " moved to All scenes", app::benchSceneIndex(id) >= app::kBenchHardScenes && !v[std::size_t(app::benchSceneIndex(id))].hard);
+    checkTrue("benchmark lists (0.83.0): atom.bfield_drag is not made (a field change remakes nothing heavy)", app::benchSceneIndex("atom.bfield_drag") == -1);
     // the scenes moved out of the default run (the owner, 16 Nov 2026): the dot of uranium at True scale, the chart, the old easy ones and the processor twins
     for (const char* id : {"atom.uranium_true", "atom.chart_chain", "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first"})
         checkTrue(std::string("benchmark lists: ") + id + " is in All scenes only", app::benchSceneIndex(id) >= app::kBenchHardScenes);
@@ -1146,16 +1195,19 @@ static void testBenchSceneNumbers() {
     }
     checkTrue("benchmark texts: a name of at most 90 characters and two or three lines of what it tests (40 to 420 characters)", shortText);
     checkTrue("benchmark texts: no history (stage, up to, from version) and no scene numbers: the ids name the scenes", noHistory);
-    checkTrue("benchmark texts: the new scenes say their zoom, distance or field of view", v[1].what.find("zoom 4.1") != std::string::npos && v[2].what.find("zoom 5.14") != std::string::npos && /* (0.75.0, on purpose: the cap, 1.5 Earth radii) */
-              v[16].what.find("zoom 0.5") != std::string::npos && v[17].what.find("zoom 2.5") != std::string::npos && v[27].what.find("2.2 GM/c") != std::string::npos && v[27].what.find("360") != std::string::npos &&
-              v[10].what.find("zoom -0.5") != std::string::npos && v[12].what.find("zoom -0.5") != std::string::npos);
+    const auto what = [&](const char* id) { const int i = app::benchSceneIndex(id); return i < 0 ? std::string() : v[std::size_t(i)].what; };   // (0.83.0: by id, the list's order changed)
+    checkTrue("benchmark texts: the new scenes say their zoom, distance or field of view", what("orbit.saturn").find("zoom 4.1") != std::string::npos && what("orbit.earth").find("zoom 5.14") != std::string::npos && /* (0.75.0, on purpose: the cap, 1.5 Earth radii) */
+              what("atom.all_enlarged").find("zoom 0.5") != std::string::npos && what("atom.all_true_zoomed").find("zoom 2.5") != std::string::npos && what("blackhole.extreme").find("2.2 GM/c") != std::string::npos && what("blackhole.extreme").find("360") != std::string::npos &&
+              what("atom.slice_all_drag").find("zoom -0.5") != std::string::npos && what("atom.side_all_glow").find("zoom -0.5") != std::string::npos);
     // the run's length: about four minutes (rule 8 of the job; a static_assert holds it too)
     // 0.72.0: 33 scenes, 291.3 s planned: the upper limit 4.9 minutes (0.64.0: 4.85; bench_scenes.cpp's static_assert, REPORT 0.72.0)
     // 0.73.0 (on purpose): 34 scenes (orbit.alphacen), 297.8 s planned: the upper limit 5.0 minutes (REPORT 0.73.0); 0.75.0 (on purpose): 35 (orbit.flyby), 304.3 s: 5.1 minutes
     // 0.77.0 (on purpose): 36 (orbit.earth_clouds), 310.8 s: 5.2 minutes (REPORT 0.77.0); 0.78.0 (on purpose): 37 (orbit.comet_tails), 317.3 s: 5.3 minutes (REPORT 0.78.0)
     // 0.81.0 (on purpose): 39 (blackhole.film_soft), 335.1 s: 5.6 minutes (REPORT 0.81.0)
     // 0.82.0 (on purpose): 40 (blackhole.circle_spin) and 39 waits (response.blackhole_tilt), 346.4 s: 5.8 minutes (REPORT 0.82.0)
-    checkTrue("benchmark run: planned at about five and three-quarter minutes since 0.82.0 (on purpose: blackhole.disc_streaks, response.blackhole_streaks; 0.81.0 blackhole.film_soft; 0.82.0 blackhole.circle_spin, response.blackhole_tilt; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 347);
+    // 0.83.0 (on purpose, the owner's decision of 24 Nov 2026): the limit is fixed at 4.5 minutes; 26 scenes and 42 waits (response.blackhole_dolly): 260.2 s
+    checkTrue("benchmark run: planned within the owner's fixed 4.5 minutes (0.83.0; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 4.5 * 60 && near(app::kBenchLimitS, 270) &&
+              app::kBenchResponseActions == 42);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {
@@ -1169,6 +1221,19 @@ static void testBenchSummary() {
     BenchScene hitch; hitch.id = "x.hitch"; hitch.name = "Hitch"; hitch.frames = benchStats(spiky); hitch.cpuAvgMs = 2; hitch.gpuAvgMs = 0.2; hitch.gpuSamples = 100;
     checkTrue("reaches: yes when the 1 % low and the new pictures are at least the rate, no when either is below, not known with no rate",
               benchReaches(150, 150, 144) == 1 && benchReaches(144, 144, 144) == 1 && benchReaches(143.9, 500, 144) == 0 && benchReaches(500, 100, 144) == 0 && benchReaches(500, 500, 0) == -1);
+    // 0.83.0 (the owner, 24 Nov 2026): a Black Hole Lab scene also needs its lag at most 2 frames at the display's rate (255 Hz: 2 / 255 s = 7.84 ms)
+    checkTrue("reaches (0.83.0): a lag over 2 frames reads no, 2 frames or less yes, no lag (not a Black Hole Lab scene) as before",
+              benchReaches(500, 500, 255, 7.9) == 0 && benchReaches(500, 500, 255, 7.8) == 1 && benchReaches(500, 500, 255, 0) == 1 && benchReaches(500, 500, 255, -1) == 1 &&
+              benchReaches(500, 500, 144, 13.0) == 1 && benchReaches(500, 500, 144, 14.0) == 0 && benchReaches(100, 500, 255, 1.0) == 0 && benchReaches(500, 500, 0, 9) == -1);
+    {   BenchScene lagged = fast; lagged.id = "x.lag"; lagged.lagMs = 40;   // fast in every frame, but the picture 40 ms behind the settings
+        BenchScene keeps = fast; keeps.id = "x.keeps"; keeps.lagMs = 5;
+        const std::vector<BenchSummaryRow> lr = benchSummary({lagged, keeps}, 255, true);
+        checkTrue("summary (0.83.0): a scene with lag over 2 frames reads no, one within reads yes, and the row carries the lag", lr.size() == 2 && lr[0].id == "x.lag" && lr[0].reaches == 0 && near(lr[0].lagMs, 40) && lr[1].reaches == 1);
+        BenchEnv le; le.refreshHz = 255;
+        const std::string lt = benchResultText(le, {lagged});
+        checkTrue("report (0.83.0): the lag column and its rule under the table", lt.find("40.0 ms") != std::string::npos && lt.find("lag ") != std::string::npos &&
+                  lt.find("its lag (the worst time the shown picture was behind the settings) is at most 2 frames at that rate (7.8 ms") != std::string::npos);
+    }
     checkStr("limited by: c >= 1.5 g is the processor", benchLimitedBy(fast, true), "processor");
     checkStr("limited by: g >= 1.5 c is the graphics card", benchLimitedBy(gpuBound, true), "graphics card");
     checkStr("limited by: neither is both", benchLimitedBy(both, true), "both");
@@ -1190,7 +1255,7 @@ static void testBenchSummary() {
               t.find("Run: Hard scenes\n") != std::string::npos);
     const std::size_t sum = t.find("SCENES, slowest first"), det = t.find("DETAILS"), r1 = t.find("x.behind "), r2 = t.find("x.gpu "), r3 = t.find("x.fast ");
     checkTrue("report: the summary table comes before the details, slowest first", sum != std::string::npos && det != std::string::npos && sum < r1 && r1 < r2 && r2 < r3 && r3 < det);
-    checkTrue("report: a summary row has the fps, the 1 % low, the pictures a second, reaches and limited by", t.find("x.gpu       100.0     100.0     100.0       no         graphics card                                 GPU\n") != std::string::npos);
+    checkTrue("report: a summary row has the fps, the 1 % low, the pictures a second, reaches and limited by", t.find("x.gpu       100.0     100.0     100.0       -          no         graphics card                                 GPU\n")   /* (0.83.0, on purpose: the lag column, "-" for a scene that is not the Black Hole Lab's) */ != std::string::npos);
     checkTrue("report: the rules are stated under the table", t.find("Rules: \"reaches\" is yes when the 1 % low and the new pictures a second are both at least the display's refresh rate (144 Hz)") != std::string::npos &&
               t.find("processor when c >= 1.5 g, graphics card when g >= 1.5 c, else both") != std::string::npos);
     checkTrue("report: the details say the new pictures", t.find("  New pictures: 10 in 0.2 s (50.0 a second)\n") != std::string::npos && t.find("  New pictures: every frame\n") != std::string::npos);
@@ -1302,7 +1367,7 @@ static void testBenchGpuChart() {
     // 0.13 stage 4 part B: the GPU chart cache switch and its two twin scenes (which 28, 29 = benchmark scenes 33, 34, after the Orbit Lab twins 31, 32)
     using atom::kBenchChartCpuFirst; using atom::kBenchAtomScenes;
     atom::AtomLab fresh; checkTrue("GPU chart cache: a new lab has the switch On (the default)", fresh.gpuChart);
-    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes; 0.63.0: -> 40 with the superposition's Slice; 0.64.0: -> 46 with the six heavy views)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 46 && atom::kBenchSceneCount == 28);
+    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes; 0.63.0: -> 40 with the superposition's Slice; 0.64.0: -> 46 with the six heavy views; 0.83.0: -> 47 with atom.emit_all)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 47 && atom::kBenchSceneCount == 28);
     {   // 0.16 stage 3: the nucleus at full zoom with the camera turning (the owner's slow case), the last scene of the list
         atom::AtomLab L; L.p.qstyle = "Simple"; L.gpuChart = false;
         atom::benchSetup(L, atom::kBenchFullZoomScene, 1040, 713);
@@ -2400,6 +2465,7 @@ int main() {
     testBenchAtomScenes();
     testBenchRiskScenes();
     testBenchSceneNumbers();
+    testBenchNewScenes();
     testBenchSummary();
     testBenchWaitsAndRest();
     testBenchEclipseDate();

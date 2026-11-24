@@ -29,7 +29,8 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Atoms in fields: hydrogen's Stark effect, Breit-Rabi at low fields, a broadened synthetic spectrum, a Boltzmann-plot temperature, the cloud of one M sublevel.
 - Data tables: <r>, <1/r>, <r²>, P(r), Q(r) of the DHF orbitals (**source needed**: Desclaux's tables), higher alkali Rydberg levels (new ASD fetch), Q-values (AME2020).
 - Labels drawn in depth order (needs a renderer change).
-- Check in the owner's next benchmark: atom.slice_drag and atom.jump_all. Still on the CPU in jump_all: the Glow core's pass over every dot (glowDotsNear) and the exposure grid read back each frame.
+- Still on the CPU in atom.jump_all: the Glow core's pass over every dot (glowDotsNear) and the exposure grid read back each frame.
+- Benchmark: atom.bfield_drag was dropped in 0.83.0. The field slider remakes nothing heavy (only the readout, the spectrum's lines and the Zeeman tables).
 
 ## Molecule Lab
 - The Density surface: the vibrating surface is rebuilt on the CPU for each new phase (water about 1 ms). Each new level's 60,000 dots are sampled once. The exposure grid is read back each frame.
@@ -94,7 +95,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look at 1.3 mm.
 
 ## Whole app
-- 0.83.0, after the camera job (the owner, 24 Nov 2026): new Black Hole benchmark scenes that move as a user does (moving in and out, over the top and under; circling with the glide is blackhole.circle_spin since 0.82.0); the Hard list cleaned: scenes that reach 255 Hz on the owner's PC move to All scenes, decided from his benchmark.
+- **owner decides**: the benchmark's lag is the age of the shown picture (blackhole_view.h lagMs), not behindWorst. behindWorst counts from the first frame behind and grows for the whole movement (REPORT 0.83.0).
 - A GPU timing of the Black Hole sky pass alone (timestamps around one pass), if needed again.
 - The Glow and Density clouds' exposure grid is read back in the frame that draws it. A grid one frame late would remove the wait.
 - The crash-safe helper: the sky's, lens's and light paths' first runs still happen in the app first. The sky's helper also makes the lens's and table pass's pipelines.

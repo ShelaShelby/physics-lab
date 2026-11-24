@@ -745,7 +745,7 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
         exact_ = true;
         prepare(s, W, H, cx, cy, nullptr);
         shownS_ = s; shownExact_ = true; hasShown_ = true;
-        st_.behind = false; st_.behindMs = 0;
+        st_.behind = false; st_.behindMs = 0; st_.lagMs = 0;
         std::copy(made_, made_ + 4, st_.made);
         emit(R, s, W, H, cx, cy, key_);
     }
@@ -926,6 +926,9 @@ void BlackHoleView::install(Picture& p) {
     std::copy(p.made, p.made + 4, made_);
     shownS_ = p.req.s; shownW_ = p.req.W; shownH_ = p.req.H; shownCx_ = p.req.cx; shownCy_ = p.req.cy;
     shownKey_ = p.req.want; shownExact_ = p.req.exact; shownSeq_ = p.req.seq;
+    shownWanted_ = -1;                                                  // 0.83.0: when its view was last asked for (lagMs)
+    for (int i = 0, at = wantsAt_; i < wantsN_; i++, at = (at + int(wants_.size()) - 1) % int(wants_.size()))
+        if (wants_[std::size_t(at)].k == shownKey_) { shownWanted_ = wants_[std::size_t(at)].last; break; }
     hasShown_ = true;
     installs_++;
     shownDiscCoarse_ = p.discCoarse;
@@ -1085,6 +1088,10 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     const double now = nowSeconds();
     const Key want = keyOf(s, W, H, cx, cy);
     if (!(want == wantKey_)) { wantKey_ = want; wantSince_ = now; }
+    if (wantsN_ == 0 || !(wants_[std::size_t(wantsAt_)].k == want)) {   // 0.83.0: the views asked for, newest last (lagMs)
+        wantsAt_ = (wantsAt_ + 1) % int(wants_.size()); wants_[std::size_t(wantsAt_)].k = want; wantsN_ = std::min(wantsN_ + 1, int(wants_.size()));
+    }
+    wants_[std::size_t(wantsAt_)].last = now;
     const bool sky = spinning && gpuSky && skyReady(R);                    // 0.56.0: sky and disc per pixel on the card
     skyUse_ = sky;
     if (sky) {
@@ -1127,6 +1134,7 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     if (!st_.behind) behindSince_ = 0;
     else if (behindSince_ == 0) behindSince_ = now;
     st_.behindMs = st_.behind ? 1000 * (now - behindSince_) : 0;
+    st_.lagMs = !st_.behind ? 0 : 1000 * (now - (shownWanted_ >= 0 ? std::max(shownWanted_, behindSince_) : behindSince_));   // 0.83.0
     st_.picture = shownSeq_;
     std::copy(made_, made_ + 4, st_.made);
     const render::Renderer2D::SkyStats& ks = R.skyStats();

@@ -57,6 +57,9 @@ struct ViewStats {
     long lookFills = 0, spinBins = 0;
     bool behind = false;
     double behindMs = 0, frameMs = 0, workMs = 0;
+    // 0.83.0: lagMs: how old the shown picture is: 0 while it is of the settings asked for, else the time since its settings were last the ones asked for.
+    // (behindMs counts from the first frame behind: while the view moves every frame the settings change every frame, so it grows for the whole movement.)
+    double lagMs = 0;
     std::uint64_t picture = 0;
     double made[4] = {0, 0, 0, 0};
     // 0.55.6: the shown spin table was filled by the graphics card; the card's last fill (ms, from its start to the frame that found it done) and how many
@@ -260,6 +263,10 @@ private:
     struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool allLight = false; bool operator==(const Key& o) const; } key_;
     static Key keyOf(const Settings& s, double W, double H, double cx, double cy);   // 0.55.5: the view asked for (spinVer 0)
     Key wantKey_, shownKey_, postedKey_, skyKey_;
+    struct WantNote { Key k; double last = 0; };                   // 0.83.0: the last views asked for and when each was last asked for (lagMs)
+    std::array<WantNote, 256> wants_{};
+    int wantsN_ = 0, wantsAt_ = 0;
+    double shownWanted_ = -1;                                       //   when the shown picture's view was last asked for (-1: not among them)
     void emit(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy, const Key& restKey);
     ViewStats st_;
     Key glareKey_;

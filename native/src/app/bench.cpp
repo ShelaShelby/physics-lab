@@ -32,8 +32,9 @@ std::string pad(std::string s, std::size_t w) { std::size_t n = 0; for (unsigned
 std::string fps(double v) { return v >= 1000 ? f("%.0f", v) : v >= 10 ? f("%.1f", v) : f("%.2f", v); }
 }
 
-int benchReaches(double low1, double pics, double hz) {
+int benchReaches(double low1, double pics, double hz, double lagMs) {
     if (!(hz > 0)) return -1;
+    if (lagMs >= 0 && lagMs > kBenchLagFrames * 1000 / hz) return 0;   // 0.83.0: the picture fell behind by more than 2 frames
     return low1 >= hz && pics >= hz ? 1 : 0;
 }
 
@@ -52,8 +53,8 @@ std::vector<BenchSummaryRow> benchSummary(const std::vector<BenchScene>& scenes,
     std::vector<BenchSummaryRow> v;
     for (const BenchScene& s : scenes) {
         BenchSummaryRow r;
-        r.id = s.id; r.name = s.name; r.avgFps = s.frames.avgFps; r.low1Fps = s.frames.low1Fps; r.picsPerS = s.picturesPerS();
-        r.reaches = benchReaches(r.low1Fps, r.picsPerS, hz);
+        r.id = s.id; r.name = s.name; r.avgFps = s.frames.avgFps; r.low1Fps = s.frames.low1Fps; r.picsPerS = s.picturesPerS(); r.lagMs = s.lagMs;
+        r.reaches = benchReaches(r.low1Fps, r.picsPerS, hz, r.lagMs);
         r.limitedBy = benchLimitedBy(s, gpuReliable);
         v.push_back(r);
     }
@@ -122,12 +123,14 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         const std::vector<BenchSummaryRow> rows = benchSummary(scenes, e.refreshHz, e.gpuReliable);
         std::size_t lw = 10;
         for (const BenchSummaryRow& r : rows) lw = std::max(lw, r.limitedBy.size());
-        t += pad("id", w) + "  " + pad("avg fps", 8) + "  " + pad("1 % low", 8) + "  " + pad("pictures/s", 10) + "  " + pad("reaches", 9) + "  " + pad("limited by", lw) + "  name\n";
+        t += pad("id", w) + "  " + pad("avg fps", 8) + "  " + pad("1 % low", 8) + "  " + pad("pictures/s", 10) + "  " + pad("lag", 9) + "  " + pad("reaches", 9) + "  " + pad("limited by", lw) + "  name\n";
         for (const BenchSummaryRow& r : rows)
-            t += pad(r.id, w) + "  " + pad(fps(r.avgFps), 8) + "  " + pad(fps(r.low1Fps), 8) + "  " + pad(fps(r.picsPerS), 10) + "  " +
+            t += pad(r.id, w) + "  " + pad(fps(r.avgFps), 8) + "  " + pad(fps(r.low1Fps), 8) + "  " + pad(fps(r.picsPerS), 10) + "  " + pad(r.lagMs >= 0 ? f("%.1f", r.lagMs) + " ms" : std::string("-"), 9) + "  " +
                  pad(r.reaches > 0 ? "yes" : r.reaches == 0 ? "no" : "not known", 9) + "  " + pad(r.limitedBy, lw) + "  " + r.name + "\n";
         t += "Rules: \"reaches\" is yes when the 1 % low and the new pictures a second are both at least the display's refresh rate (" +
-             (e.refreshHz > 0 ? f("%.0f", e.refreshHz) + " Hz" : std::string("not known here")) + "). \"Limited by\" compares the frame's CPU work c with the GPU's busy time g: "
+             (e.refreshHz > 0 ? f("%.0f", e.refreshHz) + " Hz" : std::string("not known here")) + "), and, for a Black Hole Lab scene, its lag (the worst "
+             "time the shown picture was behind the settings) is at most 2 frames at that rate (" + (e.refreshHz > 0 ? f("%.1f", kBenchLagFrames * 1000 / e.refreshHz) + " ms" : std::string("not known here")) +
+             "; \"-\": not a Black Hole Lab scene). \"Limited by\" compares the frame's CPU work c with the GPU's busy time g: "
              "processor when c >= 1.5 g, graphics card when g >= 1.5 c, else both (no reliable GPU time: \"processor?\" when c is 80 % of the frame or more); where the new "
              "pictures a second fall under 90 % of the frames a second it names what makes the pictures off the frame. Slowest first by the lower of the 1 % low and the "
              "new pictures a second.\n";
