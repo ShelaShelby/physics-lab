@@ -37,6 +37,7 @@ Vec3 lonLat(double lo, double la) {
 // arXiv:1201.1809, eq. 14; data/stars), the black body under the CIE 1931 2-degree observer to sRGB, largest channel 1, no white mixed in: tools/star_colour.py
 // wrote the table star_colours.inc (B-V in steps of 0.01). Until 0.49.4: an unnamed curve fit for the black body's RGB, then 30 % white.
 #include "star_colours.inc"
+double bucketBV(int k) { return -0.3 + 2.3 * k / (kSkyColourBuckets - 1); }   // (0.84.0: named; the same steps as before)
 double bvTemperatureK(double bv) { return 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62)); }   // Ballesteros 2012, eq. (14)
 std::array<int, 3> bvRGB(double bv) {
     const int i = std::clamp(static_cast<int>(std::lround((bv - kStarBvLo) / kStarBvStep)), 0, kStarBvCount - 1);
@@ -151,7 +152,7 @@ const Sky& skyData() {
         const int bucket = std::clamp(static_cast<int>(std::lround((bv + 0.3) / 2.3 * (kSkyColourBuckets - 1))), 0, kSkyColourBuckets - 1);
         S.stars.push_back({lonLat(lon, lat), static_cast<float>(mag), bucket});
     }
-    for (int k = 0; k < kSkyColourBuckets; k++) S.colours[k] = bvRGB(-0.3 + 2.3 * k / (kSkyColourBuckets - 1));
+    for (int k = 0; k < kSkyColourBuckets; k++) S.colours[k] = bvRGB(bucketBV(k));
     for (const char* L : kSkyLines) {
         std::vector<std::pair<int, int>> pairs;
         for (std::size_t k = 0; k + 6 <= std::strlen(L); k += 6) pairs.push_back({base36(L + k, 3), base36(L + k + 3, 3)});

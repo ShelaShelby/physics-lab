@@ -896,6 +896,9 @@ vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (tim
     q *= q;
     return y > 0.0 ? c * (q * q * s / y) : vec3(0.0);
 }
+// 0.84.0: the held camera's own shift (blackhole/lab.h heldCameraShift): f_c/f' = uFido.x - b uFido.y = (1 - b omega) / alpha at the camera (J15 (A.16),
+// beta = 0), uFido = (1 / alpha, omega / alpha); (1, 0): none (Film, the card's own checks). The disc's colour temperature is g f T.
+uniform vec2 uFido;
 vec3 discColourRaw(float r, float g) {
     if (uDFix.w > 0.0) return uDFix.rgb;                 // 0.55.3, Film: one colour all over the disc, no shift (blackhole/looks.h)
     float q = (log(r) - uDR.z) / uDR.w;
@@ -981,7 +984,7 @@ void main() {
         if (cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.x, uDR.y);
         if (uFilmSoft.w > 0.0) cov *= filmCoverAt(rc);       // 0.81.0
-        vec3 cr = discColourRaw(rc, shiftKerr(rc, b));
+        vec3 cr = discColourRaw(rc, shiftKerr(rc, b) * (uFido.x - b * uFido.y));   // 0.84.0: times the held camera's own f_c/f' for this ray's b
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
@@ -2532,6 +2535,7 @@ uniform vec4 uLP;                                     // 0.58.0, uMode 11 (the s
 uniform int uGas;                                     // 0.72.0: 1 the moving gas: each crossing's flux times gasLight's factor (1 + A n) (Real: T times its fourth
 uniform float uGasTau;                                // root, so the colour follows; Film: the one colour times it); uGasTau: the far time now since the epoch (M);
 uniform float uGasCam;                                // uGasCam: the camera's phi (the crossings' phi are from it)
+uniform vec2 uFido;                                   // 0.84.0: the held camera's own shift f_c/f' = uFido.x - b uFido.y (as kKerrFS; (1, 0): none)
 vec3 discLightRaw(float r, float g, float gf) {
     if (uDFix.w > 0.0) return uDFix.rgb * gf;
     float q = (log(r) - uDR.z) / uDR.w;
@@ -2611,7 +2615,7 @@ void main() {
         float w = fw[k];
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (probe ? k != first : cov <= 0.0) continue;
-        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0, sk = 1.0;
+        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0, sk = 1.0, fc = uFido.x - R.b * uFido.y;   // 0.84.0: fc, the held camera's own shift for this ray
         if (uGas == 1 && R.tt[k] >= 0.0 && (uMode == 0 || uMode == 5)) {
             bool fz = uMode == 5 || uGasFoot == 0;        // (the probe: no footprint, as gas.cpp's factor)
             vec2 gl = gasLight(rc, R.ph[k] + uGasCam, uGasTau - R.tt[k], fz ? 0.0 : 0.3 * fw[k] / rk[k], fz ? 0.0 : fph[k]);
@@ -2622,7 +2626,7 @@ void main() {
         }
         if (uFilmSoft.w > 0.0 && uMode == 0) cov *= filmCoverAt(rc, sk);   // 0.81.0: Film's soft edges and see-through (the exposure's samples keep the light)
         if (uMode == 5) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
-        vec3 raw = discLightRaw(rc, g, gf);
+        vec3 raw = discLightRaw(rc, g * fc, gf);
         if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }
         if (uMode == 10) { float y = dot(raw, vec3(0.2126, 0.7152, 0.0722)); fragColor = vec4(max(raw.r, max(raw.g, raw.b)), y, y, 1.0); return; }   // (0.70.0: Y again, kExpSumFS)
         vec3 cr = raw * inv;

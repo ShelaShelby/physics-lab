@@ -2,7 +2,9 @@
 // ui/shell_blackhole.cpp has the panel). Every number the readout shows comes from the physics module (kerr.h, schwarzschild.h, presets.h); nothing
 // here is a formula of its own except unit changes (metres to km and AU, radians to degrees).
 //
-// The camera hovers (a static observer, J15 (A.3) at a = 0) at a distance in units of the hole's own length GM/c^2 and always looks at the hole, which
+// The camera is held at a fixed distance in units of the hole's own length GM/c^2 (not falling, not orbiting). Without spin it hovers: a static observer.
+// Round a spinning hole it is a FIDO (zero angular momentum observer, J15 (A.3)): held at this distance and turned round with the space at the rate omega.
+// 0.84.0: its own shift of colour and brightness is drawn (heldCameraShift below). It always looks at the hole, which
 // stays in the middle of the picture. Turning moves the camera round the hole: the sky behind it changes, the hole stays put (yaw and pitch of the
 // night sky's projection, orbit/sky.h skyScreen). The field of view is the angle across the picture's height.
 // Settings file: the prefix "blackhole." (app/prefs.h), one key each; a bad value keeps the default.
@@ -173,6 +175,20 @@ const HeightTable* discHeight(const Settings& s);
 // 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
 // true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). Sets T, Tobs, rgb and Y (the hit is left as it is).
 void discLight(const Settings& s, double r, double g, DiscPixel& o);
+// 0.84.0: THE CAMERA'S OWN SHIFT, drawn. The lab's camera is held at a fixed distance (not falling, not orbiting). Without spin it is a static observer;
+// round a spinning hole it is a FIDO (J15 (A.3)): held at this distance and carried round by the turning space at the rate omega. A ray with axial angular
+// momentum b per unit energy (p_t = -1) reaches it at f_c/f' = (1 - b omega) / alpha over the frequency sent at rest far away (J15 (A.16) with beta = 0;
+// kerr.h hoverShift). At spin 0 that is (1 - 2M/r)^(-1/2) for every ray; with spin it changes across the picture with each ray's b. Real only: Film is 1
+// (J15 draws no colour or brightness shifts, looks.h). Exact for that camera.
+double heldCameraShift(const Settings& s, double b);
+// the disc's light as the camera sees it: discLight at g x heldCameraShift(s, b), g against far away (Riazuelo (53): the colour temperature g f T; a black
+// body stays a black body, so its whole light goes up by f^4 and the eye's light as the black body's at that temperature, R19 (52))
+void discLightSeen(const Settings& s, double r, double g, double b, DiscPixel& o);
+// a catalogue star seen by the camera at factor f: its dot's colour (sRGB 0-255, largest channel 255 as the catalogue's colours) is that of a black body at
+// f x its colour temperature T (the catalogue colour times the black body's ratio at f T over T, channel by channel, in linear light); its V light by the
+// black body's eye's light at f T over T (vRatio; dmag = -2.5 log10 vRatio); its whole light by f^4 (boloRatio). f = 1: the catalogue's dot, unchanged.
+struct StarSeen { std::array<int, 3> rgb{0, 0, 0}; double vRatio = 1, boloRatio = 1, dmag = 0; };
+StarSeen starSeen(const std::array<int, 3>& rgb, double T, double f);
 // The picture's brightest part of the disc (sampled every `step` pixels): its visible brightness Y and its largest linear sRGB channel, both in units of the Sun's surface
 // (0.58.0: in All light (allLightOn) both are the total light against the Sun's surface's total light, disc.h bolometricVsSun)
 // 0.70.0: logAvg, Reinhard et al.'s log-average of the samples' Y (tone.h, delta = kToneDelta x brightY); k and lw: Real's exposure (L = k Y, the burn-out white

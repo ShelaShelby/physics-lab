@@ -290,9 +290,12 @@ def precision_sky(binary, work):
     # 0.70.0: the camera curve, the card's Real picture against the processor's (toneCompare): at most 1 % of the disc's inner pixels over 8 levels of 255
     tc = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHTONE ")]
     # 0.79.0: case "streaks", the feeding preset's surface, streaks and clump at 10^6 M of running against the processor's (blackhole_view.cpp toneCompare)
-    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks"}, f"the curve's picture compared at spin 0 near and far, at 0.9, and with the streaks ({len(tc)})")
+    # 0.84.0: the held camera's own shift drawn: "close" (spin 0, 2.2 GM/c^2, the whole sky round: the shadow fills a narrower view), "closespin" (spin 0.99,
+    # 2.2), "pole" (0.99, 2.2, 8 degrees from the axis) and "closetable" (as closespin on the table's pass kKerrFS, the processor's exposure): the same limit
+    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks", "close", "closespin", "pole", "closetable"}, f"the curve's picture compared at spin 0 near and far, at 0.9, with the streaks, and at the closest distance with no spin, the top spin, over the pole and on the table's pass ({len(tc)})")
     for x in tc:
-        check(x["ok"] == "1" and int(x["pixels"]) > 50000 and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")
+        floor = 2000 if x["case"] == "close" else 50000                   # (0.84.0: from 2.2 GM/c^2 with no spin the disc covers about 5,100 inner pixels of the whole sky round)
+        check(x["ok"] == "1" and int(x["pixels"]) > floor and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")
     # 0.81.0 (PLAN_DISC.md D4): Film's soft edges and see-through disc with the streaks and the clump, the card's pass (kKerrSkyFS) against the processor
     # (traceClosed's crossings, gas.h's factors, looks.h's fade, cover and laying, in double; blackhole_view.cpp filmSoftCompare), at the paper's view and 3
     # degrees below the plane: at most 1 % of the disc's inner pixels over 8 levels of 255 (DECISIONS "Tests and precision"; limit fixed before looking); the
@@ -428,8 +431,11 @@ def hottest_k(mass, feed):
 def part_gasrow(binary, work):
     # 1. the moving gas's row says Off or On, and the picture changes when it is clicked. (0.72.0 to 0.82.0 a button "Moving gas" that did not look like a switch:
     #    the owner thought his gas models were gone.) The picture of a click on Off is the picture of the setting gas=off, to the pixel; the On picture has the streaks.
-    GAS = dict(BASE, PL_BH_GAS=None, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_GAST="3000", PL_BH_SETTLE="16:6")   # (the same clock, and the run ends once the picture has settled)
-    st = "preset=feeding;glare=off;look=film"
+    # 0.84.0: PL_BH_SPINWAIT: the fine light paths at once. Film spins (0.6), so until the fine table is in, the caption "Working out the light paths ..." stands
+    # above this row. On a loaded machine (GitHub, 4 parts at once) it went away between the frame that read the row's place and the press: the click missed
+    # (0.83.0's full run: Off read On; reproduced here with 4 runs at once). The check itself is unchanged.
+    GAS = dict(BASE, PL_BH_GAS=None, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_GAST="3000", PL_BH_SETTLE="16:6", PL_BH_SPINWAIT="1")   # (the same clock, and the run ends once the picture has settled)
+    st = "preset=feeding;glare=off;look=film;gasrun=off"   # (0.84.0: the gas held at t = 3000 in every run: with the picture made at once its clock, on the wall's time, moved between runs)
     on = run_app(binary, work, "bh_gas_on", dict(GAS, PL_BH_SET=st), frames=80)
     off = run_app(binary, work, "bh_gas_off", dict(GAS, PL_BH_SET=st, PL_SCRIPT="6:click=blackhole.gas.off"), frames=80)
     ref = run_app(binary, work, "bh_gas_ref", dict(GAS, PL_BH_SET=st + ";gas=off"), frames=80)
@@ -440,7 +446,7 @@ def part_gasrow(binary, work):
     check(all(v is not None for v in s.values()) and s["on"]["gasshown"] == "1" and s["off"]["gasshown"] == "0" and s["ref"]["gasshown"] == "0" and s["back"]["gasshown"] == "1",
           f"the row reads On, Off after a click, Off for gas=off, On after On again ({ {n: v and v['gasshown'] for n, v in s.items()} })")
     check(texts_has(on, "Streaks and clump") and any(k.startswith("seg.blackhole.gas.") for k in on.rects), "the row is named and drawn")
-    check(any(t_[2] == "Pause" for t_ in on.texts) and not any(t_[2] in ("Pause", "Play") for t_ in ref.texts) and "seg.blackhole.gas.sel1" in on.rects and "seg.blackhole.gas.sel0" in ref.rects, "Pause / Play and the rate are drawn only while it is On")
+    check(any(t_[2] == "Play" for t_ in on.texts) and not any(t_[2] in ("Pause", "Play") for t_ in ref.texts) and "seg.blackhole.gas.sel1" in on.rects and "seg.blackhole.gas.sel0" in ref.rects, "Pause / Play and the rate are drawn only while it is On")
     def diff(a, b):                                                    # (the picture: left of the Controls panel, below the top bar, above the bar)
         A, B = Bmp(a.bmp), Bmp(b.bmp)
         return sum(1 for y in range(48, 740) for x in range(0, 930) if sum(abs(p - q) for p, q in zip(A.px(x, y), B.px(x, y))) > 6)

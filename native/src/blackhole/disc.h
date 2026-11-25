@@ -40,8 +40,8 @@
 //   Checked against L79's isoradials (direct and secondary image, (5), (10), (12), (13)) for a far camera and against the ray integrator (geodesic.h) close in.
 // THE SHIFT. A photon of axial angular momentum L_z (per unit energy at infinity) from gas on a circular orbit arrives with g = 1 / (1 + z) = 1 / (u^t (1 - Omega L_z))
 //   (L79 (16): E_em = p_t u^t (1 + Omega p_phi / p_t); at a = 0 u^t = (1 - 3M/r)^(-1/2), Omega = (M/r^3)^(1/2), so (19): 1 + z = (1 - 3M/r)^(-1/2) (1 + (M/r^3)^(1/2)
-//   b sin theta0 sin alpha) for a far observer). This g is against a clock at rest far away; the hovering camera's own factor (kerr.h hoverShift) multiplies it and,
-//   as for the sky, is a readout only (it comes with the moving cameras).
+//   b sin theta0 sin alpha) for a far observer). This g is against a clock at rest far away; the held camera's own factor (kerr.h hoverShift; lab.h heldCameraShift)
+//   multiplies it. 0.84.0: drawn (until 0.83.0 a readout only): the colour temperature seen is g f T.
 // WHAT THE EYE GETS. A black body at T seen with the shift g is a black body at g T (A. Riazuelo, IJMPD 28, 1950042 (2019) (53): T_obs = T / (1 + z); I_nu / nu^3 is
 //   the same along a ray). Its colour and visible brightness by the rule of tools/star_colour.py: Planck's law at 1 nm steps from 360 to 830 nm under the CIE 1931
 //   2-degree observer (render/cie1931_data.inc), XYZ to linear sRGB (IEC 61966-2-1). The visible brightness is the luminance Y (the ybar-weighted sum), compared with

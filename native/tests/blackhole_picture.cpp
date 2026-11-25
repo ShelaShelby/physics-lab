@@ -10,8 +10,8 @@
 //                                    linear light at the lab's automatic exposure (discLook); stars the disc covers are not drawn
 // The picture: blackhole/schwarzschild.h LensView for every pixel (2 x 2 rays per pixel, averaged), the map sampled bilinearly at the far-sky direction
 // (render/planet_maps.h skyUV, as the Orbit Lab's sky shader); the map drawn at full strength (the Orbit Lab's sky level 1) over black; the shadow black;
-// each catalogue star's images (starImages) as discs by orbit/sky.h starDraw at the image's magnified magnitude. No colour or brightness shift of the
-// hovering camera is drawn (its f_c/f' is printed).
+// each catalogue star's images (starImages) as discs by orbit/sky.h starDraw at the image's magnified magnitude. This tool's sky picture draws no colour or
+// brightness shift of the hovering camera (its f_c/f' is printed; the app draws it since 0.84.0, lab.h heldCameraShift); --spin's disc has it.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -262,7 +262,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
             SpinHit h; SpinDisc d;
             if (!at(x, y, h, d) || d.order < 0) continue;
             DiscPixel q;
-            discLight(s, d.r, d.g, q);                                    // (Real: blackBodyLinearFast(g T(r)); Film: the one colour)
+            discLightSeen(s, d.r, d.g, h.b, q);                           // (Real: blackBodyLinearFast(g f T(r)), 0.84.0 with the camera's own f; Film: the one colour)
             const auto c = q.rgb;
             white = std::max({white, c[0], c[1], c[2]});
         }
@@ -300,7 +300,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
                 if (!at(X, Y, h, d)) continue;
                 if (d.order >= 0) {
                     DiscPixel dq;
-                    discLight(s, d.r, d.g, dq);
+                    discLightSeen(s, d.r, d.g, h.b, dq);
                     const auto c = dq.rgb;
                     const double m = std::max({c[0], c[1], c[2]}) / white;
                     for (int q = 0; q < 3; q++) { lin[q] += c[q] / white / std::max(1.0, m); dl[q] += c[q] / white / std::max(1.0, m); rl[q] += c[q] / white; }

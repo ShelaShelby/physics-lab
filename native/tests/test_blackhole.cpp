@@ -336,6 +336,117 @@ static void testShift() {
     }
 }
 
+// 0.84.0: the camera's own shift, drawn (lab.h cameraShift, discLightSeen, starSeen). The camera is held at a fixed distance: at spin 0 a static observer,
+// round a spinning hole a FIDO (J15 (A.3)). For a ray with axial angular momentum b (p_t = -1) it sees f_c/f' = (1 - b omega) / alpha (J15 (A.16), beta = 0).
+static void testCameraShift() {
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    // a = 0: the textbook static observer, (1 - 2M/r)^(-1/2) for every ray (R19 (B19): z_grav = -1 + (1 - 2M/r)^(1/2))
+    double w0 = 0;
+    for (double r : {kDistMin, 2.5, 3.0, 4.0, 6.0, 10.0, 50.0, kDistMax})
+        for (double b : {-5.0, 0.0, 3.0}) {
+            setDistance(s, r);
+            w0 = std::max(w0, std::fabs(heldCameraShift(s, b) * std::sqrt(1 - 2 / r) - 1));
+        }
+    check(w0 < 1e-14, "a = 0: the camera's f_c/f' = (1 - 2M/r)^(-1/2) at 2.2 to 1000 M, the same for every b: " + f(w0));
+    // R19 Figure 20's caption (data/blackhole/arxiv/1511.06025_riazuelo2019.txt.gz, read in the saved text): z_grav "≃ -0.293, ≃ -0.423 and ≃ -0.553" at r = 4M, 3M, 2.5M
+    {   const double r[3] = {4, 3, 2.5}, z[3] = {-0.293, -0.423, -0.553};
+        for (int i = 0; i < 3; i++) {
+            setDistance(s, r[i]);
+            check(std::fabs((1 / heldCameraShift(s, 0) - 1) - z[i]) < 5e-4, "R19 Fig. 20 caption at " + f(r[i]) + " M: z = " + f(1 / heldCameraShift(s, 0) - 1)); } }
+    // spin: J15 (A.16) against the FIDO built from the Boyer-Lindquist metric in its textbook form (not J15's alpha, omega, varpi): g_tt = -(1 - 2r/rho^2),
+    // g_tphi = -2ar sin^2 / rho^2, g_phiphi = (r^2 + a^2 + 2a^2 r sin^2 / rho^2) sin^2; the FIDO turns at omega = -g_tphi / g_phiphi (u_phi = 0), u . u = -1;
+    // the energy it measures, -p . u with p_t = -1, p_phi = b
+    double wk = 0, wb = 0, wl = 0;
+    for (double a : {0.3, 0.9, kSpinTop})
+        for (double r : {kDistMin, 3.0, 10.0, 100.0})
+            for (double th : {0.1, kPi / 4, kPi / 2, 2.5})
+                for (double b : {-6.0, -1.0, 0.0, 2.0, 7.0}) {
+                    const double c = std::cos(th), sn = std::sin(th), rho2 = r * r + a * a * c * c;
+                    const double gtt = -(1 - 2 * r / rho2), gtp = -2 * a * r * sn * sn / rho2, gpp = (r * r + a * a + 2 * a * a * r * sn * sn / rho2) * sn * sn;
+                    const double om = -gtp / gpp, ut = 1 / std::sqrt(-(gtt + 2 * om * gtp + om * om * gpp)), up = om * ut;
+                    const double E = -(-1 * ut + b * up);
+                    Settings q = s; setSpin(q, a); setDistance(q, r); q.pitch = th;
+                    wk = std::max(wk, std::fabs(heldCameraShift(q, b) / E - 1));
+                    wl = std::max(wl, std::fabs(gtp * ut + gpp * up) / ut);
+                    if (b == 0) wb = std::max(wb, std::fabs(heldCameraShift(q, 0) * kerrMetric(a, r, th).alpha - 1));
+                }
+    check(wk < 1e-12, "spin: the camera's f_c/f' = the FIDO's -p . u from the metric's textbook form, a 0.3 to 0.99, r 2.2 to 100 M, four theta, five b: " + f(wk));
+    check(wl < 1e-12, "that observer has no angular momentum (u_phi = 0: a FIDO, J15 (A.3)): " + f(wl));
+    check(wb < 1e-14, "spin: b = 0 gives 1 / alpha: " + f(wb));
+    {   Settings q = s; setSpin(q, 0.9); setDistance(q, 3); q.pitch = kPi / 2;
+        check(heldCameraShift(q, 4) < heldCameraShift(q, 0) && heldCameraShift(q, -4) > heldCameraShift(q, 0), "spin: light coming round with the turning space (b > 0) is less blue, against it more blue");
+        Settings fm = q; setLook(fm, Look::Film);
+        check(heldCameraShift(shown(fm), 4) == 1 && heldCameraShift(shown(fm), 0) == 1, "Film: no camera shift (J15 draws no colour or brightness shifts)"); }
+    // the disc's light: colour temperature g (against far away) x f_c/f' x T; all light (bolometric) by f^4; the eye's light by the black body at that temperature
+    {   Settings q = s; setSpin(q, 0.9); setDistance(q, 5); q.pitch = 1.2;
+        for (double b : {-3.0, 0.0, 5.0}) {
+            DiscPixel e, o;
+            discLightSeen(q, 8, 1.1, b, e);
+            const double fc = heldCameraShift(q, b), T = discPhys(q).temperature(8);
+            check(e.T == T && std::fabs(e.Tobs / (1.1 * fc * T) - 1) < 1e-15 && e.rgb == blackBodyLinearFast(e.Tobs) && e.Y == visibleVsSunFast(e.Tobs), "the disc seen with b = " + f(b) + ": T_obs = g f T");
+            Settings qa = q; qa.allLight = true;
+            discLightSeen(qa, 8, 1.1, b, e); discLight(qa, 8, 1.1, o);
+            check(std::fabs(e.Y / o.Y / std::pow(fc, 4) - 1) < 1e-12, "all light: the camera makes it f^4 brighter (" + f(e.Y / o.Y) + ")");
+        } }
+    // the CPU reference picture at spin 0: every disc pixel's T_obs = g x f_c/f' x T(r), from the closest distance to 1000 M
+    for (double r : {kDistMin, 6.0, 50.0}) {
+        Settings q = s; setDistance(q, r); setFov(q, kFovMax); q.pitch = 80 * kPi / 180;
+        const DiscTable T(q.dist);
+        const HoleView v = holeView(q, 320, 200, 160, 100);
+        const double fc = 1 / std::sqrt(1 - 2 / r);
+        long n = 0; double w = 0;
+        for (int j = 0; j < 200; j += 4)
+            for (int i = 0; i < 320; i += 4) {
+                const DiscPixel p = discPixel(T, q, v, i + 0.5, j + 0.5);
+                if (p.hit.order < 0) continue;
+                n++;
+                w = std::max(w, std::fabs(p.Tobs / (p.hit.g * fc * discPhys(q).temperature(p.hit.r)) - 1));
+            }
+        check(n > 20 && w < 1e-13, "the reference picture at " + f(r) + " M: each of " + std::to_string(n) + " disc pixels at g f T (" + f(w) + ")");
+    }
+    // at 1000 M the factor tends to 1 (1.001): each disc pixel's light near 0.83.0's (g T alone). A relative change d of a channel's linear light moves the
+    // camera curve's output by at most 2 d (tone.h, eq. (4): d ln out / d ln in < 2) and its sRGB code by at most 255 d / 2.4 levels (IEC 61966-2-1's power
+    // part; the linear part moves less): the Vulkan limit of 8 levels holds for d < 8 x 2.4 / (2 x 255) = 3.76 %. (First written as 0.5 %, not derived:
+    // the cool outer disc's blue channel moves 0.79 %; REPORT 0.84.0.)
+    {   Settings q = s; setDistance(q, kDistMax); setFov(q, 2); q.pitch = 80 * kPi / 180;
+        const DiscTable T(q.dist);
+        const HoleView v = holeView(q, 320, 200, 160, 100);
+        long n = 0; double w = 0;
+        for (int j = 0; j < 200; j += 4)
+            for (int i = 0; i < 320; i += 4) {
+                const DiscPixel p = discPixel(T, q, v, i + 0.5, j + 0.5);
+                if (p.hit.order < 0) continue;
+                DiscPixel old;
+                discLight(q, p.hit.r, p.hit.g, old);
+                n++;
+                for (int k = 0; k < 3; k++) if (old.rgb[std::size_t(k)] > 0) w = std::max(w, std::fabs(p.rgb[std::size_t(k)] / old.rgb[std::size_t(k)] - 1));
+            }
+        check(n > 20 && w < 8 * 2.4 / (2 * 255.0), "1000 M: the disc within 3.76 % of 0.83.0's light, under 8 levels (" + f(w) + ", " + std::to_string(n) + " pixels)");
+    }
+    // a star: its colour temperature f x its catalogue temperature (the colour by the black body's ratio, largest channel 255), its V light by the black
+    // body's eye's light at f T over that at T; all light by f^4
+    {   const std::array<int, 3> c{255, 244, 234};
+        const double T = 6000;
+        const StarSeen one = starSeen(c, T, 1.0);
+        check(one.rgb == c && one.dmag == 0 && one.vRatio == 1 && one.boloRatio == 1, "a star at f = 1 is unchanged (0.83.0's dot)");
+        for (double fc : {0.8, 1.3, 3.3}) {
+            const StarSeen q = starSeen(c, T, fc);
+            const std::array<double, 3> a = blackBodyLinearFast(T), b = blackBodyLinearFast(fc * T);
+            const auto lin = [](int v) { const double e = v / 255.0; return e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4); };
+            double l[3], m = 0;
+            for (int k = 0; k < 3; k++) { l[k] = lin(c[std::size_t(k)]) * b[std::size_t(k)] / a[std::size_t(k)]; m = std::max(m, l[k]); }
+            const auto enc = [](double x) { x = std::clamp(x, 0.0, 1.0); return int(std::lround(255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * std::pow(x, 1 / 2.4) - 0.055))); };
+            bool same = true;
+            for (int k = 0; k < 3; k++) same = same && q.rgb[std::size_t(k)] == enc(l[k] / m);
+            check(same, "a star at f = " + f(fc) + ": its colour that of a black body at f T");
+            check(std::fabs(q.vRatio / (visibleVsSunFast(fc * T) / visibleVsSunFast(T)) - 1) < 1e-14 && std::fabs(q.dmag + 2.5 * std::log10(q.vRatio)) < 1e-14, "its V light by the black body at f T");
+            check(std::fabs(q.boloRatio / std::pow(fc, 4) - 1) < 1e-14, "its whole light by f^4");
+        }
+        check(starSeen(c, T, 1.4).rgb[2] > c[2] - 1 && starSeen(c, T, 1.4).rgb[0] < c[0] + 1 && starSeen(c, T, 1.4).dmag < 0, "bluer and brighter falling in");
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 static void testRepeatedImages() {
     for (double rO : {10.0, 1000.0}) {
@@ -3557,6 +3668,7 @@ int main() {
     testConservation();
     testShadow();
     testShift();
+    testCameraShift();
     testRepeatedImages();
     testStars();
     testFlatLimit();

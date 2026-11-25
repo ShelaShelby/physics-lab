@@ -31,6 +31,7 @@ Settings benchSettings(const std::string& id, bool allLight, bool& ok) {
         setFov(s, kFovMax);
         s.allLight = allLight; s.glare = !allLight;
     } else if (id == "ui.resize_blackhole") { setSpin(s, 0.9); gasAllOn(s, false); }
+    else if (id == "blackhole.close_spin") { setSpin(s, kSpinTop); setDistance(s, kDistMin); setFov(s, kFovMax); }   // 0.84.0: then dragged round as blackhole.circle_spin
     else ok = false;
     return s;
 }

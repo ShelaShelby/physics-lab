@@ -257,7 +257,7 @@ private:
     std::uint64_t tableVer_ = 0;
     struct Dot { float x, y, r; render::Color c; };
     bool addDot(const Settings& s, const HoleView& v, double X, double Y, double mag, const std::array<int, 3>& c);   // 0.55.4: one star image by the rule in force
-    void trueNumbers(const HoleView& v);
+    void trueNumbers(const Settings& s, const HoleView& v);
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
     struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool allLight = false; bool operator==(const Key& o) const; } key_;

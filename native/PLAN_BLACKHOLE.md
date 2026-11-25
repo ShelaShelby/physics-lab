@@ -130,7 +130,8 @@ Today: ESA's Gaia map drawn per pixel (render/planet_maps.h Map::Sky, Renderer2D
 - (B) a sky as from the galactic centre or M87: needs a 3D model of stars and dust we do not have; it would be invented. Not proposed.
 - (C) a black background, disc only: honest but loses the lensing of the sky, which is the part that is exact. Offered as a switch ("Sky: on/off").
 - **Bending the map.** Each pixel's ray ends at a direction (θ′, φ′) on the far sky (J15 A.1 step (vi)); the map is sampled there. Lensing keeps surface brightness, so the map's
-  values are used unchanged except for the camera's own shift (A.16): colour temperature × f_c/f′ and brightness × (f_c/f′)⁴ (R19 (52), (53)). To avoid shimmer, the sample is filtered over
+  values are used unchanged except for the camera's own shift (A.16): colour temperature × f_c/f′ and brightness × (f_c/f′)⁴ (R19 (52), (53)). 0.84.0: drawn for the
+  disc and the catalogue stars, each ray its own b (lab.h heldCameraShift); the map is not shifted (it has no colour temperature; ROADMAP). To avoid shimmer, the sample is filtered over
   the ray bundle's footprint (J15 A.3.1, third bullet): in practice a mip level chosen from the map's stretch between neighbouring pixels. The map has about 0.09° a pixel: strongly magnified
   parts near the Einstein ring will be soft, and the guide says so.
 - **Bending the point stars.** Every star has a primary image, a secondary one on the other side inside the Einstein ring, and ever fainter ones hugging the shadow (J15 §3.1; R19 (44));

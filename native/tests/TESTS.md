@@ -16,7 +16,7 @@ Rules for new checks are in CLAUDE.md (Build and test). Git keeps every deleted 
 | check_shell.py:smoke | new | KEEP | ui_smoke | the app starts, each lab draws a frame that is not empty with zero validation errors, the app ends cleanly |
 | check_atom_chip.py:classicside, classicsideglow, classicslice, classicsliceglow | 150 each | KEEP | ui_atom* | GPU vs CPU: the other four Classic scenes (split from classic); 0.80.1: the picture taken at the scene's 30th frame (by the clock, the slower CPU run was caught at another zoom) and the two runs side by side: 43-77 s each on the build machine |
 | check_molecule.py:cardpic, cardpiclight | 172, 86 | KEEP | ui_molecule* | GPU vs CPU: the Density cloud's pictures (split from card) |
-| check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision); 0.79.0: the streaks' factor at spin 0.99, and toneCompare's case "streaks" (the disc's surface, streaks and clump, at most 1 % of pixels over 8 levels); 0.81.0: Film's see-through disc with the streaks (PLBHFILMSOFT, two views; the part took 67 s on the build machine) |
+| check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision); 0.79.0: the streaks' factor at spin 0.99, and toneCompare's case "streaks" (the disc's surface, streaks and clump, at most 1 % of pixels over 8 levels); 0.81.0: Film's see-through disc with the streaks (PLBHFILMSOFT, two views; the part took 67 s on the build machine); 0.84.0: toneCompare's cases close, closespin, pole and closetable (the held camera's own shift at 2.2 GM/c², no spin, spin 0.99, over the pole, the table's pass) |
 | check_blackhole.py:precisioncard | 74 | KEEP | ui_blackhole_sky | GPU vs CPU: the card's light paths against the double-precision reference (split from precision) |
 | check_orbit_ui.py:planets | 22 (new in 0.77.0) | KEEP | ui_orbit_card | GPU vs CPU: six balls with maps (measured brightness, Earth's clouds and air) against tests/planet_picture.cpp |
 
@@ -109,7 +109,7 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_5m2.py:popups | 55 | DELETE | - | pop-ups inside the window at two sizes: pixel layout |
 | check_024.py:densvib | 54 | DELETE | - | the vibrating density: unit-tested (test_density.cpp) |
 | check_blackhole.py:disc | 50 | KEEP | ui_blackhole | the gas disc's controls and the papers' hottest ring |
-| check_blackhole.py:gasrow | 35 | KEEP | ui_blackhole | 0.82.1, a bug the owner saw: the Streaks and clump row reads Off or On and the picture changes; Film draws no locked controls |
+| check_blackhole.py:gasrow | 35 | KEEP | ui_blackhole | 0.82.1, a bug the owner saw: the Streaks and clump row reads Off or On and the picture changes; Film draws no locked controls; 0.84.0: the fine light paths at once and the gas held still (a caption above the row moved it under the click on a loaded machine) |
 | check_blackhole.py:edgeon | 54 | KEEP | ui_blackhole | 0.82.1, a bug the owner saw, GPU vs CPU: the disc seen nearly edge on is smooth (57.5 and 1000 GM/c^2, 0.2 degrees round the plane) |
 | check_orbit_ui.py:time | 45 | DELETE | - | the Time panel's fit: pixel layout |
 | check_realistic.py | 44 | DELETE | - | the Realistic style's colours and draw counts: the Density pictures are compared with the processor in check_molecule card |

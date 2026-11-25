@@ -1,21 +1,24 @@
-# 0.83.0: the benchmark cleaned and renewed
+# 0.84.0: Black Hole Lab: the camera's own shift drawn; the spinning hole's camera named; the two failing full tests
 
 ## What changed
-- Read: CLAUDE.md, REPORT 0.82.1, ROADMAP, DECISIONS (benchmark rules); by grep and line ranges bench_scenes.h/.cpp, bench.h/.cpp (BenchBhMove, behindWorst), ui/benchmark.cpp (set-ups, frames, waitDefs, the table, the saved text), blackhole/lab.h, blackhole_view.h/.cpp (behind, keyOf), atom_bench.cpp, atom_sim (bfield, emit, absorb), shell_atom.cpp (Photons), shell_molecule.cpp (Live), molecule_view.h (liveOn), main.cpp (Settings, liveFrame, the window), test_app, check_6b.py, TESTS.md.
-- Hard list: the 23 scenes of the job moved to All scenes (ids and set-ups the same). 17 kept + 9 new = 26 scenes, 42 waits: 260.2 s planned. The limit is kBenchLimitS = 4.5 minutes. The 3.5-minute floor stays.
-- New: blackhole.dolly_spin, over_poles, everything, edge_on, orbit.saturn_real_fast, atom.emit_all, molecule.live_hot, ui.settings_over_blackhole, ui.resize_blackhole; wait response.blackhole_dolly. Black Hole settings in blackhole/bench_settings.cpp. Dropped: atom.bfield_drag. setParam("bfield") changes only the readout, the spectrum's lines and the Zeeman tables.
-- Tried on the build machine: everything with the glare 4.97 fps, with All light 5.46 (glare kept). live_hot Space-filling 4.8 fps, Ball and stick 14.6 (Space-filling kept; Density does not offer Live). Settings does not pause the Black Hole picture (only a tab page does). emit_all ends a flight still going and lands an absorbed photon at once, so each press starts a jump (7 presses, 7 jumps).
-- Lag column and rule (bench.cpp benchReaches, the table, the in-app table, the rule under it). Lag is NOT behindWorst. behindMs counts from the first frame behind. A moving view asks for a new view every frame, so it never catches up and behindMs grows for the whole movement (9.2 s in edge_on here) on any PC. New: lagMs (blackhole_view.h), how long ago the shown picture's view was the one asked for. Owner decides (ROADMAP).
-- ui.resize_blackhole: SDL_SetWindowSize every 4 frames, from the start size down to the minimum window and back. A maximised window is restored first and maximised again after. Full screen is not resized (its line says so). Put back exactly here (1280 x 800 and 880 x 560). Not tried on Windows.
+- Read: CLAUDE.md, REPORT 0.83.0, ROADMAP; by grep and line ranges kerr.h/.cpp, schwarzschild.h/.cpp, disc.h, gas.h, hot.h, light.h/.cpp, spin_sky.h, spin.h/.cpp, blackhole_view.cpp, lab.h/.cpp, looks.h, kerr_compute.h, kerr_sky.cpp, vk_blackhole.cpp, shaders.h (kLensFS, kKerrFS, kKerrSkyFS), renderer2d.h/.cpp, sky_card.cpp, orbit/sky.h/.cpp, shell_blackhole.cpp, blackhole_learn.cpp, PLAN_BLACKHOLE.md 125-160, bench_scenes, benchmark.cpp, shell_test.cpp, main.cpp; R19's saved text (Fig. 20 caption, (52), (53)).
+- Feasibility: every GPU path already had each ray's b (kKerrSkyFS: the traced ray's R.b; kKerrFS: the table's b in uKA). No new data had to be carried. New uniform uFido = (1/alpha, omega/alpha), f = uFido.x - b uFido.y. At spin 0 the one factor goes into the disc's temperature scale.
+- Drawn (Real): lab.h heldCameraShift (J15 (A.16), beta = 0), discLightSeen (T_obs = g f T), starSeen (colour of a black body at f T, V light by its eye's light). Stars: one f at spin 0; with spin each image's b from the table. The readout's brightest star uses the b = 0 factor. Film unchanged. The sky map is not shifted: it has no colour temperature (ROADMAP).
+- Names and texts: lab.h line 5 (FIDO, held and carried round), Camera caption, Learn, the card ("(not drawn)" gone), Film's Shifts label, comments in disc.h, schwarzschild.h, gas.h, hot.h.
+- gasrow: in Film (spin 0.6) a caption "Working out the light paths" stood above the row. Under load it vanished between the frame that read the row's place and the press, so the click missed (reproduced: 4 runs at once). Fix: PL_BH_SPINWAIT, and gasrun=off so the gas time is the same in every run. Pause/Play check reads "Play". The checks are unchanged.
+- atom.all_classic: the scene turned by the real frame times, so the card's and the processor's runs were at different angles at frame 30 (reproduced under CPU stress: exactly GitHub's 5402). Fix: with PL_BENCH_SHOT_FRAME and PL_FIXED_DT the moves follow the frame count (benchmark.cpp). Under the same stress: 128 of 256000.
+- Benchmark: blackhole.close_spin (Hard, 27 scenes, 266.7 s). blackhole.extreme reaches the same view but drags the spin for 40 % of its time and turns by setting angles.
 
 ## Tests run
-- test_app: 202,363 checks, 0 failed. New: the Hard list's ids in the written order, every moved id in All only, each new Black Hole scene's settings read back, emit_all's atom and a started jump, the 4.5-minute limit, the lag rule (7.9 ms at 255 Hz reads no, 7.8 yes), the lag column and its rule text. They do not build on 0.82.1 (benchReaches has no lag, no bench_settings.h). The old test binary on the new lists failed 5 checks.
-- Each new scene and the new wait ran once here (lavapipe, numbers not the owner's): all started, moved and ended cleanly. The wait took 11 to 14 s here.
-- check_6b.py benchrestore by hand (now with ui.resize_blackhole): 4 checks, 0 failed, 67 s. check.sh job: quick 18 of 18, ui_smoke passed.
+- blackhole_tests: 1141 checks, 0 failed. New testCameraShift: a = 0 against (1 - 2M/r)^(-1/2) and R19 Fig. 20's caption; spin against the FIDO from the textbook metric (a 0.3-0.99, r 2.2-100, 4 theta, 5 b); disc pixels at g f T; all light by f^4; stars. It does not build on 0.83.0.
+- GPU vs CPU (toneCompare, at most 1 % over 8 levels): close (spin 0, 2.2, 360 deg) 0.39 %; closespin 0.15 %; pole 0.07 %; closetable (kKerrFS) 0.004 %.
+- Against a 0.83.0 build: Film pictures identical to the pixel (2 views); Real at 1000 M: 0 pixels over 8 levels (spin 0 and 0.9).
+- check_blackhole sky 59 s and gasrow 39 s (run_group); gasrow 4 of 4 with 4 at once; check_atom_chip classic passed; app_tests 202,365, 0 failed; close_spin ran once; check.sh job: quick 18 of 18, ui_smoke passed.
 
 ## Not done
-- The 1 % lows of the job were not checked against the owner's 0.82.0 file. It is not in the repo. The list follows the job.
-- The Orbit, Molecule and Settings set-ups are not read back in test_app (it links no Orbit or Molecule Lab). Their report lines say what ran.
+- check_sources.py: only data/blackhole/arxiv is checked out here; it lists the rest as missing. The R19 file's sha256 matches SOURCES.md.
 
 ## References changed on purpose
-- test_app: the list's counts (26 / 65), the ids, the planned time (at most 270 s), kBenchAtomScenes 47 (atom.emit_all), the report row (a "-" lag column), the texts' check by id instead of index.
+- test_app: 27 Hard and 66 scenes, the id list (+blackhole.close_spin). check_blackhole: the tone cases' set (+4); close's pixel floor 2000 (the disc covers 5,120 pixels from 2.2 M, spin 0).
+- New test, my own bound corrected before the GPU work: 1000 M was first written as 0.5 % (not derived). It is now 3.76 %, derived from 8 levels; measured 0.79 %.
+- ROADMAP had no line for this job; one added (the map's colour temperature).

@@ -778,6 +778,7 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     u.i("uDN", dn, 3);
     u.f("uDFix", L.discFix, 4);
     u.f("uFilmSoft", L.filmSoft, 4);                                 // 0.81.0
+    u.f("uFido", L.fido, 2);                                         // 0.84.0
     i1("uRaw", raw ? 1 : 0);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
@@ -795,6 +796,7 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     const auto f1 = [&](const char* n, double v) { const float x = static_cast<float>(v); u.f(n, &x, 1); };
     const auto i1 = [&](const char* n, int v) { u.i(n, &v, 1); };
     u.f("uCam", L.skyCam, 4);
+    u.f("uFido", L.fido, 2);                                         // 0.84.0
     u.f("uMet", L.skyMet, 4);
     u.f("uMet2", L.skyMet2, 4);
     setMat3T(p, "uKs", L.kM);

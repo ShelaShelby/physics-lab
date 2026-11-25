@@ -89,6 +89,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "ui.resize_blackhole", BenchKind::UiResizeBlackHole, -1, "Panels, the window resized over the Black Hole Lab",
             "A feeding hole spinning at 0.9, the disc on, the streaks and the clump: the window's size changed every 4 frames from its size at the start down to the "
             "smallest window and back, as a corner is dragged. Each size makes the swapchain and the pictures again. The window is put back after.");
+        // 0.84.0: the held camera's own shift drawn ray by ray (blackhole.extreme reaches the same view but drags the spin for 40 % of its time and turns by setting the angles)
+        add(true, "blackhole.close_spin", BenchKind::BlackHoleCloseSpin, -1, "Black Hole Lab, circling at the closest distance and the top spin",
+            "A feeding hole at spin 0.99 (the top), the disc on, Real, the camera at 2.2 GM/c\xC2\xB2 (the closest) with a 360\xC2\xB0 view (the widest): dragged round 2 rad "
+            "a second and up or down for 0.6 s, then let go to glide 0.6 s, over and over. Each ray's colour and light carry the camera's own shift.");
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
         add(false, "orbit.saturn", BenchKind::OrbitSaturn, -1, "Orbit Lab, Saturn close up, the camera turning",
             "Saturn followed, true scale, 3D, zoom 4.1 (log10, the control goes to 5.5; the rings and part of the planet fill the picture), the camera turning 0.5 rad a "

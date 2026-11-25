@@ -67,7 +67,7 @@ void Renderer2D::lensSky(const LensSky& L) {
 }
 
 bool Renderer2D::lensSameView(const LensSky& P, const LensSky& L, bool ksky, bool skyDrawn, double width, double lastPtW) {
-    return P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && P.bright == L.bright && P.bend == L.bend &&
+    return P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && std::equal(L.fido, L.fido + 2, P.fido) && P.bright == L.bright && P.bend == L.bend &&
                       P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width == lastPtW &&
                       P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
                       P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&

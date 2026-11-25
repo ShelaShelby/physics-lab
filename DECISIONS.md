@@ -3,6 +3,10 @@
 A record of the owner's decisions, one or two lines each. Sessions do not have to read it: CLAUDE.md holds the rules in force (23 Nov 2026).
 A line marked "Superseded" is kept for the record only. Older wording is in git history.
 
+## 25 Nov 2026
+- All problems found by the outside review of 25 Nov 2026 are to be fixed.
+- In the realistic choice the planets are shown as they really are: true dimming with distance.
+
 ## 23 Nov 2026
 - One short CLAUDE.md holds the rules. DECISIONS.md is a record only.
 - No fixed Opus/Haiku split. The session decides when a helper agent is worth it and checks what a helper reports.

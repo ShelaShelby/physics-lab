@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.84.0", "Black Hole Lab: your own place changes the colours",
+     "Held still near the hole, you see the light that falls in towards you bluer and brighter. The picture now draws it: every part of the disc and every star "
+     "is seen at its colour temperature times the card's factor, its light by the fourth power. Without spin it is one factor for the whole picture. Round a "
+     "spinning hole each ray has its own: light that comes round with the turning space is less blue than light that comes against it. The camera there is "
+     "named for what it is: held at its distance and carried round by the turning space. The automatic exposure stays, so the picture turns bluer more than "
+     "brighter, and the card's numbers say how bright it really is. The Film look does not change: the film draws no colour or brightness shifts. The faint "
+     "sky map is not shifted: it has no colour temperature. A new benchmark scene circles the spinning hole at the closest distance."},
     {"0.83.0", "The benchmark renewed",
      "The benchmark tests the hardest things in every lab again; scenes that run with room to spare moved to All scenes. New: the Black Hole Lab with the wheel "
      "moving in and out, dragged over both poles, every heavy option at once, and Sagittarius A*'s disc edge on; a fly-by of Saturn with Real physics at the "

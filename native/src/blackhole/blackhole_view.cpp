@@ -23,6 +23,7 @@
 #include "blackhole/light.h"
 #include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
+#include "blackhole/kerr.h"
 #include "blackhole/kerr_closed.h"
 #include "blackhole/gas.h"
 #include "orbit/sky.h"
@@ -50,7 +51,7 @@ void glareVeilFn(int W, int H, double cx, double cy, double K, const std::vector
 }
 // 0.55.4: the sRGB encoding of a linear opacity (IEC 61966-2-1), so a dot laid over black at this opacity shows the star's true light
 // 0.55.6: a star image found on a worker thread, laid down afterwards in the catalogue's order (its place, magnitude, the star, its order, behind the disc)
-struct Cand { double X, Y, mag; int star, order; bool hidden; };
+struct Cand { double X, Y, mag; int star, order; bool hidden; double f = 1; };   // (0.84.0: f, the held camera's own shift for this image's ray)
 constexpr int kStarChunk = 64;                       // stars per job
 double encodeSrgb(double l) { l = std::clamp(l, 0.0, 1.0); return l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055; }
 }  // namespace
@@ -59,6 +60,14 @@ float catalogueBrightestMag() { return brightestMag(); }
 
 // One star image as a dot (both pictures' rule): Shown: the night sky's tone map (orbit/sky.h starDraw); 0.55.4, the true exposure (light.h): the star's own
 // light on the disc's scale, spread over its dot, at the screen's white; an image below the screen's faintest step is not drawn (it would draw nothing).
+// 0.84.0: a catalogue star seen by the held camera at its own shift f (lab.h starSeen): the colour of a black body at f x the colour bucket's temperature
+// (orbit/sky.h bucketBV, bvTemperatureK), its V magnitude by the black body's eye's light at f T. Spin 0: one f for every image; a spinning hole: each
+// image's own (its ray's b from the table at the image's place). Gravity's bending off: no hole, no shift.
+static StarSeen starSeenBucket(int bucket, double f) {
+    const orbit::Sky& S = orbit::skyData();
+    const int k = std::clamp(bucket, 0, orbit::kSkyColourBuckets - 1);
+    return starSeen(S.colours[std::size_t(k)], orbit::bvTemperatureK(orbit::bucketBV(k)), f);
+}
 bool BlackHoleView::addDot(const Settings& s, const HoleView& v, double X, double Y, double mag, const std::array<int, 3>& c) {
     orbit::StarDraw d;
     double a;
@@ -84,8 +93,16 @@ void BlackHoleView::glareRest(const Key& k) {
 }
 
 // 0.55.4: the readout's numbers for the true exposure (light.h trueSkyNumbers): the brightest catalogue star at the middle of the picture beside the disc's brightest part
-void BlackHoleView::trueNumbers(const HoleView& v) {
-    st_.brightMag = brightestMag();
+void BlackHoleView::trueNumbers(const Settings& s, const HoleView& v) {
+    static const int bucket = [] {                                        // the brightest catalogue star's colour bucket
+        int k = 0;
+        float b = 99;
+        for (const orbit::SkyStar& t : orbit::skyData().stars) {
+            if (t.mag < b) { b = t.mag; k = t.bucket; }
+        }
+        return k;
+    }();
+    st_.brightMag = brightestMag() + starSeenBucket(bucket, s.bend ? heldCameraShift(s, 0) : 1.0).dmag;   // 0.84.0: as the camera sees it at the middle (b = 0)
     st_.ptSr = 1 / (v.K * v.K);
     st_.trueSky = trueSkyNumbers(st_.brightMag, st_.look.brightY, st_.look.white, st_.ptSr);
 }
@@ -244,7 +261,7 @@ DiscPixel BlackHoleView::spinPixel(const Settings& s, const HoleView& v, double 
     const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
     o.hit.order = sd.order; o.hit.r = sd.r; o.hit.g = sd.g; o.hit.b = h.b; o.hit.Lz = h.b;
     if (sd.order < 0 || !light) return o;
-    discLight(s, sd.r, sd.g, o);                                             // 0.55.3: by the look's rule (lab.h)
+    discLightSeen(s, sd.r, sd.g, h.b, o);                                    // 0.55.3: by the look's rule (lab.h); 0.84.0: the camera's own shift for this ray's b
     return o;
 }
 
@@ -386,6 +403,10 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         kO[0] = static_cast<float>(dot(et, rows[0])); kO[1] = static_cast<float>(dot(et, rows[1]));
         kO[2] = static_cast<float>(dot(ep, rows[0])); kO[3] = static_cast<float>(dot(ep, rows[1]));
     };
+    if (lookRule(s.look).shifts && s.spin > 0) {                            // 0.84.0: the held camera's own shift per ray, f = 1 / alpha - b omega / alpha (lab.h heldCameraShift)
+        const KerrMetric m = kerrMetric(s.spin, s.dist, s.pitch);
+        L.fido[0] = static_cast<float>(1 / m.alpha); L.fido[1] = static_cast<float>(m.omega / m.alpha);
+    }
     if (skyUse_ && s.spin > 0 && s.bend) {                                   // 0.56.0: the spinning hole per pixel on the card (no table)
         L.kerrSky = true;
         L.bend = true;
@@ -487,6 +508,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.rIn = g.rIn; L.rOut = g.rOut;
         const DiscPhys p = discPhys(s);
         L.tScale = std::pow(p.fluxScale() / stefanBoltzmann(), 0.25);       // T = tScale F(r)^(1/4), F for Mdot = M = 1 (disc.h)
+        L.tScale *= heldCameraShift(s, 0);                                  // 0.84.0: spin 0: the camera's own shift is one factor for every ray (lab.h)
         L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
         toneFields(L, s);
         if (lookUse_) { L.whiteMode = 1; L.expStep = 4; }                   // 0.56.0: the card finds the exposure (spin 0 too; 0.70.0: your choice too)
@@ -555,11 +577,13 @@ bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, do
         const auto t0 = std::chrono::steady_clock::now();
         dots_.clear();
         st_.trueShown = st_.trueHidden = 0;
-        trueNumbers(v);
+        trueNumbers(s, v);
         const orbit::Sky& S = orbit::skyData();
         const Vec3 hole = viewMiddle(v);
         const float cap = brightestMag();
         int stars = 0, images = 0, extra = 0, capped = 0;
+        std::array<StarSeen, orbit::kSkyColourBuckets> seen;               // 0.84.0: spin 0: the camera's one shift for every image
+        for (int b = 0; b < orbit::kSkyColourBuckets; b++) seen[std::size_t(b)] = starSeenBucket(b, s.bend ? heldCameraShift(s, 0) : 1.0);
         // 0.55.6: the stars' images on all cores (each star on its own), then laid down in the catalogue's order as before: the same dots in the same order
         const std::vector<orbit::SkyStar>& all = S.stars;
         const int nStar = static_cast<int>(all.size()), nChunk = (nStar + kStarChunk - 1) / kStarChunk;
@@ -588,7 +612,8 @@ bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, do
                 if (q.hidden) { hidden++; continue; }
                 double mag = q.mag;
                 if (mag < cap) { mag = cap; capped++; }
-                if (!addDot(s, v, q.X, q.Y, mag, S.colours[all[static_cast<std::size_t>(q.star)].bucket])) continue;
+                const StarSeen sn = seen[std::size_t(std::clamp(all[static_cast<std::size_t>(q.star)].bucket, 0, orbit::kSkyColourBuckets - 1))];   // 0.84.0
+                if (!addDot(s, v, q.X, q.Y, mag + sn.dmag, sn.rgb)) continue;
                 images++;
                 if (q.order > 0) extra++;
                 any = true;
@@ -676,7 +701,7 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
         const auto t0 = std::chrono::steady_clock::now();
         dots_.clear();
         st_.trueShown = st_.trueHidden = 0;
-        trueNumbers(v);
+        trueNumbers(s, v);
         const orbit::Sky& S = orbit::skyData();
         const float cap = brightestMag();
         const double ph = cameraPhi(v), c = std::cos(ph), sn = std::sin(ph);
@@ -687,6 +712,7 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
         const int nStar = static_cast<int>(all.size()), nChunk = (nStar + kStarChunk - 1) / kStarChunk;
         std::vector<std::vector<Cand>> found(static_cast<std::size_t>(nChunk));
         const SpinStars& SS = *spinStars_;
+        const bool shifts = lookRule(s.look).shifts;                         // 0.84.0 (Film: none)
         parallelFor(nChunk, [&](int ck) {
             std::vector<SpinImage> sc;
             std::vector<Cand>& out = found[static_cast<std::size_t>(ck)];
@@ -703,7 +729,8 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
                     double X, Y;
                     if (!viewScreen(v, dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
                     const bool behind = disc && !skyEngine_ && spinPixel(s, v, X, Y, false).hit.order >= 0;   // behind the opaque disc (0.56.0: the card's own disc hides it)
-                    out.push_back({X, Y, mag, k, 0, behind});
+                    const double fb = shifts ? heldCameraShift(s, spin_->lookup(im.psi, im.chi).b) : 1.0;     // 0.84.0: this image's ray's own b
+                    out.push_back({X, Y, mag, k, 0, behind, fb});
                 }
             }
         });
@@ -715,7 +742,8 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
                 if (q.hidden) { hidden++; continue; }
                 double m2 = q.mag;
                 if (m2 < cap) { m2 = cap; capped++; }
-                if (!addDot(s, v, q.X, q.Y, m2, S.colours[all[static_cast<std::size_t>(q.star)].bucket])) continue;
+                const StarSeen sn = starSeenBucket(all[static_cast<std::size_t>(q.star)].bucket, q.f);   // 0.84.0
+                if (!addDot(s, v, q.X, q.Y, m2 + sn.dmag, sn.rgb)) continue;
                 images++;
                 any = true;
             }
@@ -1435,7 +1463,12 @@ void toneCompare(render::Renderer2D& R) {
     // with no footprint (kLensFS uGasFoot 0); the processor's reference: discPixel's surface hit, phi and t at its swept angle (DiscTable::lookupT), gas.h's
     // factor and clump, T x (S (1 + A n))^(1/4) seen at g T. The same limit.
     struct Tc { const char* name; double spin, dist, fov, tiltDeg; };
-    for (const Tc& c : {Tc{"near", 0, 20, 90, 0}, Tc{"far", 0, 50, 45, 85}, Tc{"spin", 0.9, 30, 60, 80}, Tc{"streaks", 0, 50, 45, 0}}) {
+    // 0.84.0: the held camera's own shift (lab.h heldCameraShift) at the closest distance (kDistMin) with no spin and the top spin (kSpinTop), and from over
+    // the pole (8 degrees from the axis, the top spin): the same limit
+    for (const Tc& c : {Tc{"near", 0, 20, 90, 0}, Tc{"far", 0, 50, 45, 85}, Tc{"spin", 0.9, 30, 60, 80}, Tc{"streaks", 0, 50, 45, 0},
+                        Tc{"close", 0, kDistMin, kFovMax, 0}, Tc{"closespin", kSpinTop, kDistMin, 150, 0}, Tc{"pole", kSpinTop, kDistMin, 150, 8},
+                        Tc{"closetable", kSpinTop, kDistMin, 150, 0}}) {
+        const bool table = std::strcmp(c.name, "closetable") == 0;      // 0.84.0: the table's pass (kKerrFS, the fallback without the sky pass), at the processor's exposure
         const bool streaks = std::strcmp(c.name, "streaks") == 0;
         BlackHoleView view;
         Settings u = settingsDefaults();
@@ -1449,7 +1482,7 @@ void toneCompare(render::Renderer2D& R) {
         if (s.spin > 0) view.ensureSpin(s, true);
         view.prepare(s, W, H, W / 2.0, H / 2.0, nullptr);
         const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
-        view.skyUse_ = s.spin > 0; view.lookUse_ = true;
+        view.skyUse_ = s.spin > 0 && !table; view.lookUse_ = true;
         if (s.spin > 0) view.ensureSkyF(s.spin);
         if (streaks) { view.gasT = kSkyGasT; g_gasHookOff = false; }
         render::Renderer2D::LensSky L = view.lensFor(s, v);
@@ -1459,8 +1492,8 @@ void toneCompare(render::Renderer2D& R) {
         R.skyWhiteWait();                                               // (a read-back still under way from before: taken first, so this one is ours)
         R.begin(W, H); R.lensSky(L); endFbo(R, W, H, f);
         R.skyWhiteWait();
-        DiscLook cl = cardReadLook(R.skyStats());
-        const bool ok = cl.any && finishLook(cl, s);
+        DiscLook cl = table ? view.st_.look : cardReadLook(R.skyStats());
+        const bool ok = table ? cl.any && L.kerr && !L.kerrSky : cl.any && finishLook(cl, s);
         ToneExposure e; e.k = cl.k; e.lw = cl.lw; e.ok = ok;
         std::vector<int> ord(static_cast<std::size_t>(W) * H, -1);
         std::vector<std::array<double, 3>> ref(static_cast<std::size_t>(W) * H);
@@ -1481,7 +1514,7 @@ void toneCompare(render::Renderer2D& R) {
                     double tl = 0;
                     if (!view.discTable()->lookupT(d / v.K - view.discTable()->alphaSh(), psi, tl)) { ord[at] = -2; continue; }
                     const double te = kSkyGasT - tl, gf = streakField().factor(q.hit.r, phi, te, 0) * (1 + clp.A * clp.density(q.hit.r, phi, te));
-                    q.rgb = blackBodyLinearFast(q.hit.g * discPhys(s).temperature(q.hit.r) * std::pow(gf, 0.25));
+                    q.rgb = blackBodyLinearFast(q.hit.g * heldCameraShift(s, q.hit.b) * discPhys(s).temperature(q.hit.r) * std::pow(gf, 0.25));   // (0.84.0: the camera's own shift)
                 }
                 if (q.hit.order >= 0) ref[at] = toneRGB(q.rgb, e);
             }
@@ -1679,7 +1712,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                             const double r = ce.u[k] > 0 ? 1 / ce.u[k] : 0;
                             if (!(r >= g.rIn && r <= g.rOut)) continue;
                             DiscPixel q;
-                            discLight(s, r, discShiftKerr(r, ce.b, s.spin), q);
+                            discLightSeen(s, r, discShiftKerr(r, ce.b, s.spin), ce.b, q);   // (0.84.0: with the camera's own shift)
                             ys.push_back(q.Y); ym = std::max(ym, q.Y);
                             break;
                         }

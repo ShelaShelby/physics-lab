@@ -1115,6 +1115,9 @@ static void testBenchNewScenes() {
               ok && g.preset == "sgra" && g.disc && near(g.feed, 0.11) && near(g.dist, 57.5) && near(g.pitch, 1.575) && std::fabs(g.pitch - 1.5707963) < 0.01 && bh::gasOn(g) && g.gasClump && g.gasPattern);
     const bh::Settings r = bh::benchSettings("ui.resize_blackhole", false, ok);
     checkTrue("ui.resize_blackhole: spin 0.9, the disc on, the moving gas", ok && near(r.spin, 0.9) && r.disc && bh::gasOn(r));
+    const bh::Settings cs = bh::benchSettings("blackhole.close_spin", false, ok);   // 0.84.0
+    checkTrue("blackhole.close_spin: a feeding hole at kSpinTop, the disc on, Real, at kDistMin with kFovMax", ok && cs.preset == bh::kFeedingKey && cs.disc && cs.look == bh::Look::Real &&
+              near(cs.spin, bh::kSpinTop) && near(cs.dist, bh::kDistMin) && near(cs.fovDeg, bh::kFovMax));
     bh::benchSettings("no.such", false, ok);
     checkTrue("benchSettings: an unknown id says so", !ok);
     // atom.emit_all: radium-226 (the heaviest with level clouds), every electron, Glow, Ultra, Cloud 3D, Emit and Absorb on offer (level clouds)
@@ -1137,18 +1140,19 @@ static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
     // 0.83.0 (on purpose, the owner's rule of 24 Nov 2026): 23 scenes whose 1 % low in his 0.82.0 run was at least 1.5 x 255 Hz moved to All scenes; 9 new hard
     // scenes (atom.bfield_drag dropped: a field change remakes nothing heavy). REPORT 0.83.0.
-    checkTrue("benchmark lists (on purpose, 0.83.0: the Hard list cleaned and renewed): 26 Hard scenes first, 65 in All", app::kBenchHardScenes == 26 && app::kBenchAllScenes == 65 && int(v.size()) == 65);
+    checkTrue("benchmark lists (on purpose, 0.84.0: blackhole.close_spin added to the Hard list; 0.83.0: 26 and 65): 27 Hard scenes first, 66 in All", app::kBenchHardScenes == 27 && app::kBenchAllScenes == 66 && int(v.size()) == 66);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[65] = {
+    static const char* const ids[66] = {
         // the Hard list (0.83.0): the 17 kept, in the owner's order, then the new ones a to j of the job (f dropped)
         "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas", "blackhole.film_soft", "blackhole.circle_spin",
         "atom.nucleus_zoom", "atom.nucleon", "molecule.vib_density", "atom.slice_dirac_drag", "atom.jump_all", "ui.settings_open", "atom.side_all_glow", "orbit.real_fast",
         "orbit.heaviest", "atom.all_enlarged",
         "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "blackhole.edge_on", "orbit.saturn_real_fast", "atom.emit_all", "molecule.live_hot",
         "ui.settings_over_blackhole", "ui.resize_blackhole",
+        "blackhole.close_spin",                                                  // 0.84.0
         // moved to All scenes in 0.83.0 (their ids and set-ups the same)
         "orbit.saturn", "orbit.earth", "orbit.sky", "orbit.journey", "atom.slice_drag", "atom.slice_super_drag", "atom.slice_all_drag", "atom.side_all_classic",
         "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.nucleus_density", "molecule.density",
@@ -1206,6 +1210,7 @@ static void testBenchSceneNumbers() {
     // 0.81.0 (on purpose): 39 (blackhole.film_soft), 335.1 s: 5.6 minutes (REPORT 0.81.0)
     // 0.82.0 (on purpose): 40 (blackhole.circle_spin) and 39 waits (response.blackhole_tilt), 346.4 s: 5.8 minutes (REPORT 0.82.0)
     // 0.83.0 (on purpose, the owner's decision of 24 Nov 2026): the limit is fixed at 4.5 minutes; 26 scenes and 42 waits (response.blackhole_dolly): 260.2 s
+    // 0.84.0 (on purpose): 27 scenes (blackhole.close_spin) and 42 waits: 266.7 s, under the same 4.5 minutes
     checkTrue("benchmark run: planned within the owner's fixed 4.5 minutes (0.83.0; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 4.5 * 60 && near(app::kBenchLimitS, 270) &&
               app::kBenchResponseActions == 42);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));

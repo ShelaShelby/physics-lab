@@ -115,7 +115,7 @@ std::string filmDiscText() {
     const blackhole::FilmChoices& c = blackhole::filmChoices();
     return fmt::commas(c.discT) + " K all over (one temperature), thin, not feeding; from " + sig(c.rIn, 3) + " to " + sig(c.rOut, 4) + " GM/c², the edges of the paper's disc figure (Figure 13)";
 }
-const char* kFilmShifts = "None: no colour shift and no brightness shift from the gas's speed and gravity (the film's choice, Figure 15a)";
+const char* kFilmShifts = "None: no colour shift and no brightness shift from the gas's speed and gravity, and none from your own place (the film's choice, Figure 15a)";
 std::string filmColourText() { return "The paper's white balance: a " + fmt::commas(blackhole::filmChoices().whiteT) + " K black body drawn white (appendix A.6), by the app's CIE 1931 eye in place of the film stock's colours"; }
 const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the disc's bright parts, laid over the sky (the film's lens data is not published)";
 const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the film's Houdini volume disc, the real lens flare and the film's colour grading are not published and are not here.";
@@ -191,7 +191,9 @@ void blackholeCard(AppState& app, Panel& p) {
     }
     std::snprintf(b, sizeof b, "%.4g × the rate of a clock far away", r.clockRate);
     pStat(p, "Your clock", b);
-    std::snprintf(b, sizeof b, "%.4g × bluer, %.4g × brighter (not drawn)", r.blueshift, r.brightening);
+    if (sv.look == blackhole::Look::Film) std::snprintf(b, sizeof b, "%.4g × bluer, %.4g × brighter (Film does not draw it)", r.blueshift, r.brightening);
+    else if (r.spin > 0) std::snprintf(b, sizeof b, "%.4g × bluer, %.4g × brighter straight ahead; drawn ray by ray (light coming round with the turning space less, against it more)", r.blueshift, r.brightening);
+    else std::snprintf(b, sizeof b, "%.4g × bluer, %.4g × brighter, drawn (the same for all light)", r.blueshift, r.brightening);   // 0.84.0: drawn (until 0.83.0 "not drawn")
     pStat(p, "Starlight reaching you", b);
     if (r.spin == 0 && r.dist < r.photonOrbitM) pCaption(p, "You are inside the photon orbit (" + sig(r.photonOrbitM, 2) + " GM/c²): the shadow covers more than half your sky.");
     if (r.spin > 0 && r.skyShare > 0.5) pCaption(p, "The shadow covers more than half your sky.");
@@ -374,7 +376,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (pButton(p, "blackhole.reset", "Reset view", Face::Quiet)) { blackhole::resetView(s); blackhole::stopMotion(app.bhCam); }
         pCaption(p, "Drag to circle the hole, as round a planet in the Orbit Lab: left and right go round it, up and down go over or under it. Let go and it glides "
                     "a little. The wheel or + − move you closer or farther.");
-        pCaption(p, "The camera hovers at each place you put it: it is not flying or orbiting (a moving camera sees a different sky).");
+        if (shownSpin > 0) pCaption(p, "The camera is held at each place you put it and carried round by the turning space: it is not falling or orbiting (a moving camera sees a different sky).");
+        else pCaption(p, "The camera hovers at each place you put it: it is not falling or orbiting (a moving camera sees a different sky).");
     }
     if (section("disc", "Gas disc (model)", true)) {                       // 0.55.1
         int on = (s.disc || film) ? 1 : 0;
@@ -491,7 +494,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 const double rEq = blackhole::staticLimit(shownSpin, 1.5707963267948966), rPole = blackhole::staticLimit(shownSpin, 0);
                 pCaption(p, "Inside the ergosphere, out to " + sig(rEq, 3) + " GM/c² in the disc's plane and " + sig(rPole, 3) + " GM/c² (the horizon) at the poles, nothing can stand still: "
                             "space there drags everything round the axis (Bardeen, Press & Teukolsky 1972). Farther out something could hover without turning, but this lab's camera "
-                            "turns with the dragged space wherever it is (a locally non-rotating observer). The picture is one instant; the sky's turning with time is not shown.");
+                            "is held at its distance and carried round by the turning space wherever it is (a locally non-rotating observer). The picture is one instant; the sky's turning with time is not shown.");
             }
         }
         pHeading(p, "Gas disc");
@@ -631,7 +634,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: flat, thin, opaque, each face a perfect black body, steady." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
                                : "A calculated model: " + kind + " with no gas around it. Real black holes have gas; switch on the gas disc to see the standard model of one.", false);
             pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars" + std::string(s.disc ? ", the disc's shape, its colour shift and brightness by the model" : "") +
-                        ". Soft: the sky map's own sharpness (about 0.09° a map pixel). Not drawn: the camera's own shift of colour and brightness (numbers on the card).", false);
+                        ". Soft: the sky map's own sharpness (about 0.09° a map pixel). Drawn: your own shift of colour and brightness, exact for a camera held still at this distance "
+                        "(not falling, not orbiting). Not shifted: the faint sky map, which has no colour temperature.", false);
         }
     }
 }

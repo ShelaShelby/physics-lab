@@ -66,6 +66,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Celestial mechanics in the Data panel: ephemeris tables, an integrator drift check, Lagrange points, Kirkwood gaps, a Lambert solver with porkchop plots.
 
 ## Black Hole Lab
+- **source needed**: a colour temperature (or spectrum) for each pixel of the Gaia sky map, so the held camera's own shift can change the map's colour and light as it does the stars' (0.84.0: the map is not shifted; shown only with Sky beside the disc: Shown).
 - **fix**: the GPU light paths crash the owner's Radeon driver when their pipeline is made (off there by the guard). The crash is in the "step" part of kKerrTableCS: split it into smaller parts.
 - rest.blackhole_glare is busy at rest on the owner's PC (45 % CPU). Suspected cause: the moving gas remakes the glare on the CPU. Check his next run with the gas off.
 - Scenes below 255 Hz in the owner's 0.68.1 run: film_tilt, real_move, extreme, all_light (1 % low 152-172). Their slow frames mostly wait for a swapchain image (6-9 ms, 2 images). Measure first.

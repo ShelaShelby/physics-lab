@@ -293,6 +293,33 @@ void discLight(const Settings& s, double r, double g, DiscPixel& o) {
     o.rgb = blackBodyLinearFast(o.Tobs);
     o.Y = visibleVsSunFast(o.Tobs);
 }
+// 0.84.0 (lab.h): the held camera's own shift, the disc and the stars as it sees them
+double heldCameraShift(const Settings& s, double b) {
+    if (!lookRule(s.look).shifts) return 1;                            // Film: no shifts (looks.h)
+    return hoverShift(s.spin, s.dist, s.pitch, b);                      // J15 (A.16), beta = 0: (1 - b omega) / alpha at the camera (r = dist, theta = pitch)
+}
+void discLightSeen(const Settings& s, double r, double g, double b, DiscPixel& o) { discLight(s, r, g * heldCameraShift(s, b), o); }
+StarSeen starSeen(const std::array<int, 3>& rgb, double T, double f) {
+    StarSeen o;
+    o.rgb = rgb;
+    if (f == 1 || !(T > 0) || !(f > 0)) return o;
+    const std::array<double, 3> a = blackBodyLinearFast(T), b = blackBodyLinearFast(f * T);
+    double l[3], m = 0;
+    for (int k = 0; k < 3; k++) {
+        const double e = rgb[std::size_t(k)] / 255.0, lin = e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4);   // IEC 61966-2-1
+        l[k] = a[std::size_t(k)] > 0 ? lin * b[std::size_t(k)] / a[std::size_t(k)] : 0;
+        m = std::max(m, l[k]);
+    }
+    for (int k = 0; k < 3; k++) {
+        const double x = m > 0 ? std::clamp(l[k] / m, 0.0, 1.0) : 0;
+        o.rgb[std::size_t(k)] = int(std::lround(255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * std::pow(x, 1 / 2.4) - 0.055)));
+    }
+    const double v0 = visibleVsSunFast(T);
+    o.vRatio = v0 > 0 ? visibleVsSunFast(f * T) / v0 : 1;
+    o.boloRatio = f * f * f * f;
+    o.dmag = -2.5 * std::log10(o.vRatio);
+    return o;
+}
 Vec3 discAxisView(const HoleView& v) { return Vec3{0, -v.sb, v.cb}; }
 
 DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light, bool plane) {
@@ -310,7 +337,7 @@ DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, c
     const Vec3 N = discAxisView(v);
     o.hit = discRayTable(t, x, N.z, nx * N.x + ny * N.y, ny * N.x - nx * N.y, g);
     if (o.hit.order < 0 || !light) return o;
-    discLight(s, o.hit.r, o.hit.g, o);
+    discLightSeen(s, o.hit.r, o.hit.g, o.hit.b, o);                     // 0.84.0: with the camera's own shift (spin 0: one factor for all rays)
     return o;
 }
 

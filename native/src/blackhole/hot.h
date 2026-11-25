@@ -17,8 +17,8 @@
 //   K_2(1/Theta_e), as in Leung et al.: REPORT 0.80.0.) Its absorption by Kirchhoff's law (25): alpha = j / B_nu(T_e).
 //   Power law (26) and its absorption (27); (27) prints 3^(p/2) and Gamma((3p+12)/12). Both coefficients are checked in the tests against a direct
 //   integral of the one-electron synchrotron spectrum over the power-law electrons (Rybicki & Lightman's method), which decided the factor (REPORT 0.80.0).
-// THE TRANSFER. I_nu / nu^3 is the same along a ray (BL06 (3): N_nu ~ I_nu / nu^3). With g = nu_obs / nu_gas (nu_obs at rest far away; the hovering camera's
-//   own factor is a readout only, as for the disc: disc.h "THE SHIFT"), the affine length lambda with p_t = -1 and the gas's proper length lambda / g:
+// THE TRANSFER. I_nu / nu^3 is the same along a ray (BL06 (3): N_nu ~ I_nu / nu^3). With g = nu_obs / nu_gas (nu_obs at rest far away; the held camera's
+//   own factor is not applied here: this model is not drawn in the app. The drawn disc has it since 0.84.0: disc.h "THE SHIFT"), the affine length lambda with p_t = -1 and the gas's proper length lambda / g:
 //   dI_obs / dlambda = g^2 j(nu_obs / g) - (alpha(nu_obs / g) / g) I_obs. Each step adds g^3 (j / alpha) (1 - exp(-dtau)) exp(-tau), tau the optical depth
 //   between the step and the camera (exact for a step of constant j and alpha).
 // THE RAY (a = 0): the lab's ray (disc.h "WHERE A RAY MEETS THE DISC"): it moves in the plane of e_r and t, u = 1/r obeys d^2u/dphi^2 = 3u^2 - u, its point at

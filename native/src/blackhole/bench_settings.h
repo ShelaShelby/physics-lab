@@ -9,7 +9,7 @@
 
 namespace blackhole {
 
-// id: blackhole.dolly_spin, blackhole.over_poles, blackhole.everything, blackhole.edge_on, ui.resize_blackhole; allLight: blackhole.everything with Light:
+// id: blackhole.dolly_spin, blackhole.over_poles, blackhole.everything, blackhole.edge_on, ui.resize_blackhole, blackhole.close_spin (0.84.0); allLight: blackhole.everything with Light:
 // All light instead of the eye's glare (they exclude each other; the glare was the heavier on the build machine, REPORT 0.83.0). ok false: no such scene.
 Settings benchSettings(const std::string& id, bool allLight, bool& ok);
 

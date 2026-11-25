@@ -293,6 +293,7 @@ public:
         // phi = 0) to galactic, through the camera's phi and the view; kO: the screen directions (right, up) of e_theta and e_phi. discF: F^(1/4) against ln r
         // (discFN values from ln r = discFLog0 in steps discFDl) for the disc's temperature at this spin; discCol, white, tScale, rIn, rOut as above.
         bool kerr = false;
+        float fido[2] = {1, 0};             // 0.84.0: the held camera's own shift for a ray's b, f = fido[0] - b fido[1] (kKerrFS, kKerrSkyFS uFido; (1, 0): none)
         const std::vector<float>* kA = nullptr;
         const std::vector<float>* kB = nullptr;
         const std::vector<float>* kEdge = nullptr;

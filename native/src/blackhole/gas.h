@@ -5,7 +5,7 @@
 // THE CLOCKS. Far away: Boyer-Lindquist t (the hole's time). Gas on a circular equatorial orbit, Omega = 1 / (r^(3/2) + a) (BPT (2.16), disc.h orbitOmega), moves
 //   at V = (varpi / alpha)(Omega - omega) in the locally non-rotating frame (C. T. Cunningham, ApJ 202, 788 (1975) ("C75") (A7c) = J15 (A.7)); its own clock
 //   runs at dtau/dt = 1 / u^t = alpha (1 - V^2)^(1/2) (C75 (A7a)); tested against the normalisation u.u = -1 with J15 (A.1)'s metric, and -u_t against BPT
-//   (2.12)'s E. The hovering camera (a FIDO, J15 (A.3)): dtau/dt = alpha (J15 (A.1)-(A.3); kerr.h hoverShift(b = 0) = 1 / alpha).
+//   (2.12)'s E. The camera held at its distance (a FIDO, J15 (A.3); at a = 0 a static observer): dtau/dt = alpha (J15 (A.1)-(A.3); kerr.h hoverShift(b = 0) = 1 / alpha).
 // TIME ALONG A RAY (the reference integrator). Per unit of the app's affine parameter zeta (geodesic.h KerrBL), with p_t = -1 and b = p_phi:
 //   dt/dzeta = [ (r^2 + a^2) P / Delta + a (b - a sin^2 theta) ] / rho^2,   P = r^2 + a^2 - a b
 //   (-dH/dp_t of J15 (A.15)'s Hamiltonian; the integrands of S. E. Gralla, A. Lupsasca, PRD 101, 044032 (2020) ("GLa") (12), (13c), (13f)), and the Mino time

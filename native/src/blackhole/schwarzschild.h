@@ -29,7 +29,7 @@
 //   LensTable holds dphi against x = (pi - alpha_sh) - psi, at n points evenly spaced in ln x from 1e-9 to pi - alpha_sh, and interpolates with a
 //   4-point cubic in ln x; near the shadow's edge dphi = -ln x + const (+ -2 ln x at rO = 3M) to within O(x), so below the first point it continues
 //   along the line through the first two. Lensing keeps surface brightness, so the map's light is used unchanged; the camera's blueshift
-//   (kerr.h hoverShift) is returned apart for the caller to apply or not.
+//   (kerr.h hoverShift) is returned apart. 0.84.0: the app applies it to the disc and the stars (lab.h heldCameraShift), not to the map (no colour temperature).
 //   LensView: pixel (X, Y) of a W x H picture -> look direction by the night sky's own rule (orbit/sky.h skyDirection: the angle from straight ahead is the
 //   distance from the middle, 100 degrees at the corner) -> far-sky direction or shadow. A camera at infinite distance (rO = infinity, i.e. the hole's
 //   mass is zero) returns the look direction itself: exactly the unbent sky.

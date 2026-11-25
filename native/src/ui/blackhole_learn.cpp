@@ -22,13 +22,13 @@ std::string muted(const std::string& s) { return "<p class=\"lrnP lrnMuted\">" +
 std::vector<BhLearnSection> blackholeLearnSections() {
     std::vector<BhLearnSection> v;
     v.push_back({"big", "🔎 What is on the picture?",
-        p("A black hole worked out by the laws of general relativity, not spinning unless you set its spin (Controls › Spin), with no gas around it unless you switch on the model gas disc. You hover at the distance shown on the card, "
-          "looking straight at it. Behind it is our own sky as seen from Earth: ESA's Gaia map of the Milky Way and the 2,874 brightest stars of the app's catalogue.") +
+        p("A black hole worked out by the laws of general relativity, not spinning unless you set its spin (Controls › Spin), with no gas around it unless you switch on the model gas disc. You are held still at the distance shown on the card "
+          "(round a spinning hole you are carried round by the turning space), looking straight at it. Behind it is our own sky as seen from Earth: ESA's Gaia map of the Milky Way and the 2,874 brightest stars of the app's catalogue.") +
         p("The black disc is the hole's <b>shadow</b>: every direction in it leads to the horizon, so no light comes from there. Round it the hole bends the light of the "
           "sky: the bright circle is the <b>Einstein ring</b>, the sky straight behind the hole spread into a ring, and inside it, hugging the shadow, the whole sky "
           "appears again and again, thinner each time.")});
     v.push_back({"exact", "✅ What is exact",
-        p("<b>The shadow.</b> Its edge is Synge's formula for a hovering observer (Perlick and Tsupko 2022, eq. 7), tested for every pixel.") +
+        p("<b>The shadow.</b> Its edge is Synge's formula for an observer held still (Perlick and Tsupko 2022, eq. 7), tested for every pixel.") +
         p("<b>The bending.</b> Every pixel's light path is the exact closed form of the non-spinning hole (Luminet 1979; Gralla and Lupsasca 2020), worked out "
           "in double precision and checked against a step-by-step ray integrator built from James et al. 2015. The picture looks it up in a table of 1,024 points "
           "for your distance; the table agrees with the closed form to better than 2 × 10⁻⁷ rad.") +
@@ -52,7 +52,8 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "lab's tests stop: closer to the largest spin the light paths near the shadow change too fast for the tables it makes. Close to a spinning hole nothing "
           "can stand still: space is dragged round the axis and the camera, which keeps no angular momentum, is carried with it (the card says how fast). The "
           "picture is one instant; the sky's slow turning with time is not shown. The gas orbits with the spin, in the plane of the spin; a disc orbiting against "
-          "it, a tilted disc and a warped one are not in the lab. Your own shift of colour and brightness is still a number on the card, not drawn.")});
+          "it, a tilted disc and a warped one are not in the lab. Your own shift of colour and brightness is drawn ray by ray: light that comes round with the "
+          "turning space reaches you less blue than light that comes against it (James and others 2015, eq. A.16).")});
     v.push_back({"disc", "🌀 The gas disc (a model)",
         p("Switch on <b>Gas disc (model)</b> to see the standard thin disc of gas (Novikov and Thorne; Page and Thorne 1974): gas going round the hole on circular orbits, "
           "heated by its own friction as it slowly spirals in, and shining from both faces. Such discs exist round quasars and round small black holes that feed from "
@@ -92,7 +93,10 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "has an atmosphere where electrons scatter the light. That darkens its face towards the edge, seen at a slant (the law for an atmosphere that scatters off "
           "electrons is Chandrasekhar's, in his book Radiative Transfer, 1950). It also makes the light come out harder, bluer than a black body at the same "
           "temperature (a colour-correction factor, Shimura and Takahara 1995). The lab draws neither.") +
-        p("<b>Not drawn:</b> your own hovering shifts all the light you see, sky and disc alike, bluer and brighter; the card gives that as a number, as for the sky.")});
+        p("<b>Drawn: your own place.</b> Held still near the hole, you see all the light that falls in towards you bluer and brighter, the disc and the stars alike: "
+          "each colour temperature times the card's factor, the light by its fourth power (Riazuelo 2019, eqs. 52, 53). Without spin it is one factor for the whole "
+          "picture; round a spinning hole each ray has its own. Exact for a camera held still (not falling, not orbiting). The faint sky map is not shifted: it has no "
+          "colour temperature. The automatic exposure follows, so the picture is not simply brighter: it is bluer, and the card says how much brighter it really is.")});
     {   // 0.55.3: the Film look, one row per choice (blackhole/looks.h filmRows: the physics, the film's choice, the paper's reason, where in the paper)
         std::string h = p("Controls › Look › <b>Film</b> draws the choices the makers of the film Interstellar made for its black hole, as James, von Tunzelmann, Franklin and "
                           "Thorne (2015) state them, on the same calculated hole and the same light paths as the Real look. One row per choice:");
@@ -152,9 +156,10 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>Spin</b> up to 0.99 of the largest (see Spin above). Their gas: the lab has the standard thin disc as a model (above), nothing else.") +
         p("<b>The sky is ours.</b> It is the sky seen from Earth, placed behind the hole. Nobody has a map of the sky as it looks from the centre of our galaxy or "
           "from M87: one would have to be invented.") +
-        p("<b>You hover.</b> Staying still that close to a black hole would take a powerful rocket. Your clock runs slow, and the starlight reaches you bluer and "
-          "brighter: the card gives these as numbers, but the picture does not draw the change of colour or brightness. Dragging takes you round the hole "
-          "as the Orbit Lab's camera goes round a planet, and you glide a little when you let go, but at each place you hover again: you are not flying or "
+        p("<b>You are held still.</b> Staying still that close to a black hole would take a powerful rocket. Without spin you hover; round a spinning hole you are "
+          "held at your distance and carried round by the turning space (an observer with no angular momentum). Your clock runs slow, and the light reaches you "
+          "bluer and brighter: the picture draws it. Dragging takes you round the hole "
+          "as the Orbit Lab's camera goes round a planet, and you glide a little when you let go, but at each place you are held still again: you are not falling or "
           "orbiting. A camera that orbits or falls in sees a different picture (its own motion shifts and crowds the light); the lab does not draw that.") +
         p("<b>Sagittarius A* and M87*.</b> Only their mass and distance are measured (GRAVITY Collaboration 2022; the Event Horizon Telescope 2019 and 2022). "
           "Their spin is not measured. Their real gas is a faint, very hot fog that shines mostly in radio light, not a bright disc. The famous telescope "

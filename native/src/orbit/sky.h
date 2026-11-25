@@ -64,6 +64,7 @@ void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double
 
 Vec3 lonLat(double lonDeg, double latDeg);          // unit vector from ecliptic longitude and latitude
 std::array<int, 3> bvRGB(double bv);                // 0.50: a star's colour from its B−V: a black body at the Ballesteros (2012) temperature, CIE 1931, sRGB (sky.cpp)
+double bucketBV(int k);                             // 0.84.0: the B−V a colour bucket stands for (-0.3 to 2.0 in 12 steps; Sky::colours)
 double bvTemperatureK(double bv);                   // Ballesteros 2012, EPL 97, 34008, eq. (14), K
 // 0.50 (review item 5): how bright a star is drawn: ONE rule for every star. Its light is F ∝ 10^(-0.4 m) (Pogson's ratio: 5 magnitudes = a factor 100;
 // m = -2.5 log10(f / f0), as IAU 2015 Resolution B2 (arXiv:1510.06262, eq. 4) writes Pogson's scale; data/stars/README.txt). The drawn integrated light (opacity x disc area, in square pixels) is

@@ -369,7 +369,7 @@ bool isBlackHoleKind(app::BenchKind k) {
     using K = app::BenchKind;
     return k == K::BlackHole || k == K::BlackHoleFilmTilt || k == K::BlackHoleExtreme || k == K::BlackHoleAllLight || k == K::BlackHoleMovingGas ||
            k == K::BlackHoleDiscStreaks || k == K::BlackHoleFilmSoft || k == K::BlackHoleCircleSpin || k == K::BlackHoleDolly || k == K::BlackHoleOverPoles ||
-           k == K::BlackHoleEverything || k == K::BlackHoleEdgeOn || k == K::UiSettingsOverBlackHole || k == K::UiResizeBlackHole;
+           k == K::BlackHoleEverything || k == K::BlackHoleEdgeOn || k == K::UiSettingsOverBlackHole || k == K::UiResizeBlackHole || k == K::BlackHoleCloseSpin;
 }
 // blackhole.dolly_spin, over_poles, everything, edge_on, ui.resize_blackhole: the lab's settings from blackhole/bench_settings.h (tested in test_app);
 // frameScene then moves the camera. PL_BENCH_LIGHT=all: blackhole.everything with All light; PL_BENCH_ZOOM="dist,fov": another view (the trials)
@@ -744,6 +744,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::MoleculeLiveHot: moleculeLiveHot(app); break;
         case K::UiSettingsOverBlackHole: blackholeMovingGas(app); app.showSettings = true; break;
         case K::UiResizeBlackHole: blackholeBench(app, "ui.resize_blackhole"); break;
+        case K::BlackHoleCloseSpin: blackholeBench(app, "blackhole.close_spin"); b.bhCam = blackhole::CameraMotion(); break;   // 0.84.0
         case K::UiGuideScroll: {
             commonSetup(app);
             // the longest Learn guide (measured in 0.56.1 at 1280 x 800: the Orbit Lab's timeline, 7,157 px of scrolling; the next the Orbit Lab's "What am I looking
@@ -881,7 +882,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
             blackhole::turn(app.blackhole, 0.15 * dt, 0.0);
             break;
         }
-        case K::BlackHoleCircleSpin: {                                        // 0.82.0: dragged 0.6 s, then let go to glide 0.6 s, through the lab's own camera motion
+        case K::BlackHoleCircleSpin: case K::BlackHoleCloseSpin: {            // 0.82.0: dragged 0.6 s, then let go to glide 0.6 s, through the lab's own camera motion (0.84.0: close_spin too)
             const double m = u - warm;
             if (m < 0) break;
             const int stroke = static_cast<int>(m / 1.2);
@@ -1019,7 +1020,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             return molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk) + "; " + (molecule::surfaceCardState() == 1 || g_vk ? molecule::surfaceCardPathText(g_vk != nullptr) :   // 0.68.0
                    std::string("the surface: the processor (its triangles ") + (t.kind == K::MoleculeVibDensity ? "made again for each new phase of the swing, and sorted and coloured each frame)" : "sorted again and coloured each frame as the camera turns)"));
         case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: case K::BlackHoleMovingGas: case K::BlackHoleDiscStreaks: case K::BlackHoleFilmSoft: case K::BlackHoleCircleSpin:
-        case K::BlackHoleDolly: case K::BlackHoleOverPoles: case K::BlackHoleEverything: case K::BlackHoleEdgeOn: case K::UiSettingsOverBlackHole: case K::UiResizeBlackHole: {
+        case K::BlackHoleDolly: case K::BlackHoleOverPoles: case K::BlackHoleEverything: case K::BlackHoleEdgeOn: case K::UiSettingsOverBlackHole: case K::UiResizeBlackHole: case K::BlackHoleCloseSpin: {
             const auto it = b.bhByScene.find(runIdx);
             if (it != b.bhByScene.end() && !it->second.skyPath.empty()) return "the sky and disc: " + it->second.skyPath;
             const blackhole::BlackHoleView& v = app.blackholeView;
@@ -1048,7 +1049,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
                           app.molecule.vibOn() ? (", vibration mode " + std::to_string(app.molecule.vibMode + 1)).c_str() : "");
             return z;
         case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: case K::BlackHoleMovingGas: case K::BlackHoleDiscStreaks: case K::BlackHoleFilmSoft: case K::BlackHoleCircleSpin:
-        case K::BlackHoleDolly: case K::BlackHoleOverPoles: case K::BlackHoleEverything: case K::BlackHoleEdgeOn: case K::UiSettingsOverBlackHole:
+        case K::BlackHoleDolly: case K::BlackHoleOverPoles: case K::BlackHoleEverything: case K::BlackHoleEdgeOn: case K::UiSettingsOverBlackHole: case K::BlackHoleCloseSpin:
             std::snprintf(z, sizeof z, "Black Hole Lab: distance %.1f GM/c\xC2\xB2, field of view %.0f\xC2\xB0, pitch %.3f rad (at the set-up)", app.blackhole.dist, app.blackhole.fovDeg, app.blackhole.pitch);
             return z;
         case K::UiGuideScroll: return "Learn guide " + b.pickedGuide + " (lab:guide)";
@@ -1660,7 +1661,11 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
     if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // what moves in the scene
         const int idx = b.list[std::size_t(b.run->scene())];
         b.measFrame = b.run->measuring() ? b.measFrame + 1 : -1;
-        const double u = sceneU(b), dt = std::clamp(u - b.lastU, 0.0, 0.1);
+        // 0.84.0: the checks that compare two runs at a frame (PL_BENCH_SHOT_FRAME with PL_FIXED_DT): the moves follow the frame count, not the frames' real
+        // times. By the real times the card's run and the processor's turned atom.all_classic to different angles by frame 30 on a loaded machine (0.83.0's
+        // full run on GitHub: 5402 of 256000 pixels over 8 levels).
+        static const double shotFixedDt = SDL_getenv("PL_BENCH_SHOT_FRAME") && SDL_getenv("PL_FIXED_DT") ? std::atof(SDL_getenv("PL_FIXED_DT")) : 0.0;
+        const double u = shotFixedDt > 0 ? b.sceneFrame * shotFixedDt : sceneU(b), dt = std::clamp(u - b.lastU, 0.0, 0.1);
         b.lastU = u;
         if (sceneText(idx).kind == app::BenchKind::BlackHole) sampleBlackHole(app, b, renderer);   // 0.55.5
         if (isBlackHoleKind(sceneText(idx).kind) && b.run->measuring() && std::size_t(b.run->scene()) < b.lag.size()) {   // 0.83.0: the lag (how old the shown picture is: blackhole_view.h lagMs)
