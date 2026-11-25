@@ -1,0 +1,36 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/lamb/yerokhin_shabaev_1506.01885_source.tar.gz
+# Reference: V. A. Yerokhin, V. M. Shabaev, "Lamb shift of n = 1 and n = 2 states of hydrogen-like atoms, 1 <= Z <= 110", J. Phys. Chem. Ref. Data 44, 033103 (2015), arXiv:1506.01885; the original is the paper's LaTeX source (tar.gz), file Hlike8.tex
+# URL: https://arxiv.org/e-print/1506.01885
+# Date read: 2026-11-25
+# sha256 of the original: 2dd448e774a1ac5fd8ea8945fc88c1e71a006845a8710e9fa1a8798e4a95995c
+# Place in the original: Hlike8.tex: Equations (2) to (4) (the Dirac point-nucleus energy); the energy table, Z = 1 (DIRAC row)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research: the source atom/dirac.h line 23 asks for); no test reads it yet
+#--- begin Equation (2)
+The Dirac point-nucleus binding energy $E_{\rm D}$ is given by
+\begin{align} \label{eq2}
+E_{\rm D} = mc^2\, \left[
+\sqrt{1 - \frac{(\Za)^2}{N^2}} - 1
+\right]\,,
+\end{align}
+where
+\begin{align} \label{eq:N}
+N &\ = \sqrt{(n_r+\gamma)^2 + (\Za)^2}\,,\\
+\gamma &\ = \sqrt{\kappa^2-(\Za)^2}\,,
+\end{align}
+$n_r = n - |\kappa|$ is the radial quantum number, $n$ is the principal quantum number, and
+$\kappa$ is the angular momentum-parity quantum number.
+
+The leading recoil correction $E_{\rm M}$ is written as
+\begin{align} \label{eq3}
+#--- end
+#--- begin Table, Z = 1
+  $Z = 1,\ \mbox{\rm $^{1}$H },\  R = 0.8775\,(51)\ \mbox{\rm fm},\  M/m = 1836.1526724\,(8)$}
+ \\[2pt]
+%
+DIRAC & -1.000013x3131931 & 0.750009x1528147 & 0x & 0.000003x328320432\,(2) \\
+MASS & 0.000544x3205755\,(2) & -0.000408x2386190\,(2) & 0x & -0.000000x001812648 \\
+LAMB & 0.000002x4842735\,(43) & -0.000002x1666270\,(43) & -0.000000x32154868\,(54) & 0.000000x007707557\,(33) \\
+#--- end

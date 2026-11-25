@@ -2,6 +2,12 @@
 repo ShelaShelby/physics-lab-sources at data/sun/ (same names; the other files named here are still in this folder). native/data/SOURCES.md lists each moved file with its
 reference, URL, date read and sha256. Where a test reads one, its extract (<name>.extract.txt: the lines it needs, copied exactly) is in this folder.
 
+[0.84.1] Research for the outside review (native/PLAN_REVIEW.md); the app does not use these yet. Saved in the private repo at data/sun/:
+neckel_labs_1994_SoPh153_91.pdf (ADS scan, legacy.adsabs.harvard.edu) and its typed lines (_typed.txt: abstract, section 3.2, Equations (5), (6), Table I).
+Extract: neckel_labs_1994_SoPh153_91.extract.txt. Table I's 365.875 nm row as printed sums to 0.99800, not 1 (REPORT 0.84.1). pierce_slaughter_1977_SoPh51_25.pdf
+(the older candidate, not used). spots/: the Royal Greenwich Observatory - USAF/NOAA sunspot group records 1874-2016 from NASA Marshall (RGO_NOAA1874_2013.zip,
+g2014-g2016.txt, format.txt, MissingDays.txt, the page) and one NOAA Solar Region Summary with its format sheet. Extract: spots/format.extract.txt.
+
 The Sun's colour and why no glow is drawn round it (0.49.4, Orbit Lab).
 
 astm_g173_pvlib.csv
@@ -28,6 +34,5 @@ nasa_eclipse_photography.html
     So no corona or glow is drawn round the Sun: on any screen it would be far below one grey step next to the disc. Until 0.49.3 a yellow glow
     out to 3 solar radii, in the Sun's colour, was drawn (no source, no label).
 
-Not done (ROADMAP): the Sun's limb darkening is still the lab's own blend (src/render/shaders.h, mode 3). The measured law (Neckel & Labs 1994,
-Solar Physics 153, 91; or Neckel 2005, Solar Physics 229, 13) could not be opened from the session (ADS and Springer refused) and is not
-reprinted on arXiv, so no coefficients were typed in.
+Not done (ROADMAP): the Sun's limb darkening is still the lab's own blend (src/render/shaders.h, mode 3). Until 0.84.1 the measured law could not be
+opened from the session; since 0.84.1 Neckel & Labs 1994 is saved (above) and the fix is planned in native/PLAN_REVIEW.md.

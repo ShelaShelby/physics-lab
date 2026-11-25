@@ -1,0 +1,13 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/oort/arxiv/2508.02162_chen_2025_2023KQ14_abs.html
+# Reference: Y.-T. Chen et al., "Discovery and dynamics of a Sedna-like object with a perihelion of 66 au", Nature Astronomy (2025), arXiv:2508.02162; the arXiv abstract page as received
+# URL: https://arxiv.org/abs/2508.02162
+# Date read: 2026-11-25
+# sha256 of the original: a251552475f9d99fceae25155e28a32d028277c2f7c8a425c1ad62bb4fb1afaf
+# Place in the original: the abstract (citation_abstract)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin abstract, first sentences
+<meta property="og:description" content="Trans-Neptunian objects (TNOs) with large perihelion distances ($q &gt; 60$ au) and semi-major axes ($a &gt; 200$ au) provide insights into the early evolution of the solar system and the existence of a hypothetical distant planet. These objects are still rare and their detection is challenging, yet they play a crucial role in constraining models of solar system formation. Her
+#--- end

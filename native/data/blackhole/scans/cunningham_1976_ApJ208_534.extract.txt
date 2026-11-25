@@ -1,0 +1,34 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/scans/cunningham_1976_ApJ208_534_typed.txt
+# Reference: C. Cunningham, "Returning radiation in accretion disks around black holes", Astrophys. J. 208, 534-549 (1976); the original here is the lines typed by hand from the page images of the scan data/blackhole/scans/cunningham_1976_ApJ208_534.pdf
+# URL: https://legacy.adsabs.harvard.edu/pdf/1976ApJ...208..534C
+# Date read: 2026-11-25
+# sha256 of the original: 472f302c7d7bba93bd522cd9b0fc2ed1c8edf05c37dbc83ea925bf44f419beac
+# Place in the original: p. 534 (abstract), p. 536 ((6b), (7a), (8a)), pp. 537-538 (table captions)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin p. 534 to p. 538
+p. 534, abstract
+Returning radiation is radiation emitted by an accretion disk which returns to its surface due to
+gravitational focusing or the shape of the disk. While it is unimportant for thin disks around non-
+rotating black holes, returning radiation will have significant effects on the structure and appear-
+ance of thin disks around rotating holes with a/M ~ 1. We calculate the flux of the returning
+radiation as a function of radius for a/M = 0.9, 0.99, 0.9981, and 0.9999, treating the propaga-
+tion of the radiation by general-relativistic geometric optics and treating the disk as thin.
+
+p. 536, Equations (6b), (7a), (8a)
+y = (r/r+)^-2 , (6b)
+where r+ is the radius of the event horizon
+Tf(ro, re) = (2 pi)^-1 r+^-2 ro^3 Integral cos no g^4 I [d Omega / d(g, re)] dg , (7a)
+The integrations over g include all radiation emitted at re and returning at ro
+fo(yo) = Integral_0^1 Tf(yo, ye) [fo(ye) + fg(ye)] dye , (8a)
+
+pp. 537-538, the table captions
+TABLE 1 The transfer functions Tf(yo, ye) and Ts(yo, ye) for a/M = 0.9
+TABLE 2 The transfer functions Tf(yo, ye) and Ts(yo, ye) for a/M = 0.99
+TABLE 3 The transfer functions Tf(yo, ye) and Ts(yo, ye) for a/M = 0.9981
+TABLE 4 The transfer functions Tf(yo, ye) and Ts(yo, ye) for a/M = 0.9999
+Each table: ye and yo = 0.05, 0.15, ..., 0.95 (10 x 10 values of Tf and of Ts), with re/M and ro/M beside them.
+
+#--- end

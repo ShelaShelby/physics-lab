@@ -2,6 +2,11 @@
 repo ShelaShelby/physics-lab-sources at data/planets/ (same names; the other files named here are still in this folder). native/data/SOURCES.md lists each moved file with its
 reference, URL, date read and sha256. Where a test reads one, its extract (<name>.extract.txt: the lines it needs, copied exactly) is in this folder.
 
+[0.84.1] Research for the outside review (native/PLAN_REVIEW.md: the giants' limb darkening, phase laws with the opposition surge); not used yet. Saved in the
+private repo at data/planets/photometry/: Deau et al. 2009 (0902.0345), Dyudina et al. 2016 (1511.04415), Mayorga et al. 2016 (1610.07679), Heng & Li 2021
+(2101.09984), Irwin et al. 2021 (2101.01063) and 2022 (2201.04516); three large PDFs are kept only as text (their sha256 in SOURCES.md). Extract:
+photometry/0902.0345_deau2009.extract.txt.
+
 The colour-science 0.4.7 source files kept here (colour-science_v0.4.7_*.py) are BSD-3-Clause: data/colour-science_v0.4.7_LICENSE.txt is the LICENSE file of that release tag (https://raw.githubusercontent.com/colour-science/colour/v0.4.7/LICENSE, read 2026-11-15). The CIE tables inside them are CIE data as the package redistributes them; their own terms were not read.
 
 Planet colours (0.50, Orbit Lab; review item 8).

@@ -1,0 +1,13 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/oort/sbdb_90377_sedna.json
+# Reference: NASA/JPL Small-Body Database API, record of 90377 Sedna (2003 VB12) as received (2012 VP113 and 2015 TG387 give the same class: data/oort/sbdb_2012VP113.json, sbdb_2015TG387.json)
+# URL: https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=90377
+# Date read: 2026-11-25
+# sha256 of the original: a56439763ef90b5cdb7e4612a8c3a864403fc783e9be1edbaf3fb6b239ad6d81
+# Place in the original: the object's orbit_class
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin orbit_class
+"orbit_class":{"code":"TNO","name":"TransNeptunian Object"}
+#--- end

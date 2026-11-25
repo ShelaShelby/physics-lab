@@ -2,6 +2,11 @@
 repo ShelaShelby/physics-lab-sources at data/atmosphere/ (same names; the other files named here are still in this folder). native/data/SOURCES.md lists each moved file with its
 reference, URL, date read and sha256. Where a test reads one, its extract (<name>.extract.txt: the lines it needs, copied exactly) is in this folder.
 
+[0.84.1] Research for the outside review (native/PLAN_REVIEW.md, Earth's air); not used yet. Saved in the private repo at data/atmosphere/: ozone/ the IUP Bremen
+O3 cross-sections (serdyuchenkogorshelev5digits.dat.gz: gzip of the file as received), their page, and Serdyuchenko et al. 2014 (AMT 7, 625, CC BY 3.0);
+aerosol/ the Handbook of Geophysics and the Space Environment (AFGL 1985), chapter 18, from NOAA's site (the aerosol models; its text layer is OCR with errors).
+Extract: ozone/serdyuchenkogorshelev5digits.extract.txt.
+
 The colour-science 0.4.7 source files kept here (colour-science_v0.4.7_*.py) are BSD-3-Clause: data/colour-science_v0.4.7_LICENSE.txt is the LICENSE file of that release tag (https://raw.githubusercontent.com/colour-science/colour/v0.4.7/LICENSE, read 2026-11-15). The CIE tables inside them are CIE data as the package redistributes them; their own terms were not read.
 
 Earth's air in the Orbit Lab (0.51.2): tools/make_rayleigh_data.py -> src/render/rayleigh_data.inc.

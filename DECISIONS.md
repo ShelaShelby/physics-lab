@@ -4,8 +4,15 @@ A record of the owner's decisions, one or two lines each. Sessions do not have t
 A line marked "Superseded" is kept for the record only. Older wording is in git history.
 
 ## 25 Nov 2026
-- All problems found by the outside review of 25 Nov 2026 are to be fixed.
+- All problems found by the outside review of 25 Nov 2026 are to be fixed. Where a fix needs a source, the source is found first (research job 0.84.1, native/PLAN_REVIEW.md).
 - In the realistic choice the planets are shown as they really are: true dimming with distance.
+- Film shows only the film paper's choices (J15). The lab's own glow and the see-through, soft-edged disc go.
+- The made-up learning pictures (Simple quark style, nucleus colours and glow, the Orbit view's electron ball and glide) stay as options, labelled as made up.
+  The realistic choice (the dot) and Most realistic never show them.
+- Orbit Lab, realistic choice: planets lit by the true sunlight at their distance (inverse square), with a camera-like exposure set for the followed body and a readout of it.
+- The Sun: real spots for dates where they were measured, a plain Sun with a sentence where they were not. The edge darkening from a measured law, the same law in the eclipse code.
+- Oort cloud: no invented dots. Real objects only if a published list says they belong to it. Otherwise a labelled region.
+- The order of the fixes: 0.85.0 Orbit Lab, 0.86.0 Atom Lab and Film, 0.87.0 the Black Hole disc.
 
 ## 23 Nov 2026
 - One short CLAUDE.md holds the rules. DECISIONS.md is a record only.

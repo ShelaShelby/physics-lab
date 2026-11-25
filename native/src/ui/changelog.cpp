@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.84.1", "Research only, no change to what the app does",
+     "An outside review asked for fixes in three labs. This version finds and saves the sources for them first: the Sun's measured edge darkening "
+     "(Neckel and Labs 1994), the measured sunspots since 1874 (the Greenwich and US Air Force and NOAA records), what is really known to belong to the Oort "
+     "cloud, the published form of the Dirac energy the Atom Lab uses, and the black hole disc's colour, edge darkening, returning light and thickness. "
+     "The plan for the next three versions is written from them. Nothing you see changes yet."},
     {"0.84.0", "Black Hole Lab: your own place changes the colours",
      "Held still near the hole, you see the light that falls in towards you bluer and brighter. The picture now draws it: every part of the disc and every star "
      "is seen at its colour temperature times the card's factor, its light by the fourth power. Without spin it is one factor for the whole picture. Round a "

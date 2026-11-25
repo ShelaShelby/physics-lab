@@ -2,6 +2,11 @@
 repo ShelaShelby/physics-lab-sources at data/blackhole/ (same names; the other files named here are still in this folder). native/data/SOURCES.md lists each moved file with its
 reference, URL, date read and sha256. Where a test reads one, its extract (<name>.extract.txt: the lines it needs, copied exactly) is in this folder.
 
+[0.84.1] Research for the outside review (native/PLAN_REVIEW.md, the disc's fixes); nothing is drawn from these yet. Saved in the private repo at data/blackhole/:
+scans/ Shimura & Takahara 1995 (ApJ 445, 780), Cunningham 1976 (ApJ 208, 534), Chandrasekhar 1946 (ApJ 103, 351), each with its typed lines (_typed.txt);
+arxiv/ Abramowicz, Lanza & Percival (astro-ph/9611101) and Done et al. 2012 (1107.5429). Extracts beside each; arxiv/1104.5499_abramowicz_fragile2013_vertical.extract.txt
+holds AF13's (39), (40) and (92). ALP97's (27) and Zhu's (6) print the spin term differently from AF13's (92) (REPORT 0.84.1).
+
 [0.55.1] The thin disc (src/blackhole/disc.h) reads Abramowicz & Fragile 2013 and Yuan & Narayan 2014 through their extracts in arxiv/ (<name>.extract.txt); Page & Thorne 1974,
 Luminet 1979, Bardeen, Press & Teukolsky 1972 and Cunningham 1975 were read from the page images of the scans (numbers typed in tests/test_blackhole.cpp with their page).
 

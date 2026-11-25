@@ -1,0 +1,31 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1107.5429_done2012.txt.gz
+# Reference: C. Done, S. W. Davis, C. Jin, O. Blaes, M. Ward, "Intrinsic disc emission and the soft X-ray excess in AGN", MNRAS (doi:10.1111/j.1365-2966.2011.19779.x), arXiv:1107.5429; text of the PDF (pdftotext -layout, two columns side by side: the blocks keep the other column)
+# URL: https://arxiv.org/pdf/1107.5429
+# Date read: 2026-11-25
+# sha256 of the original: 1b7f9ac8d0181bda1c9822c9952887fee7214b1a9d1fbda6a41c266e113aae38
+# Place in the original: section 2, Equation (1) (p. 2), Equation (2) and the summary (p. 4)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin Equation (1)
+cal mechanism transporting angular momentum: Balbus & Hawley             the colour temperature correction to a value
+1991) there is currently no straightforward way to parameterise the                             fcol ∼ (72/TkeV )1/9                       (1)
+effects of this with increasing mass accretion rate (e.g. Blaes et
+#--- end
+#--- begin Equation (2)
+      We can approximate the change in colour temperature correc-
+tion as                                                                       Fig. 3 shows this full radiative transfer AGN spectrum (red line)
+                                                  4 0.82                      compared to the X-ray spectrum of the NLS1 REJ 1034+394 (black
+                       fcol ∼ (Tmax /3 × 10 )                           (2)
+                                                                              data points) assuming a distance of 188 Mpc as appropriate for
+                                                    4               5
+over the critical temperature range of 3×10 K < Tmax < 10 K.                  its redshift of 0.04. This is one of the most extreme NLS1 sys-
+This changes linearly with Tmax from unity to 2.7 (the value of fcol          tems, with permitted line widths which are amongst the lowest seen
+#--- end
+#--- begin the summary
+tures, so are not well described by a set of (colour temperature                    In summary, the spectrum of a bare accretion disc can be
+corrected) blackbodies. Nonetheless, these spectra can be roughly             roughly described by a colour temperature corrected sum of black-
+modelled with Tscatt = 4 × 104 K and fcol = 2 and 1.8 for (M ,                body spectra, where the value of the colour temperature correction
+L/LEdd ) of (108 M⊙ , 0.2) and (2 × 108 M⊙ , 0.05), respectively              factor is approximately unity in the optical part of the spectrum, but
+#--- end

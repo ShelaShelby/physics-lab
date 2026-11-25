@@ -1,24 +1,21 @@
-# 0.84.0: Black Hole Lab: the camera's own shift drawn; the spinning hole's camera named; the two failing full tests
+# 0.84.1: Research: the sources for every fix of the outside review (25 Nov 2026); a plan file; no change to what the app does
 
 ## What changed
-- Read: CLAUDE.md, REPORT 0.83.0, ROADMAP; by grep and line ranges kerr.h/.cpp, schwarzschild.h/.cpp, disc.h, gas.h, hot.h, light.h/.cpp, spin_sky.h, spin.h/.cpp, blackhole_view.cpp, lab.h/.cpp, looks.h, kerr_compute.h, kerr_sky.cpp, vk_blackhole.cpp, shaders.h (kLensFS, kKerrFS, kKerrSkyFS), renderer2d.h/.cpp, sky_card.cpp, orbit/sky.h/.cpp, shell_blackhole.cpp, blackhole_learn.cpp, PLAN_BLACKHOLE.md 125-160, bench_scenes, benchmark.cpp, shell_test.cpp, main.cpp; R19's saved text (Fig. 20 caption, (52), (53)).
-- Feasibility: every GPU path already had each ray's b (kKerrSkyFS: the traced ray's R.b; kKerrFS: the table's b in uKA). No new data had to be carried. New uniform uFido = (1/alpha, omega/alpha), f = uFido.x - b uFido.y. At spin 0 the one factor goes into the disc's temperature scale.
-- Drawn (Real): lab.h heldCameraShift (J15 (A.16), beta = 0), discLightSeen (T_obs = g f T), starSeen (colour of a black body at f T, V light by its eye's light). Stars: one f at spin 0; with spin each image's b from the table. The readout's brightest star uses the b = 0 factor. Film unchanged. The sky map is not shifted: it has no colour temperature (ROADMAP).
-- Names and texts: lab.h line 5 (FIDO, held and carried round), Camera caption, Learn, the card ("(not drawn)" gone), Film's Shifts label, comments in disc.h, schwarzschild.h, gas.h, hot.h.
-- gasrow: in Film (spin 0.6) a caption "Working out the light paths" stood above the row. Under load it vanished between the frame that read the row's place and the press, so the click missed (reproduced: 4 runs at once). Fix: PL_BH_SPINWAIT, and gasrun=off so the gas time is the same in every run. Pause/Play check reads "Play". The checks are unchanged.
-- atom.all_classic: the scene turned by the real frame times, so the card's and the processor's runs were at different angles at frame 30 (reproduced under CPU stress: exactly GitHub's 5402). Fix: with PL_BENCH_SHOT_FRAME and PL_FIXED_DT the moves follow the frame count (benchmark.cpp). Under the same stress: 128 of 256000.
-- Benchmark: blackhole.close_spin (Hard, 27 scenes, 266.7 s). blackhole.extreme reaches the same view but drags the spin for 40 % of its time and turns by setting angles.
+- Step 0: the full-test run of 0.84.0 (fe8bd82, "Native full tests" run 45587630152) passed. Nothing added to ROADMAP.
+- Saved 63 files in the private repo (sources commit 20be64d), each with a SOURCES.md line. 16 new extracts. Scans with no text layer have typed lines (_typed.txt), checked against the page images.
+- Found: (a) Neckel & Labs 1994 Table I (ADS legacy scan). (b) Greenwich + USAF/NOAA groups May 1874 to 2 Oct 2016, NOAA's daily reports 1996-2026 (NCEI). (c) Oort: discovery papers and JPL SBDB. (d) Shimura & Takahara 1995, Done et al. 2012, Chandrasekhar 1946 Table 2. (e) Cunningham 1976. (f) Abramowicz, Lanza & Percival (astro-ph/9611101). (g) Yerokhin & Shabaev 2015 (2) (already saved). (h) IUP Bremen ozone, AFGL Handbook 1985 ch. 18. (i) Deau 2009, Dyudina 2016, Mayorga 2016, Heng & Li 2021, Irwin 2021/2022.
+- native/PLAN_REVIEW.md: R1-R14, each with source, formula, tests, what the user sees, limits and GPU path. Order: 0.85.0 Orbit Lab, 0.86.0 Atom Lab and Film, 0.87.0 the disc.
+- DECISIONS.md (25 Nov), ROADMAP.md, folder READMEs (sun, oort, blackhole, atmosphere, planets, lamb), changelog, VERSION 0.84.1. No app code changed.
 
 ## Tests run
-- blackhole_tests: 1141 checks, 0 failed. New testCameraShift: a = 0 against (1 - 2M/r)^(-1/2) and R19 Fig. 20's caption; spin against the FIDO from the textbook metric (a 0.3-0.99, r 2.2-100, 4 theta, 5 b); disc pixels at g f T; all light by f^4; stars. It does not build on 0.83.0.
-- GPU vs CPU (toneCompare, at most 1 % over 8 levels): close (spin 0, 2.2, 360 deg) 0.39 %; closespin 0.15 %; pole 0.07 %; closetable (kKerrFS) 0.004 %.
-- Against a 0.83.0 build: Film pictures identical to the pixel (2 views); Real at 1000 M: 0 pixels over 8 levels (spin 0 and 0.9).
-- check_blackhole sky 59 s and gasrow 39 s (run_group); gasrow 4 of 4 with 4 at once; check_atom_chip classic passed; app_tests 202,365, 0 failed; close_spin ran once; check.sh job: quick 18 of 18, ui_smoke passed.
+- check_sources.py on a full checkout of the sources repo: ok (758 manifest lines, 62 extracts, 154 blocks).
+- Typed tables checked by their own relations: NL94 rows by Sum A_n = 1 and Equation (6); Chandrasekhar's Table 2 by its column sums, ratios and polarisation degree.
+- check.sh job: quick 18 of 18 passed, ui_smoke passed (full build of 0.84.1 on the build machine).
 
 ## Not done
-- check_sources.py: only data/blackhole/arxiv is checked out here; it lists the rest as missing. The R19 file's sha256 matches SOURCES.md.
+- Doubtful values in sources: NL94's 365.875 nm row as printed sums to 0.99800 and gives F/I 0.74354, not 0.7445 (ultraviolet: the app does not use it). The disc's spin term: Zhu 2012 (6) and ALP97 (27) differ from AF13 (92). Only AF13's matches AF13 (40) (measured here: ALP97 up to 0.9 % off, Zhu up to 3 %). PLAN_REVIEW.md R12 uses AF13.
+- Refused: ADS's new scan service (202), Debrecen (403, no answer), SWPC warehouse (503), DTIC (403 twice), AMS (403). Owner's files list in ROADMAP.
+- source needed (ROADMAP): the sunspots' contrast, Uranus's and Neptune's limb darkening in numbers, an ozone column, phase laws beyond the surge. Chandrasekhar's 1946 table is the third approximation (flux 0.991 of 1 by a fit, measured here).
 
 ## References changed on purpose
-- test_app: 27 Hard and 66 scenes, the id list (+blackhole.close_spin). check_blackhole: the tone cases' set (+4); close's pixel floor 2000 (the disc covers 5,120 pixels from 2.2 M, spin 0).
-- New test, my own bound corrected before the GPU work: 1000 M was first written as 0.5 % (not derived). It is now 3.76 %, derived from 8 levels; measured 0.79 %.
-- ROADMAP had no line for this job; one added (the map's colour temperature).
+- None. No test changed.

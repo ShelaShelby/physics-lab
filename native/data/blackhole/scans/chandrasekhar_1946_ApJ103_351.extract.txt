@@ -1,0 +1,27 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/scans/chandrasekhar_1946_ApJ103_351_typed.txt
+# Reference: S. Chandrasekhar, "On the radiative equilibrium of a stellar atmosphere. X", Astrophys. J. 103, 351-370 (1946); the original here is the lines typed by hand from the page image of the scan data/blackhole/scans/chandrasekhar_1946_ApJ103_351.pdf
+# URL: https://legacy.adsabs.harvard.edu/pdf/1946ApJ...103..351C
+# Date read: 2026-11-25
+# sha256 of the original: 79c85a5a6b752b9122bff5cbc76def27db6c1dbd175d45d1125880649510a903
+# Place in the original: p. 365, Table 2 (all 11 rows)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin p. 365, Table 2
+p. 365, Table 2. The laws of darkening in the two states of polarization given by the third approximation; the degree of polarization of the emergent radiation;
+comparison of the total intensities given by the theory ignoring the polarization of the existing field of radiation but incorporating Rayleigh's phase function
+mu Il(0,mu)/F Ir(0,mu)/F Il(0,mu)/Il(0,1) Ir(0,mu)/Ir(0,1) Ir(0,mu)/Il(0,mu) delta(mu) [Il(0,mu)+Ir(0,mu)]/F I(0,mu)/F-for-Rayleigh's-phase-function
+0 0.1840 0.2310 0.2914 0.3659 1.2557 0.1134 0.4151 0.4195
+0.1 .2354 .2767 0.3728 0.4382 1.1753 .0806 0.5120 0.5175
+0.2 .2832 .3190 0.4486 0.5053 1.1264 .0594 0.6023 0.6076
+0.3 .3291 .3598 0.5213 0.5699 1.0932 .0445 0.6890 0.6937
+0.4 .3738 .3997 0.5921 0.6330 1.0691 .0334 0.7735 0.7773
+0.5 .4178 .4390 0.6616 0.6953 1.0508 .0248 0.8567 0.8593
+0.6 .4611 .4779 0.7303 0.7569 1.0364 .0179 0.9390 0.9402
+0.7 .5041 .5165 0.7983 0.8181 1.0247 .0122 1.0206 1.0203
+0.8 .5467 .5549 0.8659 0.8789 1.0150 .0075 1.1017 1.0998
+0.9 .5891 .5932 0.9331 0.9396 1.0069 0.0034 1.1824 1.1789
+1.0 0.6314 0.6314 1.0000 1.0000 1.0000 0 1.2628 1.2576
+
+#--- end

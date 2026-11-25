@@ -1,0 +1,25 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/planets/photometry/0902.0345_deau2009.txt.gz
+# Reference: E. Deau, L. Dones, S. Rodriguez, S. Charnoz, A. Brahic, "The opposition effect in the outer Solar System: a comparative study of the phase function morphology", Planet. Space Sci. (doi:10.1016/j.pss.2009.05.005), arXiv:0902.0345v1; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/0902.0345
+# Date read: 2026-11-25
+# sha256 of the original: e7d6263f36bde6e2cb8d519982f7af22586e18a8ce3fddbf8bf4119b662b8b57
+# Place in the original: Equation (7) (logarithmic model), section 2.3.2, Table 3 rows Europa, Rhea, Triton
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin Equation (7)
+                                   I/F = a0 + a1 · ln(α)                          (7)
+#--- end
+#--- begin Table 3 caption
+Direct output parameters of morphological models using opposition phase curves
+#--- end
+#--- begin Europa
+           Europa          0.580        -0.025    0.076          0.572       0.230      0.0054        0.086          0.573         0.193        0.0055
+#--- end
+#--- begin Rhea
+           Rhea            0.602        -0.055    0.085          0.573       0.379      0.0080        0.236          0.576         0.139        0.0082
+#--- end
+#--- begin Triton
+           Triton          0.584        -0.035    0.140          0.560       0.200      0.0049        0.146          0.609         0.049        0.0075
+#--- end

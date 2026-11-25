@@ -1,0 +1,20 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/spots/msfc_greenwch_page_2026-11-25.html
+# Reference: NASA Marshall Space Flight Center, "Royal Observatory, Greenwich - USAF/NOAA Sunspot Data" (D. Hathaway), the web page as received (HTML)
+# URL: https://solarscience.msfc.nasa.gov/greenwch.shtml
+# Date read: 2026-11-25
+# sha256 of the original: 5c2952da3fe2c3a8abed4fb57c3a198133959d9bd989d3eeba060963571f6447
+# Place in the original: the notes on the 1977 change of data source (the 1.4 factor)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin the raw files are uncorrected
+        Please note that, as before, the data in the raw data files (gYYYY.txt) are uncorrected
+        for the change in data source in 1977. The derived data (daily_area.txt, sunspot_area.txt,
+        sunspot_area_north.txt, sunspot_area_south.txt, and bflydata.txt) do include
+        the correction factor of 1.4x after 1976/12/31. </font></b>
+#--- end
+#--- begin the butterfly diagram
+    function of time and latitude) I have retained the RGO Spot Areas prior to 1977 as
+    reported but increased the USAF/NOAA Spot Areas by a factor of 1.4 after 1976. The data
+#--- end

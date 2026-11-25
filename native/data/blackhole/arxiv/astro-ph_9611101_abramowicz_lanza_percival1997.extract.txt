@@ -1,0 +1,17 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/astro-ph_9611101_abramowicz_lanza_percival1997.txt.gz
+# Reference: M. A. Abramowicz, A. Lanza, M. J. Percival, "Accretion disks around Kerr black holes: vertical equilibrium revisited", arXiv:astro-ph/9611101v1 (1996); text of the PDF (pdftotext -layout). (26) and (27) were read on the page image of p. 12 and p. 13: g^thetatheta = -1/R^2, so the metric signature is (+,-,-,-)
+# URL: https://arxiv.org/pdf/astro-ph/9611101
+# Date read: 2026-11-25
+# sha256 of the original: 361a78e1bdd8675a2a21bd0e1ab930354144554fca9f53fde48feaaa26b1d5d6
+# Place in the original: p. 12 (27), p. 13 (L*^2)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin p. 12, before (27)
+By inserting these into equations (22 - 24), we obtain the final result,
+#--- end
+#--- begin p. 13, under (27)
+Here L2∗ = L2 − a2 (E − 1), where L = −uφ is the conserved angular momentum for a
+geodesic motion and that E = ut is the conserved energy for such a motion. Realistic
+#--- end

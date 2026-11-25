@@ -1,0 +1,29 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1104.5499_abramowicz_fragile2013.txt.gz
+# Reference: M. A. Abramowicz, P. C. Fragile, "Foundations of black hole accretion disk theory", Living Rev. Relativity 16, 1 (2013), arXiv:1104.5499; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1104.5499
+# Date read: 2026-11-25
+# sha256 of the original: 727d3750ceb5243db18cd8e3036c40dd098005e570ef4acb03b93fba6e9156ca
+# Place in the original: (39), (40) the epicyclic frequencies; (92) the vertical equilibrium
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin (39) and (40)
+The epicyclic frequencies measured “at infinity” are (here x = r/M ),
+                                                                     
+                        (ωr∗ )2 = Ω2K 1 − 6x−1 + 8a∗ x−3/2 − 3a2∗ x−2 ,                         (39)
+                                                               
+                        (ωθ∗ )2 = Ω2K 1 − 4a∗ x−3/2 + 3a2∗ x−2 .                                (40)
+#--- end
+#--- begin (92)
+    (iv) Vertical equilibrium:
+                                        Π      L2 − a2 (E 2 − 1)
+                                             =                                                    (92)
+                                       ΣH 2           2r4
+
+
+                                                  25
+with E = −ut being the conserved energy associated with the time symmetry.
+   (v) Energy conservation:
+
+#--- end

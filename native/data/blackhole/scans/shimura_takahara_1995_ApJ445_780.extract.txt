@@ -1,0 +1,19 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/scans/shimura_takahara_1995_ApJ445_780_typed.txt
+# Reference: T. Shimura, F. Takahara, "On the spectral hardening factor of the X-ray emission from accretion disks in black hole candidates", Astrophys. J. 445, 780-788 (1995); the original here is the lines typed by hand from the page image of the scan
+# URL: https://legacy.adsabs.harvard.edu/pdf/1995ApJ...445..780S
+# Date read: 2026-11-25
+# sha256 of the original: ac63a33b91782acaa928cf1cab5cd4495c11dd6107494434d78e9a29e6b5b22b
+# Place in the original: p. 780, abstract
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin p. 780, abstract
+Radiation spectrum and the spectral hardening factor of an accretion disk around a Schwarzschild black
+hole with a mass of 1.4, 3, and 10 M_sun are determined by solving the vertical structure and radiative transfer
+self-consistently. When a viscous parameter alpha ~ 0.1, for accretion rates close to the Eddington limit, the local
+spectrum can be described by the diluted blackbody spectrum with the spectral hardening factor f ~ 1.8-2.0
+which is almost independent of a radial position and black hole mass. For ~10% of the Eddington rate, the
+local spectrum emitted from an inner region can be approximated by the diluted blackbody with f ~ 1.7. For
+accretion rates lower than 1% of the Eddington limit, the local spectrum cannot be fitted with any f.
+#--- end

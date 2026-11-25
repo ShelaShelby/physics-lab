@@ -1,0 +1,75 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/atmosphere/ozone/serdyuchenkogorshelev5digits.dat.gz
+# Reference: IUP Bremen MolSpec Lab (Serdyuchenko, Gorshelev, Weber), O3 absorption cross-sections, ASCII file of 05.03.2012; paper: Serdyuchenko et al., Atmos. Meas. Tech. 7, 625 (2014)
+# URL: https://www.iup.uni-bremen.de/gruppen/molspec/downloads/serdyuchenkogorshelev5digits.dat
+# Date read: 2026-11-25
+# sha256 of the original: acae2d3fa39834871a0c626bcd173eb8a441778cac488acc7dc48b006b5b8b45
+# Place in the original: the header (lines 1-45) and the rows at 450, 500, 550, 600, 650 and 700 nm
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin the header
+################ O3 Absorption Cross Section  ####################
+ Source: IUP, MolSpec Lab, Serdyuchenko A., Gorshelev V, Weber M.
+ Spectrometer:   Echelle Spectrometer ESA 4000 and Bruker HR 120 FTS
+ Double jacket quartz cell, thermo-insulated, pre-cooler, cryogenic
+ cooling
+ Spectral Resolution(HWHM):     0.01 nm below 290 nm,
+                                1 cm-1 between 290 nm and 350 nm,
+                                0.01 nm between 350 nm and 450 nm,
+                                1 cm-1 between 450 nm and 1100 nm,
+ Grid: interpolated on grid 0.01 nm
+
+ Absolute calibration: using pure ozone pressure.
+ Relative systematic uncertainty budget:
+ pressure:              2%
+ temperature:           1%
+ absorption length:     <0.1%
+ Total relative systematic uncertainty: <3%
+
+ Concatenated spectra parameters:
+ Spectral regions: Lightsource stability  Optical density limits:
+ 213-290 nm             0.5%           0.5-2
+ 290-310 nm             2%             0.1-2
+ 310-340 nm             1%             0.1-2
+ 340-450 nm             1%             0.05-1
+ 450-750 nm             0.2%           0.5-2
+ 750-1100nm             0.2%           0.001-0.1
+
+ COLUMN 1:      vacuum wavelength (nm)
+ COLUMN 2:      cross section (cm^2/molecule)   @293K
+ COLUMN 3:      cross section (cm^2/molecule)   @283K
+ COLUMN 4:      cross section (cm^2/molecule)   @273K
+ COLUMN 5:      cross section (cm^2/molecule)   @263K
+ COLUMN 6:      cross section (cm^2/molecule)   @253K
+ COLUMN 7:      cross section (cm^2/molecule)   @243K
+ COLUMN 8:      cross section (cm^2/molecule)   @233K
+ COLUMN 9:      cross section (cm^2/molecule)   @223K
+ COLUMN 10:     cross section (cm^2/molecule)   @213K
+ COLUMN 11:     cross section (cm^2/molecule)   @203K
+ COLUMN 12:     cross section (cm^2/molecule)   @193K
+
+
+ DATE OF FILE CREATION: 05.03.2012
+
+
+ NUMBER OF HEADER LINES: 45
+#--- end
+#--- begin 450 nm
+450.000 1.90910E-22 1.83818E-22 1.84557E-22 1.85432E-22 1.85578E-22 1.80598E-22 1.84366E-22 1.76679E-22 1.73100E-22 1.79951E-22 1.80857E-22
+#--- end
+#--- begin 500 nm
+500.000 1.17690E-21 1.17080E-21 1.17174E-21 1.16795E-21 1.15676E-21 1.17301E-21 1.16150E-21 1.15390E-21 1.16150E-21 1.16394E-21 1.16283E-21
+#--- end
+#--- begin 550 nm
+550.000 3.28728E-21 3.28034E-21 3.28165E-21 3.28268E-21 3.27380E-21 3.28401E-21 3.27613E-21 3.27083E-21 3.27832E-21 3.27511E-21 3.27846E-21
+#--- end
+#--- begin 600 nm
+600.000 5.04591E-21 5.05502E-21 5.06129E-21 5.06645E-21 5.07556E-21 5.08624E-21 5.09169E-21 5.09484E-21 5.10777E-21 5.10637E-21 5.12130E-21
+#--- end
+#--- begin 650 nm
+650.000 2.46527E-21 2.46462E-21 2.45814E-21 2.44624E-21 2.44224E-21 2.43181E-21 2.43697E-21 2.43351E-21 2.42883E-21 2.42461E-21 2.43217E-21
+#--- end
+#--- begin 700 nm
+700.000 8.61826E-22 8.55651E-22 8.47709E-22 8.35834E-22 8.29539E-22 8.20394E-22 8.19013E-22 8.14468E-22 8.08253E-22 8.02625E-22 8.03080E-22
+#--- end

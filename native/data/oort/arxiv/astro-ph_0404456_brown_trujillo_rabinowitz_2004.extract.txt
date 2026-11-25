@@ -1,0 +1,25 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/oort/arxiv/astro-ph_0404456_brown_trujillo_rabinowitz_2004.txt.gz
+# Reference: M. E. Brown, C. Trujillo, D. Rabinowitz, "Discovery of a candidate inner Oort cloud planetoid", Astrophys. J. 617, 589 (2004), arXiv:astro-ph/0404456; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/astro-ph/0404456
+# Date read: 2026-11-25
+# sha256 of the original: 038c98059156dd5cdfa4b038a8359140f8e19d6f746eb10e5fb294aff4110906
+# Place in the original: title and abstract
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin title
+                                           Discovery of a candidate inner Oort cloud planetoid
+#--- end
+#--- begin abstract
+                                       to conclude that 2003 VB12 is on a highly eccentric orbit which permanently
+                                       resides well beyond the Kuiper belt with a semimajor axis of 480±40 AU and a
+                                       perihelion of 76±4AU. Such an orbit is unexpected in our current understanding
+                                       of the solar system, but could be the result of scattering by a yet-to-be-discovered
+                                       planet, perturbation by an anomalously close stellar encounter, or formation of
+                                       the solar system within a cluster of stars. In all of these cases a significant
+                                       additional population is likely present, and in the two most likely cases 2003
+                                       VB12 is best considered a member of the inner Oort cloud, which then extends
+                                       to much smaller semimajor axes than previously expected. Continued discovery
+                                       and orbital characterization of objects in this inner Oort cloud will verify the
+#--- end

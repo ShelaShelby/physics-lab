@@ -1,0 +1,74 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/neckel_labs_1994_SoPh153_91_typed.txt
+# Reference: H. Neckel, D. Labs, "Solar limb darkening 1986-1990 (lambda lambda 303 to 1099 nm)", Solar Physics 153, 91-114 (1994); the original here is the lines typed by hand from the page images of the scan data/sun/neckel_labs_1994_SoPh153_91.pdf (no text layer)
+# URL: https://legacy.adsabs.harvard.edu/pdf/1994SoPh..153...91N
+# Date read: 2026-11-25
+# sha256 of the original: a91385fcedfdd7bc717c43d74d6092115ed69df07724aedcb66fa8a9a5af5f6b
+# Place in the original: p. 91 (abstract), p. 95 (section 3.2), p. 97 (Equations (5), (6)), p. 98 (Table I, all 30 rows)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin the typing note
+Each row was checked: the six coefficients sum to 1 (Equation (5)) and give the printed F/I by Equation (6), within the last printed digit,
+except the 365.875 nm row, which is typed as printed (its coefficients sum to 0.99800 and give F/I = 0.74354 against the printed 0.7445).
+
+#--- end
+#--- begin p. 91, abstract
+The Sun's limb darkening was observed repeatedly between the 1986 minimum and the
+1990 maximum of solar activity. Systematic variations, which could depend either on the momentary
+activity and/or the phase in the solar cycle, were not detectable, either at continuum wavelengths
+or in two broad-band spectral intervals. Completely irregular variations, which concern not only
+individual, successive scans (due to granulation, etc.), but also the daily and seasonal averages, are
+usually less than 1%, but can reach occasionally 2% or even more.
+#--- end
+#--- begin p. 95, section 3.2
+From four types of functions which were fitted by PS(W) to observed limb-
+darkening profiles, 5th-order polynomials in mu = cos theta were found to provide
+the best representation.
+(2) To eliminate seeing effects near the limb, the signals within 7" from the
+limb were excluded.
+#--- end
+#--- begin p. 97, Equations (5) and (6)
+P5(mu) = A0 + A1 mu + A2 mu^2 + A3 mu^3 + A4 mu^4 + A5 mu^5 , Sum A_n = 1.0 , (5)
+are given in Table I. These data are the averages of the two seasonal means, both
+individually corrected for scattered light.
+F/I = 2(A0/2 + A1/3 + A2/4 + A3/5 + A4/6 + A5/7) . (6)
+our data display the
+coefficients of limb darkening as almost smooth functions of wavelength (except -
+of course - for the Balmer discontinuity), and allow very reliable fits of smooth
+and monotonic interpolation functions.
+#--- end
+#--- begin p. 98, Table I
+p. 98, Table I. Coefficients of limb-darkening functions P5(mu) (Equation (5)) (mean of 1986 and 1987 east-west averages, corrected for scattered light)
+lambda(nm) N86 N87 A0 A1 A2 A3 A4 A5 F/I
+303.327 13 12 0.08011 0.70695 0.49910 -0.31080 -0.02177 0.04642 0.6826
+310.843 11 10 0.08160 0.71609 0.69685 -0.87703 0.47008 -0.08760 0.6883
+320.468 13 12 0.08833 0.77285 0.65382 -1.04647 0.72921 -0.19775 0.6985
+329.897* 17 9 0.09188 0.92459 0.19604 -0.39546 0.23599 -0.05303 0.7116
+349.947 14 8 0.11012 1.02168 -0.10924 -0.00055 -0.08688 0.06487 0.7260
+365.875 14 10 0.12828 1.04969 0.17482 -1.13371 1.23882 -0.45990 0.7445
+374.086 12 10 0.12579 0.85402 0.54601 -1.15048 0.88928 -0.26462 0.7288
+390.915 13 10 0.12995 0.91836 -0.07566 0.19149 -0.28712 0.12298 0.7204
+401.970* 13 10 0.12323 1.08648 -0.43974 0.45912 -0.32759 0.09850 0.7303
+416.319 14 7 0.12814 1.19947 -0.84407 1.07201 -0.79537 0.23982 0.7380
+427.930 12 8 0.14249 1.28796 -1.19564 1.68603 -1.36658 0.44572 0.7495
+443.885 15 8 0.16220 1.24893 -0.92165 0.89978 -0.50148 0.11220 0.7588
+445.125* 13 8 0.15248 1.38517 -1.49615 1.99886 -1.48155 0.44119 0.7596
+457.345 13 10 0.16604 1.38544 -1.52275 2.00232 -1.45969 0.42864 0.7651
+477.427 13 8 0.19571 1.30551 -1.25845 1.50626 -1.05472 0.30570 0.7751
+492.905 22 8 0.20924 1.30798 -1.20411 1.21505 -0.67196 0.14381 0.7823
+519.930* 17 12 0.23695 1.29927 -1.28034 1.37760 -0.85054 0.21706 0.7925
+541.760 12 12 0.26073 1.27428 -1.30352 1.47085 -0.96618 0.26384 0.8002
+559.950 10 8 0.26892 1.34319 -1.58427 1.91271 -1.31350 0.37295 0.8061
+579.880 13 8 0.28392 1.36896 -1.75998 2.22154 -1.56074 0.44630 0.8125
+610.975 11 6 0.30854 1.36620 -1.83572 2.33221 -1.63082 0.45959 0.8221
+640.970 14 6 0.33644 1.30590 -1.79238 2.45040 -1.89979 0.59943 0.8290
+669.400* 14 6 0.34685 1.37539 -2.04425 2.70493 -1.94290 0.55999 0.8360
+700.875 12 6 0.37885 1.25553 -1.70908 2.19647 -1.59554 0.47378 0.8434
+748.710 14 8 0.40627 1.22842 -1.67877 2.05535 -1.39972 0.38845 0.8524
+811.760 10 6 0.42977 1.25182 -1.85164 2.31949 -1.59101 0.44155 0.8621
+869.600 10 6 0.45396 1.25101 -2.02958 2.75410 -2.02287 0.59338 0.8701
+948.850 10 8 0.47855 1.19813 -1.86296 2.36939 -1.64367 0.46056 0.8773
+1046.600* 11 8 0.49870 1.21429 -2.06976 2.80703 -2.05247 0.60221 0.8841
+1098.950 9 8 0.51149 1.19354 -2.00174 2.66936 -1.94981 0.57715 0.8890
+#--- end

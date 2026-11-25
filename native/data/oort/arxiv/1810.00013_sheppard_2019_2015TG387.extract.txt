@@ -1,0 +1,28 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/oort/arxiv/1810.00013_sheppard_2019_2015TG387.txt.gz
+# Reference: S. S. Sheppard et al., "A new high perihelion trans-Plutonian inner Oort cloud object: 2015 TG387", Astron. J. (doi:10.3847/1538-3881/ab0895), arXiv:1810.00013v2; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1810.00013
+# Date read: 2026-11-25
+# sha256 of the original: b0f5aea228768b7b12b076604e0973b81808e49666953e4ce32d561be6f1782c
+# Place in the original: abstract, section 1
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+#--- begin abstract
+                                                           Inner Oort Cloud objects (IOCs) are Trans-Plutonian for their entire orbits. They are
+                                                         beyond the strong gravitational influences of the known planets yet close enough to the
+                                                         Sun that outside forces are minimal. Here we report the discovery of the third known
+                                                         IOC after Sedna and 2012 VP113, called 2015 TG387. 2015 TG387 has a perihelion
+                                                         of 65 ± 1 au and semi-major axis of 1170 ± 70 au. The longitude of perihelion angle,
+#--- end
+#--- begin section 1
+2017). Inner Oort Cloud objects (IOCs) or Trans-Plutonian objects (TPOs) have perihelia greater
+than 50-60 au and are too far from the giant planets to be strongly influenced by them (Gomes et
+al. 2008). The origins of the eccentric IOC orbits likely require mechanisms that operated more
+efficiently in the past such as stronger outside stellar tide forces or uncatalogued forces in the outer
+solar system (Fernandez 1997; Brown et al. 2004; Kenyon & Bromley 2004; Madigan et al. 2018;
+Sefilian & Touma 2018). The orbits of the IOCs thus inform us how the distant solar system formed
+and currently interacts with its surroundings. The detached ETNOs may have evolved in a similar
+manner as the IOCs or could be more similar to the scattered ETNOs. Any object with an aphelion
+beyond a few thousand au is considered an outer Oort cloud object as outside forces such as the
+#--- end
