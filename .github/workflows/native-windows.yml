@@ -135,3 +135,49 @@ jobs:
           gh @ghArgs
           if ($LASTEXITCODE -ne 0) { exit 1 }
           exit 0
+
+  # 0.85.1: the test package for the owner's PC (PhysicsLab-tests-windows-x64.zip, added to the "latest" release beside the app's zip, which is unchanged).
+  # The GPU-against-CPU programs (vk_compare_tests: what ctest -R "glsl_shaders|vk_cards" runs on Linux; planet_picture and blackhole_picture: the CPU twins),
+  # the UI check scripts and native/tools/pc_tests.ps1, the runner that does the real-hardware checks from one folder (CLAUDE.md "Build and test").
+  # Its own job after the release, so the app's build and release never wait for it.
+  test-package:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            native
+            .github
+
+      - name: Configure (with the Vulkan picture tests)
+        run: cmake -S native -B build -A x64 -DPL_VK_TESTS=ON
+
+      - name: Build the GPU-against-CPU programs
+        run: cmake --build build --config Release --parallel --target vk_compare_tests planet_picture blackhole_picture
+
+      - name: Collect and attach to the "latest" release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force tests-out/tests | Out-Null
+          foreach ($t in 'vk_compare_tests', 'planet_picture', 'blackhole_picture') { Copy-Item "build/Release/$t.exe" tests-out/ -ErrorAction Stop }
+          Copy-Item native/tools/pc_tests.ps1 tests-out/ -ErrorAction Stop
+          Copy-Item native/tests/*.py tests-out/tests/ -ErrorAction Stop
+          Copy-Item native/tests/TESTS.md tests-out/tests/ -ErrorAction Stop
+          Copy-Item native/tests/reference tests-out/tests/reference -Recurse -ErrorAction Stop
+          Copy-Item native/src/render/shaders.h tests-out/tests/ -ErrorAction Stop
+          @"
+          Physics Lab test package, commit $($env:GITHUB_SHA.Substring(0,7)).
+          Unzip this and PhysicsLab-windows-x64.zip into one folder, then in PowerShell in that folder:
+            powershell -ExecutionPolicy Bypass -File pc_tests.ps1
+          The results are in results\pc-results.txt. Nothing is installed. The app uses its own settings file in results\.
+          tests\ holds the UI check scripts (they need Python 3: python tests\<script>.py PhysicsLab.exe <work folder> [part]).
+          "@ | Set-Content tests-out/README.txt -Encoding utf8
+          Compress-Archive -Path tests-out/* -DestinationPath PhysicsLab-tests-windows-x64.zip -Force
+          $rel = gh release view latest -R $env:GITHUB_REPOSITORY --json targetCommitish --jq .targetCommitish
+          if ($rel -ne $env:GITHUB_SHA) { throw "the latest release targets $rel, not this commit $env:GITHUB_SHA" }
+          gh release upload latest PhysicsLab-tests-windows-x64.zip --clobber -R $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { exit 1 }

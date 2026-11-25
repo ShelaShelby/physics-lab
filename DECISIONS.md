@@ -16,6 +16,8 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
 - R3: the packed sunspot table goes in the public repo (it holds only measured positions and areas). No download step.
 - R4: the Oort cloud stays visible. Its dots are placed by a published model of the cloud (how many objects at each distance, its shape), labelled "Estimated from models: no object in it has been seen". Sedna, 2012 VP113 and 2015 TG387 are shown on their JPL SBDB orbits with the sentence "called inner Oort cloud objects by their discoverers; JPL lists them as trans-Neptunian objects".
 - The benchmark limit is raised once to 4.9 minutes for the three scenes of 0.85.0 (orbit.true_light, orbit.sun_edge, orbit.oort_region).
+- Checks that need real hardware (the GPU on a real driver, the benchmark, the refresh rate, window and screen behaviour) run on the owner's PC through Remote Control with native/tools/pc_tests.ps1, after the push, on the new release (job 0.85.1). The benchmark for the planning chat comes from this run.
+- For 0.85.1 only: two pushes (the runner and the test package first, then the results). This breaks the one-push rule of 20 Nov once, because the checks need the new release.
 
 ## 23 Nov 2026
 - One short CLAUDE.md holds the rules. DECISIONS.md is a record only.

@@ -19,6 +19,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.85.1", "Tests on real hardware, no change to what the app does",
+     "The developer's checks now also run on the owner's own PC (an AMD Radeon RX 9060 XT): each lab's drawing against the exact processor pictures on the "
+     "real driver, the benchmark and the screen. A test package for Windows sits beside the app on the download page. Nothing in the app changed."},
     {"0.85.0", "Orbit Lab: true sunlight, the Sun's measured edge, real sunspots, a modelled Oort cloud",
      "New Lighting choice, True sunlight (the realistic one): each planet, moon, dwarf planet and ring gets the sunlight at its real distance, as a camera set "
      "for the body you follow would show it, so Neptune followed makes Earth glare white and Earth followed leaves Neptune nearly black. A line says how the "

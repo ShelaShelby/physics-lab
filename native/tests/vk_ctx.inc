@@ -63,6 +63,13 @@ bool start(Ctx& h, std::string& why) {
     vkEnumeratePhysicalDevices(h.inst, &nd, nullptr);
     std::vector<VkPhysicalDevice> devs(nd);
     vkEnumeratePhysicalDevices(h.inst, &nd, devs.data());
+    // 0.85.1: a discrete GPU first. The owner's PC also has an integrated Radeon, and the checks are for the RX 9060 XT the app draws on.
+    std::stable_sort(devs.begin(), devs.end(), [](VkPhysicalDevice a, VkPhysicalDevice b) {
+        VkPhysicalDeviceProperties pa{}, pb{};
+        vkGetPhysicalDeviceProperties(a, &pa);
+        vkGetPhysicalDeviceProperties(b, &pb);
+        return pa.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && pb.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    });
     for (VkPhysicalDevice d : devs) {
         std::uint32_t nq = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(d, &nq, nullptr);

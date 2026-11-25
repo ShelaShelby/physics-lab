@@ -40,6 +40,7 @@ These are the rules in force. DECISIONS.md is a record of the owner's decisions;
 - A failing check in a ui_* test the job runs is fixed, or its test is corrected with the reason in the test and in REPORT.md. Never loosened.
 - When a feature is removed, its tests go too.
 - A problem that fails 3 times is skipped and written in REPORT.md and ROADMAP.md.
+- Checks that need real hardware (the GPU on a real driver, the benchmark, the refresh rate, window and screen behaviour) run on the owner's PC through Remote Control with native/tools/pc_tests.ps1, after the push, on the new release (PhysicsLab-windows-x64.zip and PhysicsLab-tests-windows-x64.zip in one folder). A job that needs them says so in its REPORT. Results go to native/docs/hardware/.
 
 ## Writing
 - Developer files (code comments, REPORT.md, plan files, CLAUDE.md, ROADMAP.md) use standard terms: GPU, CPU, shader, build machine. Short sentences, one fact each. No chains of semicolons and colons.

@@ -13,7 +13,7 @@ For the planning chat only. Working chats follow CLAUDE.md.
 ## Each round
 1. Check the newest commit: the Windows run ("Native Windows build") is green, the "latest" release targets it, VERSION was bumped.
 2. Check the GitHub full-test run ("Native full tests") of the same commit. A failure there goes into the next job.
-3. After a version that added a benchmark scene, ask for the owner's benchmark. Compare scene by scene with the previous run. Read gpu-paths-log.txt's [vulkan] lines.
+3. After a version that added a benchmark scene, the benchmark comes from the pc_tests.ps1 run on the owner's PC (native/docs/hardware/). Compare scene by scene with the previous saved run. Read gpu-paths-log.txt's [vulkan] lines (the run lists them).
 
 ## Writing a job
 - First line "Job: native X.Y.Z: <what>". X.Y for features, X.Y.Z for small things. One job, one push.

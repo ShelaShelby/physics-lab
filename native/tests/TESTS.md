@@ -195,3 +195,26 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_024.py:nobuild | 2 | DELETE | - | no Build mode: one old decision |
 | check_blackhole.py:realest | 2 | KEEP | ui_blackhole | Most realistic |
 | check_022s7.py:factmol | 2 | DELETE | - | the fact line clear of the Molecule bar: one old fixed bug |
+
+## The owner's PC (0.85.1)
+
+The checks that need real hardware. They run on the owner's PC (AMD Radeon RX 9060 XT, 2560 x 1369 window, 255 Hz) after the push, on the new release (CLAUDE.md "Build and test").
+- The package: PhysicsLab-tests-windows-x64.zip on the "latest" release, beside the app's zip (the Windows workflow's job test-package). It holds vk_compare_tests.exe
+  (the card programs and the renderer's pictures against the CPU: what ctest -R "glsl_shaders|vk_cards" runs on Linux; 0.85.1: it takes a discrete GPU first),
+  planet_picture.exe and blackhole_picture.exe (the CPU twins), the UI check scripts (tests\, they need Python 3) and pc_tests.ps1.
+- The runner: native/tools/pc_tests.ps1. Windows PowerShell 5.1 only, nothing installed. Unzip both zips into one folder and run
+  `powershell -ExecutionPolicy Bypass -File pc_tests.ps1` (or `-Parts smoke,bh`). Results: results\pc-results.txt, one PASS, FAIL or INFO line per check.
+  The app runs with its own settings file in results\ (PL_SETTINGS), so the owner's settings stay untouched. Each app start stops after 14 minutes, the benchmark after 20.
+
+| Part | What | From |
+|---|---|---|
+| device | the GPUs, drivers, Vulkan version and refresh rate (Windows and vulkaninfo); Python present or not | new |
+| smoke | the app starts on Vulkan, each of the four labs draws a frame that is not empty, exit code 0 | check_shell.py:smoke |
+| vkcards | vk_compare_tests on the real driver: every comparison within its limit | vk_cards |
+| bh | the sky's start-up checks, the camera curve (near, far, spin, streaks, close, closespin, pole, closetable), Film's see-through disc, the full picture at 2560 x 1369, the shadow's edge, the edge-on views near pitch 90 degrees | check_blackhole.py:sky, precision, edgeon |
+| planets | True sunlight (Earth, Jupiter, Neptune), the 2024 eclipse, the Sun with its 7 sunspot groups, against planet_picture | check_orbit_ui.py:review085 |
+| bench | the full benchmark (PL_BENCH=start), its result file kept | new |
+| logs | every [vulkan] line of each run's gpu-paths-log.txt and of the owner's own (read only); a path off, died or drawn anew is a FAIL | new |
+| validation | the four labs with the Khronos validation layers, if installed | check_shell.py:smoke |
+
+Not in the runner: the light paths' card comparison (check_blackhole.py:precisioncard). The light paths' pipeline crashes the owner's driver (ROADMAP, Black Hole Lab).
