@@ -3,6 +3,7 @@
 #include "render/vk_blackhole.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -30,6 +31,8 @@
 #include "r2d_glowadd_frag.h"
 #include "r2d_glaredown_frag.h"
 #include "r2d_glareadd_frag.h"
+#include "r2d_glarelevel_frag.h"
+#include "r2d_glaresum_frag.h"
 #include "r2d_kerrtable_comp.h"
 
 namespace render {
@@ -51,6 +54,8 @@ Code codeOf(int p) {
     case VkBlackHole::pGlowAdd: return {k_r2d_glowadd_frag, sizeof k_r2d_glowadd_frag};
     case VkBlackHole::pGlareDown: return {k_r2d_glaredown_frag, sizeof k_r2d_glaredown_frag};
     case VkBlackHole::pGlareAdd: return {k_r2d_glareadd_frag, sizeof k_r2d_glareadd_frag};
+    case VkBlackHole::pGlareLevel: return {k_r2d_glarelevel_frag, sizeof k_r2d_glarelevel_frag};
+    case VkBlackHole::pGlareSum: return {k_r2d_glaresum_frag, sizeof k_r2d_glaresum_frag};
     default: return {k_r2d_cmp_frag, sizeof k_r2d_cmp_frag};
     }
 }
@@ -65,7 +70,7 @@ Variants variantsOf(int p) {
     case VkBlackHole::pKerr: set(0, {kRgba8, kF32, kF32}); if (std::getenv("PL_BH_COMPARE")) set(1, {kF32}); break;   // (1: the tests' float outputs only)
     case VkBlackHole::pSky: set(0, {kRgba8, kF32, kF32, kR8}); set(1, {kF32}); break;   // (1: the exposure's samples, the probe)
     case VkBlackHole::pSkyTiny: case VkBlackHole::pSkyMath: case VkBlackHole::pMaxDown: case VkBlackHole::pExpSum: case VkBlackHole::pGlowDown: case VkBlackHole::pGlowBlur:
-    case VkBlackHole::pGlareDown: set(1, {kF32}); break;
+    case VkBlackHole::pGlareDown: case VkBlackHole::pGlareLevel: case VkBlackHole::pGlareSum: set(1, {kF32}); break;
     case VkBlackHole::pGlowAdd: case VkBlackHole::pGlareAdd: set(0, {kRgba8}); break;
     default: set(0, {kRgba8}); set(1, {kF32}); set(2, {kR8}); break;               // pCopy: the low layers stretched over the picture's own
     }
@@ -84,7 +89,7 @@ const char* VkBlackHole::progName(int p) {
     static const char* const n[pProgCount] = {"lens (kLensFS)", "spinning hole's table pass (kKerrFS)", "the tiny shader (kKerrSkyTinyFS)", "the elliptic functions alone",
                                               "the whole sky shader (kKerrSkyFS)", "exposure (kMaxDownFS)", "glow down (kGlowDownFS)", "glow blur (kGlowBlurFS)",
                                               "glow add (kGlowAddFS)", "glare down (kGlareDownFS)", "glare add (kGlareAddFS)", "copy (kCompositeFS)",
-                                              "the log-average (kExpSumFS)"};
+                                              "the log-average (kExpSumFS)", "glare levels (kGlareLevelFS)", "glare veil (kGlareSumFS)"};
     return p >= 0 && p < pProgCount ? n[p] : "?";
 }
 std::size_t VkBlackHole::spirvBytes(int p) { return codeOf(p).bytes; }
@@ -168,6 +173,12 @@ bool VkBlackHole::init(VkCards& c, const std::string& cacheDir, std::string& why
         if (!prepare(p, w) || !makePipelines(p, w)) { ok_ = false; why = std::string(progName(p)) + ": " + w; return false; }
         prog_[p].state = 2;
     }
+    // 0.85.5: the glare's veil on the card: made here as well (small programs), but a failure keeps only the processor's veil
+    for (int p : {pGlareLevel, pGlareSum}) {
+        std::string w;
+        if (forced("glare") || !prepare(p, w) || !makePipelines(p, w)) { prog_[p].state = -1; prog_[p].why = forced("glare") ? "PL_VK_CARDFAIL=glare" : w; continue; }
+        prog_[p].state = 2;
+    }
     app::GpuGuard& G = app::gpuVkLensGuard();
     if (G.started() && !G.allowed()) { why = G.offText().empty() ? "switched off by its guard" : G.offText(); prog_[pLens].state = -1; prog_[pKerr].state = -1; return true; }
     static GuardSteps steps(&app::gpuVkLensGuard());
@@ -183,10 +194,12 @@ void VkBlackHole::destroy() {
     if (!dev_) return;
     vkDeviceWaitIdle(dev_);
     writeCache();
-    for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glow_[0], &glow_[1], &glareSrc_, &glareVeil_, &probe_,
+    for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glow_[0], &glow_[1], &glareSrc_, &glareVeil_, &glareNear_, &glareCorr_, &probe_,
                    &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
+    for (GlareLevel& g : gL_) for (Tex* t : {&g.E, &g.D, &g.M1, &g.M2, &g.S}) dropTex(*t);
+    gL_.clear();
     for (Tex& t : sum_) dropTex(t);
     sum_.clear();
     for (HostBuf* h : {&whiteBuf_, &probeBuf_, &glareBuf_, &debugBuf_}) { c_->dropBuffer(h->b); h->busy = false; }
@@ -1062,6 +1075,91 @@ void VkBlackHole::glareDown(VkCommandBuffer cb, int fbW, int fbH, int b, int nx,
 void VkBlackHole::glareUpload(VkCommandBuffer cb, int nx, int ny, const std::vector<float>& veil) {
     upload(cb, glareVeil_, nx, ny, kF32, veil.data(), 3, "the glare's veil");
     glareNx_ = nx; glareNy_ = ny;
+    veilCard_ = false;
+}
+
+// 0.85.5: the veil on the card (light.cpp glareVeil's levels and pairs; render/shaders.h kGlareLevelFS, kGlareSumFS), recorded after glareDown in the same
+// batch: no read-back, nothing on the processor but the tables (made again only when the finest block or the pixels per radian change)
+bool VkBlackHole::glareOnCard(VkCommandBuffer cb, const GlareJob& j) {
+    if (!glareCard() || !j.tables || !glareSrc_.img || !cb || j.nx <= 0 || j.ny <= 0) return false;
+    constexpr int kCW = 23;                                              // light.cpp: 2 kCorrR + 1 flat ratios each way
+    if (j.b != glareTabB_ || j.K != glareTabK_ || !glareNear_.img || !glareCorr_.img) {
+        std::vector<float> nearT, corr;
+        double eye[2] = {0, 0};
+        j.tables(j.fbW, j.fbH, j.cx, j.cy, j.K, nearT, corr, eye);
+        if (nearT.empty() || corr.size() != static_cast<std::size_t>(kCW * kCW) || nearT.size() > c_->limits().maxImageDimension2D) return false;
+        upload(cb, glareNear_, static_cast<int>(nearT.size()), 1, kR32, nearT.data(), 1, "the glare's near weights");
+        upload(cb, glareCorr_, kCW, kCW, kR32, corr.data(), 1, "the glare's flat ratios");
+        if (!glareNear_.img || !glareCorr_.img) return false;
+        glareTabB_ = j.b; glareTabK_ = j.K;
+        glareEye_[0] = static_cast<float>(eye[0]); glareEye_[1] = static_cast<float>(eye[1]);
+    }
+    // the levels (light.cpp: each 4 x 4 blocks of the one below, up to a grid of at most 6 x 6)
+    std::vector<std::array<int, 3>> dims;
+    for (int nx = j.nx, ny = j.ny, f = 1;; nx = (nx + 3) / 4, ny = (ny + 3) / 4, f *= 4) {
+        dims.push_back({nx, ny, f});
+        if (nx <= 6 && ny <= 6) break;
+    }
+    for (std::size_t l = dims.size(); l < gL_.size(); l++) for (Tex* t : {&gL_[l].E, &gL_[l].D, &gL_[l].M1, &gL_[l].M2, &gL_[l].S}) dropTex(*t);
+    gL_.resize(dims.size());
+    const VkImageUsageFlags use2 = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    for (std::size_t l = 0; l < dims.size(); l++) {
+        GlareLevel& g = gL_[l];
+        const int nx = dims[l][0], ny = dims[l][1], sx = l == 0 ? nx : 3 * nx, sy = l == 0 ? ny : 3 * ny;
+        if (g.nx != nx || g.ny != ny || !g.E.img || !g.D.img || !g.M1.img || !g.M2.img || !g.S.img || g.S.w != sx || g.S.h != sy) {
+            g.nx = g.ny = 0;
+            if (!makeTex(g.E, nx, ny, kF32, use2, "the glare's levels") || !makeTex(g.D, nx, ny, kF32, use2, "the glare's levels") ||
+                !makeTex(g.M1, nx, ny, kF32, use2, "the glare's levels") || !makeTex(g.M2, nx, ny, kF32, use2, "the glare's levels") ||
+                !makeTex(g.S, sx, sy, kF32, use2 | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "the glare's veil on the card")) return false;
+            g.nx = nx; g.ny = ny;
+        }
+        g.f = dims[l][2];
+    }
+    const auto common = [&](VkUniforms& u, const GlareLevel& g) {
+        const int size[2] = {j.fbW, j.fbH}, n[2] = {g.nx, g.ny};
+        const float c[2] = {static_cast<float>(j.cx), static_cast<float>(j.cy)}, k = static_cast<float>(j.K);
+        u.i("uSize", size, 2); u.f("uC", c, 2); u.f("uK", &k, 1); u.i("uB", &j.b, 1); u.f("uEye", glareEye_, 2); u.i("uN", n, 2); u.i("uF", &g.f, 1);
+    };
+    const auto read = [&](Tex& t) { use(cb, t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT); };
+    const int top = static_cast<int>(gL_.size()) - 1;
+    for (int l = 0; l <= top; l++) {                                    // each level's light, directions and spreads
+        GlareLevel& g = gL_[static_cast<std::size_t>(l)];
+        GlareLevel* c = l > 0 ? &gL_[static_cast<std::size_t>(l - 1)] : nullptr;
+        VkUniforms& u = prog_[pGlareLevel].u;
+        common(u, g);
+        const int nc[2] = {c ? c->nx : 0, c ? c->ny : 0};
+        u.i("uNc", nc, 2);
+        Tex* out[4] = {&g.E, &g.D, &g.M1, &g.M2};
+        for (int w = 0; w < 4; w++) {
+            u.i("uWhat", &w, 1);
+            Tex& src = c ? c->E : glareSrc_;
+            read(src);
+            if (c) { read(c->D); read(c->M1); read(c->M2); }
+            if (w >= 2) read(g.D);
+            begin(cb, {out[w]}, 0, 0, g.nx, g.ny, false);
+            draw(cb, pGlareLevel, 1, {{"uSrc", src.view, nearest_}, {"uCD", c ? c->D.view : VK_NULL_HANDLE, nearest_}, {"uCM1", c ? c->M1.view : VK_NULL_HANDLE, nearest_},
+                                      {"uCM2", c ? c->M2.view : VK_NULL_HANDLE, nearest_}, {"uOwnD", w >= 2 ? g.D.view : VK_NULL_HANDLE, nearest_}}, 0, 0, g.nx, g.ny);
+            end(cb);
+        }
+    }
+    for (int l = top; l >= 0; l--) {                                    // the veil, top level first
+        GlareLevel& g = gL_[static_cast<std::size_t>(l)];
+        GlareLevel* pa = l < top ? &gL_[static_cast<std::size_t>(l + 1)] : nullptr;
+        VkUniforms& u = prog_[pGlareSum].u;
+        common(u, g);
+        const int isTop = l == top ? 1 : 0;
+        u.i("uTop", &isTop, 1); u.i("uLevel", &l, 1);
+        for (Tex* t : {&g.E, &g.D, &g.M1, &g.M2, &glareNear_, &glareCorr_}) read(*t);
+        if (pa) read(pa->S);
+        begin(cb, {&g.S}, 0, 0, g.S.w, g.S.h, false);
+        draw(cb, pGlareSum, 1, {{"uE", g.E.view, nearest_}, {"uD", g.D.view, nearest_}, {"uM1", g.M1.view, nearest_}, {"uM2", g.M2.view, nearest_},
+                                {"uPS", pa ? pa->S.view : VK_NULL_HANDLE, nearest_}, {"uNear", glareNear_.view, nearest_}, {"uCorr", glareCorr_.view, nearest_}},
+             0, 0, g.S.w, g.S.h);
+        end(cb);
+    }
+    glareNx_ = j.nx; glareNy_ = j.ny; glareB_ = j.b;
+    veilCard_ = true;
+    return true;
 }
 
 // 0.55.4's makeGlare, all in this frame (the automatic checks): the blocks drawn, read back (the batch waited for), the veil
@@ -1097,7 +1195,7 @@ void VkBlackHole::glareWant(const LensSky& L, int fbW, int fbH) {
     j.fbW = fbW; j.fbH = fbH;
     j.cx = std::round(L.cx * ppp); j.cy = fbH - std::round(L.cy * ppp); j.K = L.kRad * ppp;
     j.b = std::max(1, L.glareBlock(fbW, fbH, j.cx, j.cy, j.K)); j.nx = (fbW + j.b - 1) / j.b; j.ny = (fbH + j.b - 1) / j.b;
-    j.veil = L.glareVeil; j.lower = L.glareThread;
+    j.veil = L.glareVeil; j.lower = L.glareThread; j.tables = L.glareTables;
     j.gen = ++glareGen_;
     want_ = j;
 }
@@ -1152,8 +1250,16 @@ void VkBlackHole::glarePump() {
         VkCommandBuffer cb = c_->cmd();
         if (cb) {
             glareDown(cb, job_.fbW, job_.fbH, job_.b, job_.nx, job_.ny);
-            readBack(cb, glareSrc_, 0, 0, job_.nx, job_.ny, glareBuf_);
-            glareStage_ = 3;
+            if (glareOnCard(cb, job_)) {                                // 0.85.5: the veil on the card, in this batch
+                glareStats_.b = job_.b; glareStats_.nx = job_.nx; glareStats_.ny = job_.ny; glareStats_.readMs = 0; glareStats_.veilMs = 0;
+                glareStats_.spread = glareStats_.laid = 0; glareStats_.made++;
+                glareStats_.waitMs = since(t0);
+                glareValid_ = true;
+                composed_ = false;
+            } else {
+                readBack(cb, glareSrc_, 0, 0, job_.nx, job_.ny, glareBuf_);
+                glareStage_ = 3;
+            }
         }
     }
     glareStats_.frameMs = since(t0);
@@ -1184,9 +1290,10 @@ void VkBlackHole::compose(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
             const bool cw = L.whiteMode == 1 && !sum_.empty() && L.disc;
             const int wm = cw ? 1 : 0;
             u.i("uWhiteMode", &wm, 1);
-            for (Tex* t : {&layer_[0], &layer_[1], &glareVeil_}) use(cb, *t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+            Tex& veil = veilCard_ && !gL_.empty() ? gL_[0].S : glareVeil_;   // 0.85.5: the card's veil or the processor's
+            for (Tex* t : {&layer_[0], &layer_[1], &veil}) use(cb, *t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
             begin(cb, {&out_}, 0, 0, fbW, fbH, false);
-            draw(cb, pGlareAdd, 0, {{"uDisc", layer_[0].view, nearest_}, {"uSky", layer_[1].view, nearest_}, {"uVeil", glareVeil_.view, nearest_},
+            draw(cb, pGlareAdd, 0, {{"uDisc", layer_[0].view, nearest_}, {"uSky", layer_[1].view, nearest_}, {"uVeil", veil.view, nearest_},
                                     {"uWhite", cw ? sum_.back().view : white_.view, nearest_}}, 0, 0, fbW, fbH);
             end(cb);
         } else {
@@ -1399,6 +1506,32 @@ void VkBlackHole::math(const std::vector<float>& in, std::vector<float>& out) {
             out[static_cast<std::size_t>(8 * i + k)] = px[static_cast<std::size_t>(4 * i + k)];
             out[static_cast<std::size_t>(8 * i + 4 + k)] = px[static_cast<std::size_t>(4 * (n + i) + k)];
         }
+}
+
+// 0.85.5 (the tests, PL_BH_COMPARE): the card's veil of the blocks src (nx x ny x 3, rows from the bottom) for a picture W x H, middle (cx, cy), K pixels
+// per radian, finest block b, waited for; out: nx x ny x 3 (empty: the card's veil cannot be made). glareSrc_ is made again by the next picture.
+void VkBlackHole::veilTest(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
+                           void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2])) {
+    out.clear();
+    GlareJob j;
+    j.fbW = W; j.fbH = H; j.cx = cx; j.cy = cy; j.K = K; j.b = b; j.nx = (W + b - 1) / b; j.ny = (H + b - 1) / b; j.tables = tables;
+    const std::size_t n = static_cast<std::size_t>(j.nx) * static_cast<std::size_t>(j.ny);
+    if (!ok_ || !glareCard() || src.size() != 3 * n) return;
+    VkCommandBuffer cb = c_->cmd();
+    if (!cb) return;
+    dropTex(glareSrc_);
+    upload(cb, glareSrc_, j.nx, j.ny, kF32, src.data(), 3, "the glare's blocks (the tests)");
+    glareTabB_ = 0;                                                     // (the tables made again for this grid)
+    const bool made = glareOnCard(cb, j);
+    if (made) readBack(cb, gL_[0].S, 0, 0, j.nx, j.ny, debugBuf_);
+    c_->flush(true);
+    debugBuf_.busy = false;
+    dropTex(glareSrc_);
+    glareValid_ = false; veilCard_ = false; composed_ = false; glareTabB_ = 0;
+    const float* px = static_cast<const float*>(debugBuf_.b.map);
+    if (!made || !px || c_->failed()) return;
+    out.resize(3 * n);
+    for (std::size_t q = 0; q < n; q++) for (std::size_t k = 0; k < 3; k++) out[3 * q + k] = px[4 * q + k];
 }
 
 double VkBlackHole::whiteWait() {

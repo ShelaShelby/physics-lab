@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.85.4 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.85.5 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -433,7 +433,8 @@ if(PL_BUILD_APP)
                       # shader in double precision: shaderFloat64)
                       "lens_frag:kLensHeadPart+kGasPart+kLensMainPart" "kerr_frag:kKerrFS" "skytiny_frag:kKerrSkyTinyFS" "skymath_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyMathPart"
                       "sky_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyTracePart+kGasPart+kKerrSkyMainPart" "maxdown_frag:kMaxDownFS" "expsum_frag:kExpSumFS" "glowdown_frag:kGlowDownFS"
-                      "glowblur_frag:kGlowBlurFS" "glowadd_frag:kGlowAddFS" "glaredown_frag:kGlareDownFS" "glareadd_frag:kGlareAddFS" "kerrtable_comp:kKerrTableCS"
+                      "glowblur_frag:kGlowBlurFS" "glowadd_frag:kGlowAddFS" "glaredown_frag:kGlareDownFS" "glareadd_frag:kGlareAddFS"
+                      "glarelevel_frag:kGlareHeadPart+kGlareLevelPart" "glaresum_frag:kGlareHeadPart+kGlareSumPart"   # 0.85.5: the glare veil on the card "kerrtable_comp:kKerrTableCS"
                       # 0.64.0: Saturn's rings per pixel and their probe (the start-up check)
                       "rings_frag:kRingsHeadFSPart+kRingsPart+kRingsMainFSPart" "ringprobe_comp:kRingsHeadCSPart+kRingsPart+kRingsMainCSPart"
                       "classic_comp:kClassicCS"   # 0.64.0: the Classic dots from the cloud buffer

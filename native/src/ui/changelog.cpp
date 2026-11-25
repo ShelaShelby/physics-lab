@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.85.5", "Black Hole Lab: the eye's glare is worked out on the graphics card",
+     "The veil of light the eye's glare lays round the bright disc is now worked out on the graphics card, with the same steps as before. The processor "
+     "did this work on up to eight threads, about a third of a second each time, four times a second while the gas moved: the app used almost half of "
+     "the processor while you only watched. Now it uses about 2 %, and the glare appears with the picture, not a moment later. The picture is the same: "
+     "the card's veil matches the processor's to a few parts in a million. Where the card cannot do it, the processor does, as before."},
     {"0.85.4", "Black Hole Lab: no long freezes on cards with slow double precision",
      "Some graphics cards, such as AMD's Radeon RX 9000 series, work out the spinning hole's light paths far more slowly than the processor does. While "
      "the card did that work the picture froze for up to two seconds. The app now times the first fill: when the card takes over a second, the processor "

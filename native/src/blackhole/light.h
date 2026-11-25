@@ -98,5 +98,8 @@ struct GlareSums { double spread = 0, laid = 0; double ms = 0; };
 void glareVeil(const GlareGrid& g, const std::vector<float>& src, std::vector<float>& veil, GlareSums* sums = nullptr, double age = kEyeAge, double p = kEyePigment);
 // The reference: every pair of blocks directly (slow; small pictures only)
 void glareVeilDirect(const GlareGrid& g, const std::vector<float>& src, std::vector<float>& veil, double age = kEyeAge, double p = kEyePigment);
+// 0.85.5: the tables the veil on the card reads (render/shaders.h kGlareSumFS), as glareVeil uses them: nearW, the near weights for the finest block
+// (9 values of sin(th) / th x 16 directions x 5 x 5 offsets, the offsets fastest); corr, the flat ratios of the finest level (23 x 23 offsets from -11, di fastest)
+void glareTables(const GlareGrid& g, std::vector<float>& nearW, std::vector<float>& corr, double age = kEyeAge, double p = kEyePigment);
 
 }  // namespace blackhole

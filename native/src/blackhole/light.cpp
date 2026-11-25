@@ -393,6 +393,18 @@ void glareVeil(const GlareGrid& g, const std::vector<float>& src, std::vector<fl
     }
 }
 
+void glareTables(const GlareGrid& g, std::vector<float>& nearW, std::vector<float>& corr, double age, double p) {
+    const double a0 = g.b / g.K / kDeg;                                 // the finest block, degrees (as glareVeil)
+    const NearTable& NT = nearTable(a0, age, p);
+    nearW.resize(NT.w.size());
+    for (std::size_t k = 0; k < NT.w.size(); k++) nearW[k] = static_cast<float>(NT.w[k]);
+    const int CW = 2 * kCorrR + 1;
+    corr.assign(static_cast<std::size_t>(CW) * CW, 1.0f);
+    for (int dj = -kCorrR; dj <= kCorrR; dj++)
+        for (int di = -kCorrR; di <= kCorrR; di++)
+            if (std::max(std::abs(di), std::abs(dj)) > kGlareNear) corr[static_cast<std::size_t>(dj + kCorrR) * CW + (di + kCorrR)] = static_cast<float>(flatRatio(a0, di, dj, true, age, p));
+}
+
 void glareVeilDirect(const GlareGrid& g, const std::vector<float>& src, std::vector<float>& veil, double age, double p) {
     const std::size_t n = static_cast<std::size_t>(g.nx) * g.ny;
     std::vector<V3> dir(n);

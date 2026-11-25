@@ -27,7 +27,8 @@ ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMa
              "kLensFS": ["kLensHeadPart", "kGasPart", "kLensMainPart"],   # 0.72.0: the moving gas (kGasPart) in both
              # 0.64.0: Saturn's rings per pixel (Vulkan) and their probe (the start-up check)
              "kRingsFS": ["kRingsHeadFSPart", "kRingsPart", "kRingsMainFSPart"], "kRingsProbeCS": ["kRingsHeadCSPart", "kRingsPart", "kRingsMainCSPart"],
-             "kLinesCS": ["kLinesHeadCSPart", "kLinesPart", "kLinesMainCSPart"]}   # 0.68.0: the Orbit Lab's lines
+             "kLinesCS": ["kLinesHeadCSPart", "kLinesPart", "kLinesMainCSPart"],   # 0.68.0: the Orbit Lab's lines
+             "kGlareLevelFS": ["kGlareHeadPart", "kGlareLevelPart"], "kGlareSumFS": ["kGlareHeadPart", "kGlareSumPart"]}   # 0.85.5: the glare veil on the GPU
 # 0.68.0: shaders written for Vulkan only (GLSL 450 with descriptor sets), compiled here as the build does (glslang -V, relaxed rules, the loose uniforms in a block)
 VULKAN_ONLY = {"kLinesVS": ["kLinesHeadVSPart", "kLinesPart", "kLinesMainVSPart"], "kSurfaceVS": ["kSurfaceVSHeadPart", "kSurfaceVSMainPart"]}
 # 0.56.0, SIZE: every shader's SPIR-V (glslang's OpenGL target, the measure the limits below were set with) is measured as glslang writes it and with its size optimiser (-Os: every function inlined, as a driver

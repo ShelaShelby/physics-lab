@@ -40,7 +40,7 @@ class VkBlackHole {
 public:
     using LensSky = Renderer2D::LensSky;
     // the programs (each its SPIR-V from shaders.h's text); the first six are made on the worker thread
-    enum Prog { pLens, pKerr, pSkyTiny, pSkyMath, pSky, pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy, pExpSum, pProgCount };
+    enum Prog { pLens, pKerr, pSkyTiny, pSkyMath, pSky, pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy, pExpSum, pGlareLevel, pGlareSum, pProgCount };
     static const char* progName(int p);
     static std::size_t spirvBytes(int p);
 
@@ -73,6 +73,8 @@ public:
     // last read-back, waited for (0: none since the last call)
     void debugPicture(const LensSky& L, double ptW, double ptH, int skyTexW, int fbW, int fbH, std::vector<float>& out);
     void math(const std::vector<float>& in, std::vector<float>& out);
+    void veilTest(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
+                  void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2]));   // 0.85.5: the card's glare veil
     double whiteWait();
 
     const Renderer2D::SkyStats& skyStats() const { return skyStats_; }
@@ -193,7 +195,8 @@ private:
     Renderer2D::GlareStats glareStats_;
     // the glare (as Renderer2D's GlareJob; stage 0 idle, 3 the blocks read back under way, 2 the veil on its thread)
     struct GlareJob { int fbW = 0, fbH = 0, b = 1, nx = 0, ny = 0; double cx = 0, cy = 0, K = 0; std::uint64_t gen = 0; bool gasOnly = false;
-                      void (*veil)(int, int, double, double, double, const std::vector<float>&, std::vector<float>&, double[3]) = nullptr; void (*lower)() = nullptr; };
+                      void (*veil)(int, int, double, double, double, const std::vector<float>&, std::vector<float>&, double[3]) = nullptr; void (*lower)() = nullptr;
+                      void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2]) = nullptr; };
     GlareJob want_, job_;
     std::chrono::steady_clock::time_point glareLastStart_{};   // 0.72.0
     std::uint64_t glareGen_ = 0;
@@ -204,6 +207,18 @@ private:
     double glareOut_[3] = {0, 0, 0};
     std::chrono::steady_clock::time_point glareT0_;
     float glareKeep_ = 0;
+    // 0.85.5: the card's veil: per level its light, directions, spreads (two textures) and veil; the near weights and flat ratios (for the finest block of
+    // glareTabB_ pixels at glareTabK_ pixels per radian). veilCard_: the veil shown is the card's (gL_[0].S), else the processor's upload (glareVeil_).
+    struct GlareLevel { Tex E, D, M1, M2, S; int nx = 0, ny = 0, f = 1; };
+    std::vector<GlareLevel> gL_;
+    Tex glareNear_, glareCorr_;
+    int glareTabB_ = 0;
+    double glareTabK_ = 0;
+    bool veilCard_ = false;
+    float glareEye_[2] = {0, 0};                         // the eye's age and pigmentation (light.h), from the tables' call
+    // the veil on the card from glareSrc_ (kGlareLevelFS, kGlareSumFS) into gL_[0].S, recorded into cb; false: it cannot be made (the processor's then)
+    bool glareOnCard(VkCommandBuffer cb, const GlareJob& j);
+    bool glareCard() const { return prog_[pGlareLevel].state == 2 && prog_[pGlareSum].state == 2; }
     // the frame's pass state
     VkCommandBuffer cb_ = VK_NULL_HANDLE;
     VkFormat passFmt_[4] = {};

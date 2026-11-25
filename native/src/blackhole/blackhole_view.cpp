@@ -43,6 +43,12 @@ float brightestMag() {
     return m;
 }
 // 0.55.4: the eye's glare for the renderer (light.h): the finest block and the veil, on the picture's own grid
+// 0.85.5: the veil on the card (render/vk_blackhole.cpp glareOnCard) unless PL_BH_GLARE_CPU is set (the processor's, for comparing)
+bool glareCardOn() { static const bool cpu = std::getenv("PL_BH_GLARE_CPU") != nullptr; return !cpu; }
+void glareTablesFn(int W, int H, double cx, double cy, double K, std::vector<float>& nearW, std::vector<float>& corr, double eye[2]) {   // 0.85.5: the card's veil
+    glareTables(glareGrid(W, H, cx, cy, K), nearW, corr);
+    eye[0] = kEyeAge; eye[1] = kEyePigment;
+}
 int glareBlockFn(int W, int H, double cx, double cy, double K) { return glareGrid(W, H, cx, cy, K).b; }
 void glareVeilFn(int W, int H, double cx, double cy, double K, const std::vector<float>& src, std::vector<float>& veil, double out[3]) {
     GlareSums g;
@@ -440,7 +446,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             }
             filmSoftFields(L, s);                                           // 0.81.0
             if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }
-            L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;
+            L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread; L.glareTables = glareCardOn() ? glareTablesFn : nullptr;
         }
         return L;
     }
@@ -488,7 +494,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             }
             filmSoftFields(L, s);                                           // 0.81.0
             if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
-            L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;   // 0.55.5
+            L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread; L.glareTables = glareCardOn() ? glareTablesFn : nullptr;   // 0.55.5
         }
         return L;
     }
@@ -525,7 +531,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             viewRows(v, rows);
             for (int i = 0; i < 3; i++) { L.gasE1[i] = static_cast<float>(rows[i].x); L.gasE2[i] = static_cast<float>(rows[i].y); } }
         if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
-        L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;   // 0.55.5
+        L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread; L.glareTables = glareCardOn() ? glareTablesFn : nullptr;   // 0.55.5
     }
     return L;
 }
@@ -2020,6 +2026,39 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             std::printf("PLBHGLARE size=%dx%d b=%d grid=%dx%d spread=%.9g laid=%.9g keep=%.9g readms=%.1f veilms=%.1f withoutms=%.1f withms=%.1f glarems=%.1f\n", sz[0], sz[1], gs.b, gs.nx, gs.ny,
                         gs.spread, gs.laid, 1 - glareShare(), gs.readMs, gs.veilMs, best[0], best[1], best[1] - best[0]);
         }
+    }
+    // 0c. 0.85.5, the eye's glare veil on the card against the processor's (light.cpp glareVeil, the reference): a ring of light like a disc seen at a slant,
+    //     three bright points and a faint patch, on two grids (1280 x 800 in blocks of 4 pixels, 800 x 500 in blocks of 2). The difference is over the largest veil value.
+    for (int g = 0; g < 2; g++) {
+        const int W = g == 0 ? 1280 : 800, H = g == 0 ? 800 : 500;     // (the second smaller: the software card on the build machine is slow)
+        const double cx = g == 0 ? 640.3 : 400.3, cy = g == 0 ? 400.7 : 250.7, K = g == 0 ? 1222.3 : 600.0;
+        const GlareGrid G = glareGrid(W, H, cx, cy, K);
+        std::vector<float> src(static_cast<std::size_t>(G.nx) * G.ny * 3, 0.0f), cpu, card;
+        for (int j = 0; j < G.ny; j++)
+            for (int i = 0; i < G.nx; i++) {
+                const double X = (i + 0.5) * G.b - cx, Y = (j + 0.5) * G.b - cy, e = std::hypot(X / 220.0, Y / 70.0);
+                float* p = &src[3 * (static_cast<std::size_t>(j) * G.nx + i)];
+                if (e > 0.8 && e < 1.2) { const float v = static_cast<float>(3.0 + 2.0 * X / 220.0); p[0] = 1.3f * v; p[1] = v; p[2] = 0.7f * v; }
+                if (X > 300 && X < 360 && Y > 150 && Y < 200) p[0] = p[1] = p[2] = 0.05f;
+            }
+        const int pts[3][2] = {{G.nx / 5, G.ny / 4}, {G.nx - 3, G.ny / 2}, {G.nx / 2 + 1, G.ny / 2}};
+        for (const auto& q : pts) for (int k = 0; k < 3; k++) src[3 * (static_cast<std::size_t>(q[1]) * G.nx + q[0]) + k] = 400.0f;
+        const auto t0 = std::chrono::steady_clock::now();
+        glareVeil(G, src, cpu);
+        const double cpuMs = msSince(t0);
+        const auto t1 = std::chrono::steady_clock::now();
+        R.glareVeilCard(W, H, cx, cy, K, G.b, src, card, glareTablesFn);
+        const double cardMs = msSince(t1);
+        double peak = 0, worst = 0, worstRel = 0;
+        for (float v : cpu) peak = std::max(peak, static_cast<double>(v));
+        if (card.size() == cpu.size())
+            for (std::size_t k = 0; k < cpu.size(); k++) {
+                const double d = std::fabs(static_cast<double>(card[k]) - cpu[k]);
+                worst = std::max(worst, d);
+                if (cpu[k] > 1e-2 * peak) worstRel = std::max(worstRel, d / cpu[k]);
+            }
+        std::printf("PLBHGLARECARD grid=%dx%d b=%d made=%d peak=%.6g diff=%.3g reldiff=%.3g cpums=%.1f cardms=%.1f\n", G.nx, G.ny, G.b, card.size() == cpu.size() ? 1 : 0, peak,
+                    peak > 0 ? worst / peak : 1.0, worstRel, cpuMs, cardMs);
     }
     if (std::getenv("PL_BH_COMPARE_LOOKS")) { R.begin(1280, 800); return; }   // (by hand: the looks part only)
     const bool onlySpin = std::getenv("PL_BH_COMPARE_SPIN") != nullptr;   // (by hand: the spin part only)

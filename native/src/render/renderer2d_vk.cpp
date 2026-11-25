@@ -173,6 +173,11 @@ void Renderer2D::skyMath(const std::vector<float>& in, std::vector<float>& out) 
     if (vkbh_) vkbh_->math(in, out);
     else out.assign(in.size() / 12 * 8, 0.0f);
 }
+void Renderer2D::glareVeilCard(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
+                               void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2])) {
+    out.clear();
+    if (vkbh_) vkbh_->veilTest(W, H, cx, cy, K, b, src, out, tables);
+}
 int Renderer2D::skyLensState() const { return vkbh_ ? vkbh_->lensState() : 2; }
 double Renderer2D::skyWhiteWait() { if (!vkbh_) return 0; const double w = vkbh_->whiteWait(); skyStats_ = vkbh_->skyStats(); return w; }   // (0.70.0: the stats too, at once)
 

@@ -394,6 +394,12 @@ def part_precision(binary, work):   # (0.76.0: the sky's half and the card's are
         sp, ld = float(x["spread"]), float(x["laid"])
         check(sp > 0 and 0.8 < ld / sp <= 1.01 and abs(float(x["keep"]) - 0.72066) < 1e-4, f"{x['size']}: the veil lays {ld / sp if sp else 0:.4f} of the light it spreads (the rest leaves the picture), keep {x['keep']}")
         print(f"  glare {x['size']}: block {x['b']} px, grid {x['grid']}, read-back {x['readms']} ms, veil {x['veilms']} ms, picture {x['withoutms']} -> {x['withms']} ms")
+    # 0.85.5: the veil made on the card (kGlareLevelFS, kGlareSumFS) against the processor's glareVeil, the reference, on two grids. The card works in
+    # single precision. Measured on the RX 9060 XT: 2.3e-6 of the largest veil value, 7.0e-5 relative where the veil is over 1 % of it (0.85.5). Limits fixed
+    # from that, with room: 1e-4 and 1e-3 (a float error, far below a level of 255)
+    gc = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHGLARECARD ")]
+    check(len(gc) == 2 and all(x["made"] == "1" and float(x["diff"]) <= 1e-4 and float(x["reldiff"]) <= 1e-3 for x in gc),
+          f"the glare's veil on the card = the processor's ({[(x['grid'], x['diff'], x['reldiff'], x['cardms'], x['cpums']) for x in gc]})")
     p = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHPLAIN ")]
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
     # 0.72.0, the moving gas at spin 0 (kLensFS uDebug 3) after 10^6 M of running: every pixel of the first disc image has phi within 2e-3 rad of the geometry

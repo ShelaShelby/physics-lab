@@ -333,6 +333,9 @@ public:
         // the same picture is shown without the glare. A newer picture drops an older glare. false: all of it at once in this frame (automatic checks).
         bool glareAsync = false;
         void (*glareThread)() = nullptr;
+        // 0.85.5: the tables the card's veil reads (blackhole/light.h glareTables: the near weights, the flat ratios, the eye's age and pigmentation); null:
+        // the veil is made on the processor
+        void (*glareTables)(int W, int H, double cx, double cy, double K, std::vector<float>& nearW, std::vector<float>& corr, double eye[2]) = nullptr;
         // 0.56.0: the spinning hole per pixel from the closed forms (render/shaders.h kKerrSkyFS) in place of kerr's table (kA, kB, kEdge, kTau unused; kM, kO,
         // spin, the disc's fields as for kerr). skyCam (a, r_c, cos theta_c, sin theta_c), skyMet (alpha, omega, varpi, rho), skyMet2 (Delta^(1/2), r+, r-, r+ + 1e-3):
         // the camera, made in double by the caller (blackhole/kerr.h kerrMetric). filmRaw: the Film's one colour before the screen's white (w > 0: Film).
@@ -378,6 +381,9 @@ public:
     // of 12 floats in, 8 out, waited for); the exposure's read-back of the last picture, waited for (0: none). render/vk_blackhole.h has them.
     void lensFloat(const LensSky& L, int w, int h, std::vector<float>& out);
     void skyMath(const std::vector<float>& in, std::vector<float>& out);
+    // 0.85.5: the eye's glare veil made on the card from the blocks src (VkBlackHole::veilTest), waited for; empty: not made (no Vulkan, or its programs failed)
+    void glareVeilCard(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
+                       void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2]));
     double skyWhiteWait();
     // 0.85.3: the lens pass's pipeline (render/vk_blackhole.h lensState): 2 made, -1 failed, 0 or 1 not yet. 2 without Vulkan's Black Hole programs.
     int skyLensState() const;

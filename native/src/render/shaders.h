@@ -1173,6 +1173,179 @@ void main() {
 }
 )";
 
+// 0.85.5: the eye's glare veil on the card (light.cpp glareVeil, step for step, in single precision; the processor's stays the reference and the fallback).
+// The finest level's blocks are glareSrc_'s texels. Each level above is 4 x 4 blocks of the one below, up to a grid of at most 6 x 6. kGlareLevelFS (kGlareHeadPart + kGlareLevelPart) makes
+// a level's four textures, one pass each (uWhat): 0 E (each block's light x solid angle; .a 1 if it has light), 1 its light's direction, 2 and 3 the spread
+// of its light about that direction (M: xx yy zz xy, then xz yz). kGlareSumFS lays the veil, top level first: at each sample point (one per block at the
+// finest level, 3 x 3 above) the coarser levels' veil (Lagrange's quadratic between the parent's 3 x 3 points) plus this level's pairs.
+static const char* const kGlareHeadPart = R"(#version 330 core
+const float PI = 3.14159265358979;
+const float kDegG = 0.0174532925199433;
+uniform ivec2 uSize;                                  // the picture, pixels
+uniform vec2 uC;                                      // its middle (cx, cy), pixels
+uniform float uK;                                     // pixels per radian
+uniform int uB;                                       // the finest block, pixels
+uniform vec2 uEye;                                    // the eye's age (years) and pigmentation p
+uniform ivec2 uN;                                     // this level's blocks
+uniform int uF;                                       // finest blocks per block of this level
+out vec4 fragColor;
+float psf(float th) {                                 // light.cpp glarePsf (degrees)
+    if (!(th >= 0.1 && th <= 100.0)) return 0.0;
+    float a = uEye.x / 62.5, a4 = a * a * a * a;
+    return 10.0 / (th * th * th) + (5.0 / (th * th) + 0.1 * uEye.y / th) * (1.0 + a4) + 2.5e-3 * uEye.y;
+}
+vec3 dirAt(float X, float Y) {                        // light.cpp dirAt
+    float dx = (X - uC.x) / uK, dy = (Y - uC.y) / uK, th = min(length(vec2(dx, dy)), PI), s = th > 1e-12 ? sin(th) / th : 1.0;
+    return vec3(s * dx, s * dy, -cos(th));
+}
+float angleDeg(vec3 a, vec3 b) { float c = length(a - b) * 0.5; return 2.0 * asin(min(1.0, c)) / kDegG; }
+ivec2 spanOf(int k, int f, int n) { return ivec2(k * f * uB, min((k + 1) * f * uB, n)); }   // light.cpp span
+float solidAngle(int i, int j) {                      // light.cpp glareBlockSolidAngle (the finest level)
+    ivec2 sx = spanOf(i, 1, uSize.x), sy = spanOf(j, 1, uSize.y);
+    if (sx.y <= sx.x || sy.y <= sy.x) return 0.0;
+    float X = 0.5 * float(sx.x + sx.y), Y = 0.5 * float(sy.x + sy.y), th = length(vec2(X - uC.x, Y - uC.y)) / uK;
+    return float((sx.y - sx.x) * (sy.y - sy.x)) * (th > 1e-9 ? sin(th) / th : 1.0) / (uK * uK);
+}
+)";
+static const char* const kGlareLevelPart = R"(
+uniform sampler2D uSrc;                               // the finest level: the blocks' mean light; above: the level below's E
+uniform sampler2D uCD;                                // the level below's directions
+uniform sampler2D uCM1;                               // the level below's spreads
+uniform sampler2D uCM2;
+uniform sampler2D uOwnD;                              // this level's directions (the spread's passes)
+uniform ivec2 uNc;                                    // the level below's blocks
+uniform int uWhat;
+void main() {
+    ivec2 q = ivec2(gl_FragCoord.xy);
+    ivec2 sx = spanOf(q.x, uF, uSize.x), sy = spanOf(q.y, uF, uSize.y);
+    float X = 0.5 * float(sx.x + sx.y), Y = 0.5 * float(sy.x + sy.y);
+    if (uF == 1) {
+        float om = solidAngle(q.x, q.y);
+        vec3 c = dirAt(X, Y);
+        if (uWhat == 0) { vec3 e = texelFetch(uSrc, q, 0).rgb * om; fragColor = vec4(e, (e.r > 0.0 || e.g > 0.0 || e.b > 0.0) ? 1.0 : 0.0); return; }
+        if (uWhat == 1) { fragColor = vec4(c, 0.0); return; }
+        float s2 = om / 12.0;                         // a square of solid angle om: om / 12 along each of its two sides
+        if (uWhat == 2) fragColor = vec4(s2 * (1.0 - c.x * c.x), s2 * (1.0 - c.y * c.y), s2 * (1.0 - c.z * c.z), -s2 * c.x * c.y);
+        else fragColor = vec4(-s2 * c.x * c.z, -s2 * c.y * c.z, 0.0, 0.0);
+        return;
+    }
+    ivec2 lo = 4 * q, hi = min(4 * q + 4, uNc);
+    if (uWhat == 0) {
+        vec3 e = vec3(0.0);
+        for (int jj = lo.y; jj < hi.y; jj++) for (int ii = lo.x; ii < hi.x; ii++) e += texelFetch(uSrc, ivec2(ii, jj), 0).rgb;
+        fragColor = vec4(e, (e.r > 0.0 || e.g > 0.0 || e.b > 0.0) ? 1.0 : 0.0);
+        return;
+    }
+    if (uWhat == 1) {                                 // the light-weighted mean of its parts' directions (none: its middle's)
+        vec3 s = vec3(0.0);
+        for (int jj = lo.y; jj < hi.y; jj++) for (int ii = lo.x; ii < hi.x; ii++) {
+            vec3 e = texelFetch(uSrc, ivec2(ii, jj), 0).rgb;
+            s += (e.r + e.g + e.b) * texelFetch(uCD, ivec2(ii, jj), 0).xyz;
+        }
+        float m = length(s);
+        fragColor = vec4(m > 0.0 ? s / m : dirAt(X, Y), 0.0);
+        return;
+    }
+    vec3 c0 = texelFetch(uOwnD, q, 0).xyz;            // the parts' spreads and their places about the centre, light-weighted
+    float W = 0.0;
+    vec4 a = vec4(0.0);
+    vec2 b = vec2(0.0);
+    for (int jj = lo.y; jj < hi.y; jj++) for (int ii = lo.x; ii < hi.x; ii++) {
+        ivec2 r = ivec2(ii, jj);
+        vec3 e3 = texelFetch(uSrc, r, 0).rgb;
+        float w = e3.r + e3.g + e3.b;
+        if (!(w > 0.0)) continue;
+        vec3 ex = texelFetch(uCD, r, 0).xyz - c0;
+        a += w * (texelFetch(uCM1, r, 0) + vec4(ex.x * ex.x, ex.y * ex.y, ex.z * ex.z, ex.x * ex.y));
+        b += w * (texelFetch(uCM2, r, 0).xy + vec2(ex.x * ex.z, ex.y * ex.z));
+        W += w;
+    }
+    if (!(W > 0.0)) { fragColor = vec4(0.0); return; }
+    fragColor = uWhat == 2 ? a / W : vec4(b / W, 0.0, 0.0);
+}
+)";
+static const char* const kGlareSumPart = R"(
+uniform sampler2D uE;                                 // this level: light x solid angle (.a: has light), directions, spreads
+uniform sampler2D uD;
+uniform sampler2D uM1;
+uniform sampler2D uM2;
+uniform sampler2D uPS;                                // the level above's veil at its 3 x 3 points per block
+uniform sampler2D uNear;                              // light.cpp's near weights (kNf x kNp x 5 x 5, one row)
+uniform sampler2D uCorr;                              // light.cpp's flat ratios (23 x 23, from -11)
+uniform int uTop;                                     // 1: the top level (every block a source; no level above)
+uniform int uLevel;                                   // 0: the finest
+const int kNear = 2, kCorrR = 11, kNf = 9, kNp = 16;
+const float kFmin = 0.05;
+float nearWeight(float th, float phi, int di, int dj) {   // light.cpp nearWeight
+    float f = th > 1e-9 ? sin(th) / th : 1.0;
+    float u = clamp((f - kFmin) / (1.0 - kFmin) * float(kNf - 1), 0.0, float(kNf - 1)), v = phi / PI * float(kNp);
+    v -= float(kNp) * floor(v / float(kNp));
+    int i0 = min(int(u), kNf - 2), j0 = int(v) % kNp, j1 = (j0 + 1) % kNp;
+    float fu = u - float(i0), fv = v - floor(v);
+    int o = (dj + kNear) * 5 + (di + kNear);
+    float w00 = texelFetch(uNear, ivec2((i0 * kNp + j0) * 25 + o, 0), 0).r, w01 = texelFetch(uNear, ivec2((i0 * kNp + j1) * 25 + o, 0), 0).r;
+    float w10 = texelFetch(uNear, ivec2(((i0 + 1) * kNp + j0) * 25 + o, 0), 0).r, w11 = texelFetch(uNear, ivec2(((i0 + 1) * kNp + j1) * 25 + o, 0), 0).r;
+    return (1.0 - fu) * ((1.0 - fv) * w00 + fv * w01) + fu * ((1.0 - fv) * w10 + fv * w11);
+}
+float psiSpread(vec3 t, vec3 c, vec4 m1, vec2 m2) {   // light.cpp psiSpread: Psi at the light's centre plus the second-order term of its spread
+    float th = angleDeg(t, c), w = psf(th);
+    if (!(w > 0.0) || !(m1.x + m1.y + m1.z > 0.0)) return w;
+    vec3 r = t - dot(t, c) * c;
+    float rn = length(r);
+    if (!(rn > 0.0)) return w;
+    r /= rn;
+    float d2r = 1.0 / (kDegG * kDegG);
+    float mrr = (m1.x * r.x * r.x + m1.y * r.y * r.y + m1.z * r.z * r.z + 2.0 * (m1.w * r.x * r.y + m2.x * r.x * r.z + m2.y * r.y * r.z)) * d2r;
+    float mtt = (m1.x + m1.y + m1.z) * d2r - mrr;
+    float a = uEye.x / 62.5, a4 = 1.0 + a * a * a * a;  // light.cpp psiDerivs
+    float d1 = -30.0 / (th * th * th * th) + (-10.0 / (th * th * th) - 0.1 * uEye.y / (th * th)) * a4;
+    float d2 = 120.0 / (th * th * th * th * th) + (30.0 / (th * th * th * th) + 0.2 * uEye.y / (th * th * th)) * a4;
+    return max(0.0, w + 0.5 * (d2 * mrr + d1 / th * mtt));
+}
+void main() {
+    ivec2 t = ivec2(gl_FragCoord.xy);
+    bool fine = uLevel == 0;
+    ivec2 q = fine ? t : t / 3, k = fine ? ivec2(1) : t - 3 * (t / 3);
+    ivec2 sx = spanOf(q.x, uF, uSize.x), sy = spanOf(q.y, uF, uSize.y);
+    float fr[3] = float[3](0.125, 0.5, 0.875);
+    float px = fine ? 0.5 * float(sx.x + sx.y) : float(sx.x) + float(sx.y - sx.x) * fr[k.x];
+    float py = fine ? 0.5 * float(sy.x + sy.y) : float(sy.x) + float(sy.y - sy.x) * fr[k.y];
+    vec3 d = dirAt(px, py);
+    vec3 S = vec3(0.0);
+    if (uTop == 0) {                                  // the coarser levels' veil: Lagrange's weights on the parent's three nodes each way
+        ivec2 pq = q / 4;
+        ivec2 psx = spanOf(pq.x, 4 * uF, uSize.x), psy = spanOf(pq.y, 4 * uF, uSize.y);
+        float xs[3] = float[3](0.0, 0.0, 0.0), ys[3] = float[3](0.0, 0.0, 0.0), wx[3] = float[3](1.0, 1.0, 1.0), wy[3] = float[3](1.0, 1.0, 1.0);
+        for (int m = 0; m < 3; m++) { xs[m] = float(psx.x) + float(psx.y - psx.x) * fr[m]; ys[m] = float(psy.x) + float(psy.y - psy.x) * fr[m]; }
+        for (int m = 0; m < 3; m++)
+            for (int o = 0; o < 3; o++) if (o != m) { wx[m] *= (px - xs[o]) / (xs[m] - xs[o]); wy[m] *= (py - ys[o]) / (ys[m] - ys[o]); }
+        for (int my = 0; my < 3; my++) for (int mx = 0; mx < 3; mx++) S += wx[mx] * wy[my] * texelFetch(uPS, 3 * pq + ivec2(mx, my), 0).rgb;
+        S = max(S, vec3(0.0));
+    }
+    ivec2 a0 = ivec2(0), a1 = uN - 1;                 // the sources: all at the top; else the parent's neighbours' children
+    if (uTop == 0) { a0 = max(ivec2(0), (q / 4 - kNear) * 4); a1 = min(uN - 1, (q / 4 + kNear) * 4 + 3); }
+    vec3 acc = vec3(0.0);
+    for (int jj = a0.y; jj <= a1.y; jj++)
+        for (int ii = a0.x; ii <= a1.x; ii++) {
+            int di = q.x - ii, dj = q.y - jj, cd = max(abs(di), abs(dj));
+            if (cd <= kNear && !fine) continue;       // near pairs belong to a finer level (the finest keeps them, the block itself too)
+            ivec2 r = ivec2(ii, jj);
+            vec4 e = texelFetch(uE, r, 0);
+            if (!(e.a > 0.5)) continue;
+            float w = 0.0;
+            if (cd <= kNear) {                        // the source's own local map
+                ivec2 rx = spanOf(ii, 1, uSize.x), ry = spanOf(jj, 1, uSize.y);
+                float X = 0.5 * float(rx.x + rx.y), Y = 0.5 * float(ry.x + ry.y);
+                w = nearWeight(length(vec2(X - uC.x, Y - uC.y)) / uK, atan(Y - uC.y, X - uC.x), di, dj);
+            } else if (fine) w = psf(angleDeg(d, texelFetch(uD, r, 0).xyz)) * (cd <= kCorrR ? texelFetch(uCorr, ivec2(di + kCorrR, dj + kCorrR), 0).r : 1.0);
+            else w = psiSpread(d, texelFetch(uD, r, 0).xyz, texelFetch(uM1, r, 0), texelFetch(uM2, r, 0).xy);
+            if (w <= 0.0) continue;
+            acc += w * e.rgb;
+        }
+    fragColor = vec4(S + acc, 1.0);
+}
+)";
+
 // ---- compute shaders (GLSL 430 core text, built for Vulkan) ----
 // The colour group of every dot of a superposition or of a cloud jump, worked out on the GPU from the amplitudes stored with each dot when it was made. One kernel, two modes (uMode).
 // Each function is a direct port of its C++ twin, named in its comment; the C++ functions stay the reference (tests/vk_compare.cpp counts every dot that differs, and each must be within
