@@ -12,7 +12,9 @@ param(
     [string]$Folder = $PSScriptRoot,
     [string[]]$Parts = @('device', 'smoke', 'vkcards', 'bh', 'planets', 'bench', 'items', 'logs', 'validation'),
     [int]$Width = 1280,
-    [int]$Height = 800
+    [int]$Height = 800,
+    [string]$WindowAt = '',     # "x,y": where the app's windows open (another monitor, so the owner can keep using his main one); default: centred
+    [switch]$NoKeys              # skip the full-screen check (it presses F11 through Windows and takes the focus)
 )
 $ErrorActionPreference = 'Stop'
 $Parts = @($Parts | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })   # (-File passes "a,b" as one string)
@@ -122,6 +124,7 @@ function Invoke-App([string]$name, [hashtable]$extra, [int]$frames = 60, [int]$l
     if (Test-Path $hd) { Remove-Item -Recurse -Force $hd }
     New-Item -ItemType Directory -Force $hd | Out-Null
     $bmp = Join-Path $res "$name.bmp"
+    if ($WindowAt) { Set-Content -Path (Join-Path $hd 'settings.txt') -Value "window=$Width,$Height,$WindowAt,0" -Encoding ASCII }
     if (Test-Path $bmp) { Remove-Item -Force $bmp }
     $e = @{ PL_SETTINGS = (Join-Path $hd 'settings.txt'); PL_SHOT_DIR = $hd; PL_WINDOW = "${Width}x${Height}"; PL_MOTION = 'on'; PL_FIXED_DT = '0.016';
             PL_DYK_FIRST = '3'; PL_DATE = '2026-10-05'; PL_EXIT_AFTER_FRAMES = "$frames"; PL_THEME = 'dark'; PL_LOG_SHELL = '1'; PL_PANELS = 'atom.card=o';
@@ -212,8 +215,8 @@ if ($Parts -contains 'bh') {
         Add-Check "3c.bh.filmsoft.$($x['tilt'])" ($x['ok'] -eq '1' -and (N $x['share']) -le 0.01) "Film's see-through disc: $($x['over8']) of $($x['pixels']) disc pixels over 8 levels"
     }
     foreach ($x in (Get-Rows $r.Out 'PLBHSKYPIC')) {
-        $parts = ($x.Keys | Sort-Object | ForEach-Object { "$_=$($x[$_])" }) -join ' '
-        Add-Info "3c.bh.skypic.$($x['case'])" $parts
+        $kvs = ($x.Keys | Sort-Object | ForEach-Object { "$_=$($x[$_])" }) -join ' '
+        Add-Info "3c.bh.skypic.$($x['case'])" $kvs
     }
     # the full picture at the owner's window (2560 x 1369) against the double-precision reference, at four tilts
     $r = Invoke-App 'bh_skyfull' (Merge $GL @{ PL_BH_COMPARE = 'sky'; PL_BH_SKYFULL = '2560,1369,30' }) 1 840
@@ -290,7 +293,7 @@ if ($Parts -contains 'bench') {
     if (Test-Path $hd) { Remove-Item -Recurse -Force $hd }
     New-Item -ItemType Directory -Force $hd | Out-Null
     # the owner's window: maximised (2560 x 1369 inside the taskbar), as his own settings keep it
-    Set-Content -Path (Join-Path $hd 'settings.txt') -Value 'window=2560,1369,-,-,1' -Encoding ASCII
+    Set-Content -Path (Join-Path $hd 'settings.txt') -Value $(if ($WindowAt) { "window=2560,1369,$WindowAt,1" } else { 'window=2560,1369,-,-,1' }) -Encoding ASCII
     $r = Invoke-Tool $app @() 'bench' @{ PL_BENCH = 'start'; PL_SETTINGS = (Join-Path $hd 'settings.txt'); PL_SHOT_DIR = $hd; PL_EXIT_AFTER_SECONDS = '1140' } 1200 $hd 'physics-lab-benchmark-*.txt'
     $file = Get-ChildItem $hd -Filter 'physics-lab-benchmark-*.txt' -ErrorAction SilentlyContinue | Select-Object -First 1
     Add-Check '3d.bench' ($null -ne $file) "the benchmark ran and saved its result ($(if ($file) { $file.Name } else { 'no file' }); $([math]::Round($r.Seconds)) s)"
@@ -305,7 +308,7 @@ function Invoke-BenchOnly([string]$name, [string]$only, [hashtable]$more) {
     $hd = Join-Path $res "home_$name"
     if (Test-Path $hd) { Remove-Item -Recurse -Force $hd }
     New-Item -ItemType Directory -Force $hd | Out-Null
-    Set-Content -Path (Join-Path $hd 'settings.txt') -Value 'window=2560,1369,-,-,1' -Encoding ASCII
+    Set-Content -Path (Join-Path $hd 'settings.txt') -Value $(if ($WindowAt) { "window=2560,1369,$WindowAt,1" } else { 'window=2560,1369,-,-,1' }) -Encoding ASCII
     $e = @{ PL_BENCH = 'start'; PL_BENCH_ONLY = $only; PL_SETTINGS = (Join-Path $hd 'settings.txt'); PL_SHOT_DIR = $hd; PL_EXIT_AFTER_SECONDS = '600' }
     if ($more) { foreach ($k in $more.Keys) { $e[$k] = $more[$k] } }
     $r = Invoke-Tool $app @() $name $e 660 $hd 'physics-lab-benchmark-*.txt'
@@ -340,6 +343,7 @@ if ($Parts -contains 'items') {
     foreach ($ln in (Get-SceneLines $r.File 'ui.resize_blackhole')) { Add-Info '3e.resize.maximised' $ln }
     $saved = Get-Content (Join-Path $res 'home_item_resize_max\settings.txt') -ErrorAction SilentlyContinue | Where-Object { $_ -like 'window=*' }
     Add-Check '3e.resize.maximised' ($r.File -and $saved -match ',1$') "the scene ran from a maximised window and left it maximised (settings: $saved)"
+    if ($NoKeys) { Add-Info '3e.fullscreen' 'skipped (-NoKeys)' } else {
     # full screen: F11 pressed twice through Windows (the app's own key) over the Black Hole Lab, at the screen's own size
     $hd = Join-Path $res 'home_item_fullscreen'
     if (Test-Path $hd) { Remove-Item -Recurse -Force $hd }
@@ -355,6 +359,7 @@ if ($Parts -contains 'items') {
     $scr = Get-CimInstance Win32_VideoController | Where-Object { $_.CurrentHorizontalResolution } | Select-Object -First 1
     $full = "$($scr.CurrentHorizontalResolution) x $($scr.CurrentVerticalResolution)"
     Add-Check '3e.fullscreen' ($r.Code -eq 0 -and ($sw -match [regex]::Escape($full))) "F11 twice over the Black Hole Lab: exit $($r.Code), a swapchain at the screen's $full ($(@($sw | Select-Object -Unique) -join ' | '))"
+    }
 }
 
 # ---- 3b: gpu-paths-log.txt, every [vulkan] line; a path that fell back to the CPU is a finding ----

@@ -1,0 +1,684 @@
+Physics Lab benchmark
+Version: 0.85.1
+Date: 2026-11-25 17:09:49
+Run: Hard scenes
+Processor: AMD Ryzen 5 7500X3D 6-Core Processor, 6 cores, 12 threads
+Memory installed: 32.0 GB; the app's peak during the run: 974 MB
+Start-up: 1144 ms from the start of the app to its first finished picture
+The benchmark's own start: 144 ms from Start to the first scene's warm-up (settings kept and the run made 1 ms; two frames showing "Preparing the benchmark ..."; the GPU timer's check 136 ms, 27 known loads; the first scene set up 0 ms); then the swapchain made again for VSync off 16 ms
+Worst single frame: 365.3 ms, in atom.emit_all
+GPU: AMD Radeon RX 9060 XT
+Graphics: Vulkan 1.4.359, FIFO (waits for the screen)
+Atom Lab superposition and jumps: Vulkan: GPU superposition on
+Atom Lab 90 % outline: Vulkan: GPU outline on
+Orbit Lab rocks: Vulkan: GPU rocks on
+Driver / vendor: AMD proprietary driver 2.0.416 (26.11.2 (LLPC))
+Window: 2560 x 1369 pixels, not full screen
+Picture area: 2560 x 1369 pixels
+Display refresh rate: 255 Hz
+Text size: normal, theme: auto
+Windows power throttling: switched off for this app (accepted)
+VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: 1.3 s warm-up (not counted), then 5.2 s counted.
+GPU timer (Vulkan timestamp queries): available
+GPU timer check: reliable, self-check with a known load: timer 2.99 ms, clock 3.10 ms
+GPU time covers the whole drawing of a frame (the frame's command buffer: picture, panels and text; and the card programs' batches submitted for it, summed; a worker thread's batches, such as the light paths' fill, are not the frame's), up to just before the present. A frame's timestamps are read once its fence has signalled; a zero or backwards pair is thrown away (the timer check's line counts them).
+Input during the test: blocked
+
+SCENES, slowest first
+id                          avg fps   1 % low   pictures/s  lag        reaches    limited by                                    name
+atom.emit_all               171.8     3.97      171.8       -          no         processor                                     Atom Lab, Emit and Absorb in turn with every electron
+blackhole.film_tilt         965.3     442.7     7.37        42.1 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, the Film look tilted through the disc's plane, then at rest
+blackhole.everything        858.1     506.8     30.6        71.6 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, every heavy option at once, turning
+blackhole.real_move         1138      451.6     34.8        1487.3 ms  no         processor (the pictures, made off the frame)  Black Hole Lab, the spinning hole's sky and disc while the view moves
+blackhole.close_spin        881.7     491.5     38.5        119.1 ms   no         processor (the pictures, made off the frame)  Black Hole Lab, circling at the closest distance and the top spin
+blackhole.over_poles        914.2     529.9     41.4        62.1 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, dragged over both poles at the top spin
+blackhole.circle_spin       965.6     639.3     42.1        53.1 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, circling the spinning hole and its disc as a user drags, with the glide
+blackhole.all_light         907.4     510.3     42.1        53.6 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, Light: All light on the spinning hole while the view moves
+blackhole.dolly_spin        909.3     573.6     42.5        53.9 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, the wheel moving the camera in and out at spin 0.9
+blackhole.extreme           904.1     434.0     43.9        63.1 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, the top spin, the closest distance and the widest view
+ui.resize_blackhole         151.3     62.9      83.4        37.0 ms    no         processor (the pictures, made off the frame)  Panels, the window resized over the Black Hole Lab
+ui.settings_over_blackhole  806.3     570.1     81.9        29.4 ms    no         processor (the pictures, made off the frame)  Panels, Settings over the Black Hole Lab's moving gas, scrolled
+blackhole.moving_gas        918.2     611.2     83.8        27.2 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, the moving gas at the fastest rate while the view turns
+blackhole.film_soft         839.9     516.5     197.9       12.9 ms    no         processor (the pictures, made off the frame)  Black Hole Lab, the Film look's see-through disc and streaks, turning
+orbit.saturn_real_fast      481.1     230.6     481.1       -          no         both                                          Orbit Lab, a fly-by of Saturn with Real physics at the fastest time
+atom.nucleus_zoom           311.1     246.7     311.1       -          no         graphics card                                 Atom Lab, the nucleus at full zoom, the camera turning
+atom.nucleon                343.8     281.2     343.8       -          yes        graphics card                                 Atom Lab, one nucleon
+atom.jump_all               360.7     295.4     360.7       -          yes        processor                                     Atom Lab, a jump with every electron held in flight
+molecule.vib_density        349.4     303.6     349.4       -          yes        processor                                     Molecule Lab, the vibrating density playing
+atom.slice_dirac_drag       370.3     312.9     370.3       -          yes        processor                                     Atom Lab, the Slice of a Dirac state, the cut dragged
+ui.settings_open            603.7     327.4     603.7       -          yes        processor                                     Panels, Settings over the heaviest Orbit view, Pick a body open and scrolled
+orbit.real_fast             594.4     327.4     594.4       -          yes        processor                                     Orbit Lab, Real planet physics with relativity at the fastest time
+atom.side_all_glow          482.5     334.7     482.5       -          yes        both                                          Atom Lab, the side view with every electron, Glow
+orbit.heaviest              640.2     339.7     640.2       -          yes        processor                                     Orbit Lab, the heaviest view
+orbit.true_light            619.7     339.9     619.7       -          yes        processor                                     Orbit Lab, True sunlight: Neptune followed, then Earth, in turn
+atom.all_enlarged           413.0     349.3     413.0       -          yes        both                                          Atom Lab, every electron, Shells enlarged, Glow, Ultra, the camera turning
+orbit.oort_region           817.8     381.7     817.8       -          yes        processor                                     Orbit Lab, zoomed out to the Oort cloud's model dots
+blackhole.edge_on           644.5     403.3     638.7       3.3 ms     yes        both                                          Black Hole Lab, Sagittarius A*'s disc seen edge on, turning
+orbit.sun_edge              780.3     505.7     780.3       -          yes        processor                                     Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse
+molecule.live_hot           902.6     655.8     902.6       -          yes        processor                                     Molecule Lab, the largest molecule live at 1,500 K, the camera turning
+Rules: "reaches" is yes when the 1 % low and the new pictures a second are both at least the display's refresh rate (255 Hz), and, for a Black Hole Lab scene, its lag (the worst time the shown picture was behind the settings) is at most 2 frames at that rate (7.8 ms; "-": not a Black Hole Lab scene). "Limited by" compares the frame's CPU work c with the GPU's busy time g: processor when c >= 1.5 g, graphics card when g >= 1.5 c, else both (no reliable GPU time: "processor?" when c is 80 % of the frame or more); where the new pictures a second fall under 90 % of the frames a second it names what makes the pictures off the frame. Slowest first by the lower of the 1 % low and the new pictures a second.
+
+WAITS (each done 3 times: the middle and the worst, until the finished picture)
+id                                      middle      worst       worst frame  name
+response.lab_switch.orbit_atom          5 ms        5 ms        4.0 ms       From the Orbit Lab to the Atom Lab
+response.lab_switch.atom_molecule       4 ms        5 ms        4.0 ms       From the Atom Lab to the Molecule Lab
+response.lab_switch.molecule_blackhole  8 ms        8 ms        4.1 ms       From the Molecule Lab to the Black Hole Lab
+response.lab_switch.blackhole_orbit     4 ms        4 ms        3.9 ms       From the Black Hole Lab to the Orbit Lab
+response.atom_element                   3128 ms     3129 ms     8.7 ms       Carbon to the heaviest atom, every electron
+response.atom_density                   3127 ms     3132 ms     8.5 ms       Cloud density Normal to Ultra, every electron
+response.molecule_pick                  14 ms       23 ms       4.0 ms       Another molecule in the Density style
+response.blackhole_spin                 1020 ms     1035 ms     8.1 ms       A new spin and distance typed in
+response.blackhole_look                 361 ms      434 ms      5.7 ms       Real to Film
+response.blackhole_look_back            8 ms        8 ms        4.2 ms       Film back to Real
+response.blackhole_streaks              282 ms      282 ms      4.7 ms       The disc's streaks made
+response.blackhole_tilt                 1015 ms     1024 ms     8.1 ms       The fine picture after a tilt
+response.blackhole_dolly                1181 ms     1200 ms     8.1 ms       The sharp picture after a wheel step
+response.sunspot_table                  4 ms        4 ms        4.0 ms       The Sun's first close view (the sunspot table read)
+response.orbit_date                     465 ms      1685 ms     12.3 ms      A jump to a far date in Real physics
+  response.lab_switch.orbit_atom: each lab at its defaults; the time to the new lab's first finished picture
+  response.atom_element: Cloud 3D, every electron, Ultra: from carbon to oganesson; until its cloud has all its dots
+  response.atom_density: oganesson, Cloud 3D, every electron: Cloud density from Normal (60,000 dots) to Ultra (240,000); until the cloud is complete
+  response.molecule_pick: Density style, 100,000 dots, cloud and surface: water to benzene, benzene to methanol, methanol to ethylene; until its cloud and surface are made
+  response.blackhole_spin: a feeding hole, Real look: from spin 0.5 at 20 GM/c² to 0.8, 0.85, 0.9 at 15, 18, 21 GM/c²; until the sharp picture
+  response.blackhole_look: a feeding hole: the look changed from Real to Film; until the finished picture
+  response.blackhole_look_back: the look changed from Film back to Real (with the glare); until the finished picture
+  response.blackhole_streaks: a feeding hole, Real look, the streaks off: their field (gas.h, made once at start-up on a worker) made again from nothing and the streaks turned on; until the picture with them
+  response.blackhole_tilt: a feeding hole spinning at 0.9 (the disc on), from 20 GM/c², 10° above the disc: the camera turned and tilted 0.1 rad, as a drag leaves it (0.82.0); until the fine picture of the new tilt
+  response.blackhole_dolly: a feeding hole spinning at 0.9 (the disc on), at 20 GM/c²: one wheel notch closer, with the eased step (0.83.0); until the sharp picture of the new distance
+  response.sunspot_table: the Orbit Lab at its defaults, the built-in sunspot table not read yet (orbit/sunspots.h, 255,250 rows): the Sun picked, close up on 10 May 2024; until the picture with its spot outlines
+  response.orbit_date: Planet physics Real: from today to 1850-06-01, 2095-01-01 and 1805-03-01; until the picture of that date is drawn
+
+AT REST (each lab left alone 3 s after its picture is finished, VSync on)
+id                    verdict  processor               GPU a frame  drawn anew          worker  name
+rest.orbit            busy     2.4 % (29 % of a thread)  0.71 ms      765 times           idle    Orbit Lab at its defaults, time stopped
+    why drawn anew: no run of 30 frames in a row was seen
+rest.atom             quiet    1.8 % (22 % of a thread)  0.31 ms      every frame (this lab)  idle    Atom Lab at its defaults
+rest.molecule         quiet    1.8 % (21 % of a thread)  0.24 ms      every frame (this lab)  idle    Molecule Lab at its defaults
+rest.blackhole        quiet    1.8 % (21 % of a thread)  0.41 ms      no                  idle    Black Hole Lab at its defaults
+rest.blackhole_spin   quiet    2.0 % (24 % of a thread)  0.42 ms      no                  idle    Black Hole Lab, the hole spinning at 0.9
+rest.blackhole_glare  busy     46.2 % (555 % of a thread)  2.45 ms      766 times           idle    Black Hole Lab, a feeding hole with the eye's glare
+Rule: busy when a worker thread was busy, or a lab that keeps its picture drew it anew, or the app used more than 25 % of one processor thread (all its threads together); else quiet. The processor share is of the whole processor (12 threads).
+
+DETAILS
+blackhole.real_move  Black Hole Lab, the spinning hole's sky and disc while the view moves
+  What it tests: A feeding hole spinning at 0.9, seen from 20 GM/c², 10° above its disc, a 90° view, our sky, Real look with the glare: the camera turns, tilts and comes closer (0.65 s each, with rests), then the same at spin 0 going back. The sky and disc per pixel on the graphics card where its check passed.
+  Path: the sky and disc: the graphics card, every pixel from the closed formulas (start-up check passed: far direction 3.6e-06 / 2.0e-06 rad, disc r 3.5e-06 / 3.5e-06, benchmark / Film)
+  Frames counted: 5918
+  Average: 0.88 ms per frame = 1138.0 fps
+  1 % low: 451.6 fps (average of the slowest 1 % of the frames)
+  New pictures: 102 in the 2.93 s the view moved (34.8 a second; 5.2 s counted)
+  Worst frame: 8.67 ms
+  Frames slower than 16.7 ms: 0 of 5918
+  CPU work per frame: 0.75 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 8.7 ms: frame thread 1.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, the rest 7.3 ms (not counted above)
+  Worst frame 2: 7.8 ms: frame thread 1.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, the rest 6.7 ms (not counted above)
+  Worst frame 3: 7.8 ms: frame thread 0.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, the rest 6.8 ms (not counted above)
+  GPU time per frame: 0.24 ms
+  GPU span per frame: 0.24 ms (from the first to the last GPU command of the frame, waiting included)
+  Black Hole Lab: the frame's own thread draws the last finished picture; the tables, star bins, stars' images and exposure are worked out on a worker thread, the glare's veil and the fine spin table on threads of their own (below normal priority).
+  Black Hole Lab, the spinning hole's light paths: the processor, because The light paths on Vulkan stopped the app last time (in the step 'the helper died making the light paths' pipeline').; the card's fills not needed
+  Black Hole Lab, the spinning hole's sky and disc: the graphics card, every pixel from the closed formulas (start-up check passed: far direction 3.6e-06 / 2.0e-06 rad, disc r 3.5e-06 / 3.5e-06, benchmark / Film); the pass on the card not needed for the whole picture; the exposure: the graphics card (reduced in the same frame)
+  Black Hole Lab, spin 0.9, turning round the axis: frame thread 0.01 ms average, 0.08 ms worst; picture behind the settings in 723 of 723 frames, at most 1839 ms; 25 new pictures in 0.7 s (38 a second)
+    worker: coarse table 9.4 ms average, 9.4 ms worst (1x); star bins 11.9 ms average, 17.4 ms worst (2x); stars' images 4.3 ms average, 9.2 ms worst (27x); exposure 11.3 ms average, 81.8 ms worst (27x)
+    at rest: the sharp picture (the fine table) 33 ms after the stop
+  Black Hole Lab, spin 0.9, tilting: frame thread 0.03 ms average, 0.38 ms worst; picture behind the settings in 588 of 588 frames, at most 691 ms; 25 new pictures in 0.6 s (38 a second)
+    worker: coarse table 8.6 ms average, 9.4 ms worst (27x); star bins 6.7 ms average, 17.4 ms worst (28x); stars' images 3.8 ms average, 6.6 ms worst (29x); exposure 7.8 ms average, 19.2 ms worst (29x)
+    at rest: the sharp picture (the fine table) 422 ms after the stop
+  Black Hole Lab, spin 0.9, changing distance: frame thread 0.03 ms average, 0.13 ms worst; picture behind the settings in 595 of 595 frames, at most 681 ms; 25 new pictures in 0.7 s (38 a second)
+    worker: coarse table 8.6 ms average, 9.3 ms worst (27x); star bins 6.6 ms average, 18.5 ms worst (28x); stars' images 3.8 ms average, 6.6 ms worst (29x); exposure 8.2 ms average, 29.0 ms worst (29x)
+    at rest: the sharp picture (the fine table) 433 ms after the stop
+  Black Hole Lab, spin 0, turning round the axis: frame thread 0.01 ms average, 0.03 ms worst; picture behind the settings in 372 of 372 frames, at most 336 ms; 38 new pictures in 0.3 s (117 a second)
+    worker: coarse table 0.5 ms average, 0.5 ms worst (1x); star bins not needed; stars' images 0.9 ms average, 1.2 ms worst (40x); exposure 7.2 ms average, 9.2 ms worst (40x); disc table 8.9 ms average, 8.9 ms worst (1x)
+  Black Hole Lab, spin 0, tilting: frame thread 0.01 ms average, 0.03 ms worst; picture behind the settings in 378 of 378 frames, at most 336 ms; 39 new pictures in 0.3 s (120 a second)
+    worker: coarse table not needed; star bins not needed; stars' images 0.9 ms average, 1.0 ms worst (41x); exposure 7.3 ms average, 8.6 ms worst (41x)
+  Black Hole Lab, spin 0, changing distance: frame thread 0.01 ms average, 0.03 ms worst; picture behind the settings in 365 of 365 frames, at most 346 ms; 18 new pictures in 0.3 s (55 a second)
+    worker: coarse table 0.5 ms average, 0.5 ms worst (20x); star bins not needed; stars' images 0.9 ms average, 1.1 ms worst (20x); exposure 7.3 ms average, 8.1 ms worst (20x); disc table 8.7 ms average, 9.1 ms worst (20x)
+  Black Hole Lab, at rest: glare not needed; fine spin table 83.9 ms average, 97.9 ms worst (3x); the fine spin table made at the scene's start (all cores) 0 ms
+blackhole.film_tilt  Black Hole Lab, the Film look tilted through the disc's plane, then at rest
+  What it tests: The Film look at the paper's view (74.1 GM/c², 86.6° from the spin axis) with a 30° view (the disc fills it): the camera tilts 6° down through the disc's plane and back, three times, then rests. The picture at rest is compared with the last moving one: the pixels that change between disc and not-disc and the largest patch.
+  Black Hole Lab: distance 74.1 GM/c², field of view 30°, pitch 1.511 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 5020
+  Average: 1.04 ms per frame = 965.3 fps
+  1 % low: 442.7 fps (average of the slowest 1 % of the frames)
+  New pictures: 23 in the 3.12 s the view moved (7.4 a second; 5.2 s counted)
+  Worst frame: 14.37 ms
+  Frames slower than 16.7 ms: 0 of 5020
+  CPU work per frame: 0.91 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 14.4 ms: frame thread 14.2 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 6.8 ms: frame thread 6.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 4.8 ms: frame thread 4.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.29 ms
+  GPU span per frame: 0.35 ms (from the first to the last GPU command of the frame, waiting included)
+  Film at rest against the last moving picture (2218 x 1325 pixels, a pixel is disc where its brightest channel is at least a fifth of the brightest): 2471175 disc pixels at rest, 28589 pixels change between disc and not-disc, the largest connected patch 13523 pixels
+  1 frame left out of the counted frames: the benchmark's own numbers (a result read, a picture comparison) took 21.6 ms of them
+blackhole.extreme  Black Hole Lab, the top spin, the closest distance and the widest view
+  What it tests: A feeding hole, Real look: the spin dragged from 0 to 0.99 (the control's top) and back, then at 0.99 the camera at 2.2 GM/c² (the closest the control allows) with a 360° view (the widest), turning and tilting.
+  Black Hole Lab: distance 50.0 GM/c², field of view 45°, pitch 1.745 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4702
+  Average: 1.11 ms per frame = 904.1 fps
+  1 % low: 434.0 fps (average of the slowest 1 % of the frames)
+  New pictures: 228 in the 5.20 s the view moved (43.9 a second; 5.2 s counted)
+  Worst frame: 5.59 ms
+  Frames slower than 16.7 ms: 0 of 4702
+  CPU work per frame: 0.97 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 5.6 ms: frame thread 5.3 ms, waited for the card 0.0 ms, acquire 0.2 ms, present 0.1 ms
+  Worst frame 2: 5.3 ms: frame thread 5.1 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 4.7 ms: frame thread 4.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.36 ms
+  GPU span per frame: 0.47 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.all_light  Black Hole Lab, Light: All light on the spinning hole while the view moves
+  What it tests: A feeding hole spinning at 0.9 with its disc out to 2000 GM/c², Real look, Light: All light, from 20 GM/c² with a 90° view (the hardest of five views tried, REPORT 0.58.0): the camera turns round the axis and tilts through the disc's plane and back, as a drag does. The sky and disc per pixel on the graphics card where its check passed.
+  Black Hole Lab: distance 20.0 GM/c², field of view 90°, pitch 1.396 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4719
+  Average: 1.10 ms per frame = 907.4 fps
+  1 % low: 510.3 fps (average of the slowest 1 % of the frames)
+  New pictures: 219 in the 5.20 s the view moved (42.1 a second; 5.2 s counted)
+  Worst frame: 4.67 ms
+  Frames slower than 16.7 ms: 0 of 4719
+  CPU work per frame: 0.97 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 4.7 ms: frame thread 4.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 4.2 ms: frame thread 4.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 4.1 ms: frame thread 1.1 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms, events 2.8 ms
+  GPU time per frame: 0.36 ms
+  GPU span per frame: 0.46 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.moving_gas  Black Hole Lab, the moving gas at the fastest rate while the view turns
+  What it tests: A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), from 10 GM/c² with a 60° view, 10° above the disc (the hardest of five views tried, 2.2 to 20 GM/c²): the camera turns slowly round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.
+  Black Hole Lab: distance 10.0 GM/c², field of view 60°, pitch 1.396 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4775
+  Average: 1.09 ms per frame = 918.2 fps
+  1 % low: 611.2 fps (average of the slowest 1 % of the frames)
+  New pictures: 436 in the 5.20 s the view moved (83.8 a second; 5.2 s counted)
+  Worst frame: 2.49 ms
+  Frames slower than 16.7 ms: 0 of 4775
+  CPU work per frame: 0.95 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 2.5 ms: frame thread 2.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 2.2 ms: frame thread 0.9 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 1.2 ms
+  Worst frame 3: 1.8 ms: frame thread 1.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.39 ms
+  GPU span per frame: 0.51 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.film_soft  Black Hole Lab, the Film look's see-through disc and streaks, turning
+  What it tests: The Film look at the paper's view (74.1 GM/c², 86.6° from the spin axis) with a 30° view: the soft-edged, partly see-through disc (up to four crossings laid per pixel) with its streaks and the clump moving at the fastest rate (10^7), the camera turning slowly round the axis. A new picture every frame on the graphics card.
+  Black Hole Lab: distance 74.1 GM/c², field of view 30°, pitch 1.511 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4368
+  Average: 1.19 ms per frame = 839.9 fps
+  1 % low: 516.5 fps (average of the slowest 1 % of the frames)
+  New pictures: 1029 in the 5.20 s the view moved (197.9 a second; 5.2 s counted)
+  Worst frame: 2.78 ms
+  Frames slower than 16.7 ms: 0 of 4368
+  CPU work per frame: 1.05 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.06 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 2.8 ms: frame thread 2.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 2.6 ms: frame thread 2.4 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 2.4 ms: frame thread 2.2 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.65 ms
+  GPU span per frame: 0.80 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.circle_spin  Black Hole Lab, circling the spinning hole and its disc as a user drags, with the glide
+  What it tests: A feeding hole spinning at 0.9, Real, the disc on, a 45° view, at the closest distance where the shadow does not fill the picture: dragged round 2 rad a second and up or down through the disc's plane for 0.6 s, then let go to glide 0.6 s, over and over. Each tilt needs new light paths.
+  Black Hole Lab: distance 4.6 GM/c², field of view 45°, pitch 1.396 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 5022
+  Average: 1.04 ms per frame = 965.6 fps
+  1 % low: 639.3 fps (average of the slowest 1 % of the frames)
+  New pictures: 201 in the 4.78 s the view moved (42.1 a second; 5.2 s counted)
+  Worst frame: 2.59 ms
+  Frames slower than 16.7 ms: 0 of 5022
+  CPU work per frame: 0.90 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 2.6 ms: frame thread 2.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 2.0 ms: frame thread 1.9 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 2.0 ms: frame thread 1.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.34 ms
+  GPU span per frame: 0.45 ms (from the first to the last GPU command of the frame, waiting included)
+atom.nucleus_zoom  Atom Lab, the nucleus at full zoom, the camera turning
+  What it tests: lawrencium-266, Orbit view, Accurate quarks, + Sea, Nucleons, the largest zoom (x10,000,000; log10 7), the camera turning 0.15 rad every frame as a fast drag does.
+  Atom Lab: Lr-266, Orbit, Nucleons, Accurate, + Sea, zoom 7.00
+  Frames counted: 1618
+  Average: 3.21 ms per frame = 311.1 fps
+  1 % low: 246.7 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 4.37 ms
+  Frames slower than 16.7 ms: 0 of 1618
+  CPU work per frame: 0.90 ms (the waits for the card taken out)
+  Waited for the card per frame: 2.25 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 4.4 ms: frame thread 1.2 ms, waited for the card 0.0 ms, acquire 3.1 ms, present 0.1 ms
+  Worst frame 2: 4.3 ms: frame thread 1.6 ms, waited for the card 0.0 ms, acquire 2.6 ms, present 0.1 ms
+  Worst frame 3: 4.3 ms: frame thread 0.9 ms, waited for the card 0.0 ms, acquire 3.3 ms, present 0.1 ms
+  GPU time per frame: 2.93 ms
+  GPU span per frame: 2.93 ms (from the first to the last GPU command of the frame, waiting included)
+atom.nucleon  Atom Lab, one nucleon
+  What it tests: uranium-238, Accurate quarks, + Sea detail, zoomed all the way into the first nucleon: its quarks and the sea, drawn every frame.
+  Atom Lab: U-238, Orbit, Nucleons, Accurate, + Sea, zoom 2.84
+  Frames counted: 1788
+  Average: 2.91 ms per frame = 343.8 fps
+  1 % low: 281.2 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.80 ms
+  Frames slower than 16.7 ms: 0 of 1788
+  CPU work per frame: 1.18 ms (the waits for the card taken out)
+  Waited for the card per frame: 1.67 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.8 ms: frame thread 1.2 ms, waited for the card 0.0 ms, acquire 2.5 ms, present 0.1 ms
+  Worst frame 2: 3.7 ms: frame thread 1.2 ms, waited for the card 0.0 ms, acquire 2.4 ms, present 0.1 ms
+  Worst frame 3: 3.7 ms: frame thread 1.1 ms, waited for the card 0.0 ms, acquire 2.5 ms, present 0.0 ms
+  GPU time per frame: 2.63 ms
+  GPU span per frame: 2.63 ms (from the first to the last GPU command of the frame, waiting included)
+molecule.vib_density  Molecule Lab, the vibrating density playing
+  What it tests: water (the only molecule with a vibrating density file, H2O_vib.pld, 1.7 MB), Density style, its first mode playing, 100,000 dots, cloud and surface, zoom x1.6: the density is blended and its surface made again for every new phase of the swing.
+  Molecule Lab: H2O (3 atoms), zoom x1.60, vibration mode 1
+  Path: the Density cloud's dots: the graphics card (its start-up check passed: 12 cases, 73728 dots: 45015 drawn by both, 0 drawn by one side only (0 within the rounding at the picture's edge); 0 beyond their limit, the largest difference 0.65 of its limit); the surface: the graphics card (Vulkan; turned, coloured, sorted and drawn there, sent once for each new surface; its start-up check passed: benzene (C6H6): 7066 vertices, 14128 triangles: 0 places over 2.8e-03 point (the largest 6.1e-05), 0 colours over 1e-4 (the largest 3.0e-07), 0 out of order (the largest fall 0.0e+00 bohr, limit 4.4e-05); water (H2O): 2470 vertices, 4936 triangles: 0 places over 2.5e-03 point (the largest 6.1e-05), 0 colours over 1e-4 (the largest 2.4e-07), 0 out of order (the largest fall 0.0e+00 bohr, limit 2.4e-05); water vibrating (its first mode with a density, at 0.7 of the swing): 2500 vertices, 4996 triangles: 0 places over 2.5e-03 point (the largest 6.1e-05), 0 colours over 1e-4 (the largest 1.8e-07), 0 out of order (the largest fall 0.0e+00 bohr, limit 2.4e-05))
+  Frames counted: 1817
+  Average: 2.86 ms per frame = 349.4 fps
+  1 % low: 303.6 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 4.39 ms
+  Frames slower than 16.7 ms: 0 of 1817
+  CPU work per frame: 2.57 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.22 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 4.4 ms: frame thread 4.1 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.2 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 2: 4.0 ms: frame thread 3.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.2 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 3: 3.3 ms: frame thread 3.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.2 ms (the longest: the exposure grids (Glow or Density cloud))
+  GPU time per frame: 1.22 ms
+  GPU span per frame: 1.56 ms (from the first to the last GPU command of the frame, waiting included)
+atom.slice_dirac_drag  Atom Lab, the Slice of a Dirac state, the cut dragged
+  What it tests: uranium-238 (one electron), 4f, Relativity Dirac, Slice view, Classic, Ultra (48,000 dots), zoom 0: the cut moves 0.01 every frame as atom.slice_drag.
+  Atom Lab: U-238, Slice, one electron, 4f, Classic, 48000 dots, zoom 0.00
+  Path: the Slice's dots: made by the processor (the Dirac state's own sampler); drawn: the graphics card (Vulkan; its start-up check passed: Cloud 3D 6000 dots, 5837 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 3.1e-05), 0 keys out of order, 0 squares wrong | the side view, Classic 6000 dots, 5502 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 0), 0 keys out of order, 0 squares wrong | the side view, Glow 6000 dots, 5502 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 0), 0 keys out of order, 0 squares wrong; 2028 cells, 0 beyond their limit (0 differ by a dot at a cell's edge) | the Slice, Classic 6000 dots, 5020 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 2.1e-05), 0 keys out of order, 0 squares wrong | the Slice, Glow 6000 dots, 4996 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 0), 0 keys out of order, 0 squares wrong; 2028 cells, 0 beyond their limit (0 differ by a dot at a cell's edge))
+  Frames counted: 1926
+  Average: 2.70 ms per frame = 370.3 fps
+  1 % low: 312.9 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.37 ms
+  Frames slower than 16.7 ms: 0 of 1926
+  CPU work per frame: 2.58 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.4 ms: frame thread 3.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.3 ms: frame thread 3.1 ms, waited for the card 0.0 ms, acquire 0.2 ms, present 0.1 ms
+  Worst frame 3: 3.3 ms: frame thread 3.2 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms
+  GPU time per frame: 0.44 ms
+  GPU span per frame: 0.49 ms (from the first to the last GPU command of the frame, waiting included)
+atom.jump_all  Atom Lab, a jump with every electron held in flight
+  What it tests: The heaviest atom with level clouds (radium-226), Cloud 3D, every electron, Shells enlarged, Glow, Ultra: a jump between two measured levels held half way (the two levels' clouds cross-faded every frame), zoom 0 (the cloud fills the picture), the camera turning 0.8 rad a second.
+  Atom Lab: Ra-226, Cloud 3D, every electron, Whole atom, Shells enlarged, Glow, 240000 dots, zoom 0.00
+  Path: the every-electron cloud: drawn from a buffer on the graphics card; the jump's groups: the graphics card (its start-up check passed: 3 cases, 80014 dots' groups against the processor's: 0 differ (the test is exact))
+  Frames counted: 1876
+  Average: 2.77 ms per frame = 360.7 fps
+  1 % low: 295.4 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 4.19 ms
+  Frames slower than 16.7 ms: 0 of 1876
+  CPU work per frame: 2.51 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.19 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 4.2 ms: frame thread 3.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.3 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 2: 3.8 ms: frame thread 3.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.1 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 3: 3.8 ms: frame thread 3.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.1 ms (the longest: the exposure grids (Glow or Density cloud))
+  GPU time per frame: 0.77 ms
+  GPU span per frame: 1.01 ms (from the first to the last GPU command of the frame, waiting included)
+ui.settings_open  Panels, Settings over the heaviest Orbit view, Pick a body open and scrolled
+  What it tests: The heaviest Orbit view (orbit.heaviest) with the Settings page open over it, and the Controls panel's Pick a body list open and scrolled down and up.
+  Path: the belts' rocks: the graphics card (Vulkan rock compute); the trails' and orbits' lines: the graphics card (Vulkan; its start-up check passed: the heavy view's camera (3D, zoom x1, 1280 x 800): 26 runs, 5271 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.063 of its limit (0.0031 point); 7 pieces cut at the near plane, 172 behind it; the closest zoom in 2D, following the 1 AU body: 26 runs, 28970 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.24 of its limit (1.6e+02 point); 0 pieces cut at the near plane, 0 behind it; a 3D close-up following the 5.2 AU body (zoom 3): 26 runs, 6584 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.5 of its limit (0.096 point); 14 pieces cut at the near plane, 16083 behind it; the Alpha Centauri scene's ellipses (2D, zoom 2.5, following a planet 12,000 au out): 131 runs, 2892 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.027 of its limit (55 point); 0 pieces cut at the near plane, 0 behind it; 3D at zoom 5.5 following the 1 AU body, looking back along its orbit (the orbit passes the camera and goes behind it): 26 runs, 4826 points: 0 over the limit, 0 runs with another number of points; the largest difference 5.9e-05 of its limit (0.0031 point); 23 pieces cut at the near plane, 16614 behind it; 3D at zoom 5.5 following the 1 AU body, looking ahead along its orbit (its trail passes the camera and goes behind it): 26 runs, 4838 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.0078 of its limit (1.3 point); 24 pieces cut at the near plane, 27377 behind it)
+  Frames counted: 3140
+  Average: 1.66 ms per frame = 603.7 fps
+  1 % low: 327.4 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.94 ms
+  Frames slower than 16.7 ms: 0 of 3140
+  CPU work per frame: 1.54 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.9 ms: frame thread 3.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.4 ms: frame thread 3.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 3.4 ms: frame thread 3.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.82 ms
+  GPU span per frame: 0.86 ms (from the first to the last GPU command of the frame, waiting included)
+atom.side_all_glow  Atom Lab, the side view with every electron, Glow
+  What it tests: oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Glow, Ultra (240,000 dots), zoom -0.5, zoomed in to +0.5 and back as a wheel does.
+  Atom Lab: Og-294, Cloud, every electron, Whole atom, Shells enlarged, Glow, 240000 dots, zoom -0.30
+  Path: the side view's dots: the graphics card (Vulkan; its start-up check passed: Cloud 3D 6000 dots, 5837 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 3.1e-05), 0 keys out of order, 0 squares wrong | the side view, Classic 6000 dots, 5502 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 0), 0 keys out of order, 0 squares wrong | the side view, Glow 6000 dots, 5502 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 0), 0 keys out of order, 0 squares wrong; 2028 cells, 0 beyond their limit (0 differ by a dot at a cell's edge) | the Slice, Classic 6000 dots, 5020 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 2.1e-05), 0 keys out of order, 0 squares wrong | the Slice, Glow 6000 dots, 4996 shown: 0 in another group, 0 in another band (0 at a band's edge within the rounding), 0 places beyond 2e-3 points (the largest 0), 0 keys out of order, 0 squares wrong; 2028 cells, 0 beyond their limit (0 differ by a dot at a cell's edge))
+  Frames counted: 2509
+  Average: 2.07 ms per frame = 482.5 fps
+  1 % low: 334.7 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.14 ms
+  Frames slower than 16.7 ms: 0 of 2509
+  CPU work per frame: 1.13 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.86 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.1 ms: frame thread 1.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 1.4 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 2: 3.1 ms: frame thread 1.9 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 1.1 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 3: 3.1 ms: frame thread 1.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 1.5 ms (the longest: the exposure grids (Glow or Density cloud))
+  GPU time per frame: 1.53 ms
+  GPU span per frame: 1.98 ms (from the first to the last GPU command of the frame, waiting included)
+orbit.real_fast  Orbit Lab, Real planet physics with relativity at the fastest time
+  What it tests: Planet physics Real (the n-body integration, general relativity 1PN on), moons on, 3D, every extra, zoom x1, the fastest time (1 s = about 50 years): the integrator walks about 50 years a second and makes its stretches ahead on a thread of its own.
+  Path: the belts' rocks: the graphics card (Vulkan rock compute); the trails' and orbits' lines: the graphics card (Vulkan; its start-up check passed: the heavy view's camera (3D, zoom x1, 1280 x 800): 26 runs, 5271 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.063 of its limit (0.0031 point); 7 pieces cut at the near plane, 172 behind it; the closest zoom in 2D, following the 1 AU body: 26 runs, 28970 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.24 of its limit (1.6e+02 point); 0 pieces cut at the near plane, 0 behind it; a 3D close-up following the 5.2 AU body (zoom 3): 26 runs, 6584 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.5 of its limit (0.096 point); 14 pieces cut at the near plane, 16083 behind it; the Alpha Centauri scene's ellipses (2D, zoom 2.5, following a planet 12,000 au out): 131 runs, 2892 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.027 of its limit (55 point); 0 pieces cut at the near plane, 0 behind it; 3D at zoom 5.5 following the 1 AU body, looking back along its orbit (the orbit passes the camera and goes behind it): 26 runs, 4826 points: 0 over the limit, 0 runs with another number of points; the largest difference 5.9e-05 of its limit (0.0031 point); 23 pieces cut at the near plane, 16614 behind it; 3D at zoom 5.5 following the 1 AU body, looking ahead along its orbit (its trail passes the camera and goes behind it): 26 runs, 4838 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.0078 of its limit (1.3 point); 24 pieces cut at the near plane, 27377 behind it)
+  Frames counted: 3091
+  Average: 1.68 ms per frame = 594.4 fps
+  1 % low: 327.4 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.79 ms
+  Frames slower than 16.7 ms: 0 of 3091
+  CPU work per frame: 1.56 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.8 ms: frame thread 3.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.7 ms: frame thread 3.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.2 ms
+  Worst frame 3: 3.6 ms: frame thread 3.5 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms
+  GPU time per frame: 0.76 ms
+  GPU span per frame: 0.81 ms (from the first to the last GPU command of the frame, waiting included)
+orbit.heaviest  Orbit Lab, the heaviest view
+  What it tests: 3D, belts and Oort cloud (6,000 rocks), every extra, the full night sky with constellation lines and names, far-away things, full orbit trails, true scale, the fastest time (1 s = about 50 years), zoom x1, Simple planet physics. The rocks' places come from the graphics card where it can (Vulkan).
+  Path: the belts' rocks: the graphics card (Vulkan rock compute); the trails' and orbits' lines: the graphics card (Vulkan; its start-up check passed: the heavy view's camera (3D, zoom x1, 1280 x 800): 26 runs, 5271 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.063 of its limit (0.0031 point); 7 pieces cut at the near plane, 172 behind it; the closest zoom in 2D, following the 1 AU body: 26 runs, 28970 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.24 of its limit (1.6e+02 point); 0 pieces cut at the near plane, 0 behind it; a 3D close-up following the 5.2 AU body (zoom 3): 26 runs, 6584 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.5 of its limit (0.096 point); 14 pieces cut at the near plane, 16083 behind it; the Alpha Centauri scene's ellipses (2D, zoom 2.5, following a planet 12,000 au out): 131 runs, 2892 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.027 of its limit (55 point); 0 pieces cut at the near plane, 0 behind it; 3D at zoom 5.5 following the 1 AU body, looking back along its orbit (the orbit passes the camera and goes behind it): 26 runs, 4826 points: 0 over the limit, 0 runs with another number of points; the largest difference 5.9e-05 of its limit (0.0031 point); 23 pieces cut at the near plane, 16614 behind it; 3D at zoom 5.5 following the 1 AU body, looking ahead along its orbit (its trail passes the camera and goes behind it): 26 runs, 4838 points: 0 over the limit, 0 runs with another number of points; the largest difference 0.0078 of its limit (1.3 point); 24 pieces cut at the near plane, 27377 behind it)
+  Frames counted: 3330
+  Average: 1.56 ms per frame = 640.2 fps
+  1 % low: 339.7 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.56 ms
+  Frames slower than 16.7 ms: 0 of 3330
+  CPU work per frame: 1.44 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.6 ms: frame thread 3.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.5 ms: frame thread 3.4 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 3.5 ms: frame thread 3.4 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.75 ms
+  GPU span per frame: 0.79 ms (from the first to the last GPU command of the frame, waiting included)
+atom.all_enlarged  Atom Lab, every electron, Shells enlarged, Glow, Ultra, the camera turning
+  What it tests: The heaviest atom with every electron (oganesson-294, 118 electrons; its decay clock held), Cloud 3D, Whole atom, Radius Shells enlarged, Glow, Cloud density Ultra (240,000 dots: 48,000 per electron, at most 240,000), zoom 0.5 (log10; the cloud fills the picture), the camera turning 0.8 rad a second.
+  Atom Lab: Og-294, Cloud 3D, every electron, Whole atom, Shells enlarged, Glow, 240000 dots, zoom 0.50
+  Path: the every-electron cloud: drawn from a buffer on the graphics card
+  Frames counted: 2148
+  Average: 2.42 ms per frame = 413.0 fps
+  1 % low: 349.3 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.07 ms
+  Frames slower than 16.7 ms: 0 of 2148
+  CPU work per frame: 1.75 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.59 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.1 ms: frame thread 1.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 1.2 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 2: 3.0 ms: frame thread 1.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 1.2 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 3: 2.9 ms: frame thread 1.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 1.0 ms (the longest: the exposure grids (Glow or Density cloud))
+  GPU time per frame: 1.89 ms
+  GPU span per frame: 2.32 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.dolly_spin  Black Hole Lab, the wheel moving the camera in and out at spin 0.9
+  What it tests: A feeding hole spinning at 0.9, the disc on, Real: the wheel turned a notch every 0.06 s, the camera moving in eased steps with the glide from 1000 GM/c² (the farthest) to 2.2 (the closest) and back, over and over. Every step needs new light paths.
+  Black Hole Lab: distance 1000.0 GM/c², field of view 45°, pitch 1.745 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4729
+  Average: 1.10 ms per frame = 909.3 fps
+  1 % low: 573.6 fps (average of the slowest 1 % of the frames)
+  New pictures: 221 in the 5.20 s the view moved (42.5 a second; 5.2 s counted)
+  Worst frame: 3.28 ms
+  Frames slower than 16.7 ms: 0 of 4729
+  CPU work per frame: 0.96 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.3 ms: frame thread 1.1 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 2.1 ms
+  Worst frame 2: 2.7 ms: frame thread 0.8 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms, events 1.8 ms
+  Worst frame 3: 2.2 ms: frame thread 2.1 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.35 ms
+  GPU span per frame: 0.46 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.over_poles  Black Hole Lab, dragged over both poles at the top spin
+  What it tests: A feeding hole at spin 0.99 (the control's top), the disc on, Real, the starting view: dragged up and down from the pitch limit near one pole to the other and back (0.01 to pi - 0.01 rad from the axis) at 1.2 rad a second, through the disc's plane.
+  Black Hole Lab: distance 50.0 GM/c², field of view 45°, pitch 1.745 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4755
+  Average: 1.09 ms per frame = 914.2 fps
+  1 % low: 529.9 fps (average of the slowest 1 % of the frames)
+  New pictures: 215 in the 5.20 s the view moved (41.4 a second; 5.2 s counted)
+  Worst frame: 4.85 ms
+  Frames slower than 16.7 ms: 0 of 4755
+  CPU work per frame: 0.96 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 4.8 ms: frame thread 4.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.7 ms: frame thread 1.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 2.7 ms
+  Worst frame 3: 3.5 ms: frame thread 3.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.35 ms
+  GPU span per frame: 0.46 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.everything  Black Hole Lab, every heavy option at once, turning
+  What it tests: A feeding hole at spin 0.99, Real, the disc out to 2000 GM/c², the streaks and the clump at the fastest rate (10^7), the camera at 2.2 GM/c² (the closest) with a 360° view (the widest), the eye's glare (heavier here than All light, REPORT 0.83.0), turning 0.15 rad a second.
+  Black Hole Lab: distance 2.2 GM/c², field of view 360°, pitch 1.745 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4463
+  Average: 1.17 ms per frame = 858.1 fps
+  1 % low: 506.8 fps (average of the slowest 1 % of the frames)
+  New pictures: 159 in the 5.20 s the view moved (30.6 a second; 5.2 s counted)
+  Worst frame: 6.76 ms
+  Frames slower than 16.7 ms: 0 of 4463
+  CPU work per frame: 1.03 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 6.8 ms: frame thread 1.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 5.6 ms
+  Worst frame 2: 4.6 ms: frame thread 1.1 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 3.4 ms
+  Worst frame 3: 4.5 ms: frame thread 4.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.34 ms
+  GPU span per frame: 0.45 ms (from the first to the last GPU command of the frame, waiting included)
+blackhole.edge_on  Black Hole Lab, Sagittarius A*'s disc seen edge on, turning
+  What it tests: Sagittarius A*, the disc on, feeding 0.11, from 57.5 GM/c² in the disc's plane (pitch 1.575 rad, the view of the 0.82.1 bug), the streaks and the clump on, Real: the camera turning slowly round the axis (0.15 rad a second).
+  Black Hole Lab: distance 57.5 GM/c², field of view 45°, pitch 1.575 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 3352
+  Average: 1.55 ms per frame = 644.5 fps
+  1 % low: 403.3 fps (average of the slowest 1 % of the frames)
+  New pictures: 3322 in the 5.20 s the view moved (638.7 a second; 5.2 s counted)
+  Worst frame: 2.79 ms
+  Frames slower than 16.7 ms: 0 of 3352
+  CPU work per frame: 0.78 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.69 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 2.8 ms: frame thread 0.8 ms, waited for the card 0.0 ms, acquire 2.0 ms, present 0.1 ms
+  Worst frame 2: 2.8 ms: frame thread 0.7 ms, waited for the card 0.0 ms, acquire 2.0 ms, present 0.1 ms
+  Worst frame 3: 2.7 ms: frame thread 0.9 ms, waited for the card 0.0 ms, acquire 1.7 ms, present 0.1 ms
+  GPU time per frame: 1.16 ms
+  GPU span per frame: 1.47 ms (from the first to the last GPU command of the frame, waiting included)
+orbit.saturn_real_fast  Orbit Lab, a fly-by of Saturn with Real physics at the fastest time
+  What it tests: orbit.flyby (Saturn followed from the closest zoom, every extra on, Stars Full with constellations) with Planet physics Real, relativity on and the fastest time; the camera turning 0.5 rad a second and tilting through the ring plane.
+  Orbit Lab: zoom 4.17 (log10), Planet physics Real, relativity on, picture 2560 x 1369 points
+  Frames counted: 2502
+  Average: 2.08 ms per frame = 481.1 fps
+  1 % low: 230.6 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 5.37 ms
+  Frames slower than 16.7 ms: 0 of 2502
+  CPU work per frame: 1.96 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 5.4 ms: frame thread 5.2 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms
+  Worst frame 2: 5.0 ms: frame thread 4.9 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 4.9 ms: frame thread 4.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 1.31 ms
+  GPU span per frame: 1.41 ms (from the first to the last GPU command of the frame, waiting included)
+atom.emit_all  Atom Lab, Emit and Absorb in turn with every electron
+  What it tests: The heaviest atom with level clouds (radium-226), Cloud 3D, every electron, Shells enlarged, Glow, Ultra, zoom 0: Emit and Absorb pressed in turn every 0.5 s; a jump still in flight is ended and an absorbed photon lands at once, so each press starts a jump. The camera turning 0.8 rad a second.
+  Atom Lab: Ra-226, Cloud 3D, every electron, Whole atom, Shells enlarged, Glow, 240000 dots, zoom 0.00
+  Path: the every-electron cloud: drawn from a buffer on the graphics card; the jump's groups: the graphics card (its start-up check passed: 3 cases, 80014 dots' groups against the processor's: 0 differ (the test is exact))
+  Frames counted: 894
+  Average: 5.82 ms per frame = 171.8 fps
+  1 % low: 4.0 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 365.28 ms
+  Frames slower than 16.7 ms: 20 of 894
+  CPU work per frame: 5.55 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.19 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 365.3 ms: frame thread 364.8 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.4 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 2: 364.4 ms: frame thread 363.9 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, 1 batch(es) waited for 0.4 ms (the longest: the exposure grids (Glow or Density cloud))
+  Worst frame 3: 354.7 ms: frame thread 354.2 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms, 1 batch(es) waited for 0.4 ms (the longest: the exposure grids (Glow or Density cloud))
+  GPU time per frame: 0.76 ms
+  GPU span per frame: 1.00 ms (from the first to the last GPU command of the frame, waiting included)
+  Emit and Absorb: 13 presses, 13 jumps started
+molecule.live_hot  Molecule Lab, the largest molecule live at 1,500 K, the camera turning
+  What it tests: benzene (12 atoms, the most of the molecules with vibrations), Live at 1,500 K (every mode at once), Space-filling (Density does not offer Live; the heavier of Ball and stick and Space-filling, REPORT 0.83.0), zoom x4, the camera turning 0.8 rad a second.
+  Molecule Lab: C6H6 (12 atoms), Space-filling, Live at 1500 K, zoom x4.00
+  Frames counted: 4694
+  Average: 1.11 ms per frame = 902.6 fps
+  1 % low: 655.8 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 1.76 ms
+  Frames slower than 16.7 ms: 0 of 4694
+  CPU work per frame: 1.00 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 1.8 ms: frame thread 1.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 1.7 ms: frame thread 1.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 1.7 ms: frame thread 1.6 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.64 ms
+  GPU span per frame: 0.64 ms (from the first to the last GPU command of the frame, waiting included)
+ui.settings_over_blackhole  Panels, Settings over the Black Hole Lab's moving gas, scrolled
+  What it tests: blackhole.moving_gas's view (spin 0.9, the streaks and the clump at the fastest rate, 10 GM/c², 60°, turning) with the Settings page open over it and scrolled down and up every 2.6 s. The picture keeps drawing behind Settings.
+  Black Hole Lab: distance 10.0 GM/c², field of view 60°, pitch 1.396 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4193
+  Average: 1.24 ms per frame = 806.3 fps
+  1 % low: 570.1 fps (average of the slowest 1 % of the frames)
+  New pictures: 426 in the 5.20 s the view moved (81.9 a second; 5.2 s counted)
+  Worst frame: 2.33 ms
+  Frames slower than 16.7 ms: 0 of 4193
+  CPU work per frame: 1.10 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 2.3 ms: frame thread 1.2 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 1.0 ms
+  Worst frame 2: 2.2 ms: frame thread 2.1 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms
+  Worst frame 3: 2.0 ms: frame thread 1.4 ms, waited for the card 0.2 ms, acquire 0.1 ms, present 0.4 ms
+  GPU time per frame: 0.47 ms
+  GPU span per frame: 0.59 ms (from the first to the last GPU command of the frame, waiting included)
+ui.resize_blackhole  Panels, the window resized over the Black Hole Lab
+  What it tests: A feeding hole spinning at 0.9, the disc on, the streaks and the clump: the window's size changed every 4 frames from its size at the start down to the smallest window and back, as a corner is dragged. Each size makes the swapchain and the pictures again. The window is put back after.
+  the window from 2560 x 1369 (maximised) down to 880 x 560 and back, a new size every 4 frames
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 787
+  Average: 6.61 ms per frame = 151.3 fps
+  1 % low: 62.9 fps (average of the slowest 1 % of the frames)
+  New pictures: 434 in the 5.20 s the view moved (83.4 a second; 5.2 s counted)
+  Worst frame: 17.32 ms
+  Frames slower than 16.7 ms: 1 of 787
+  CPU work per frame: 6.24 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 17.3 ms: frame thread 17.1 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, the swapchain made again 12.3 ms
+  Worst frame 2: 16.7 ms: frame thread 16.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 15.7 ms: frame thread 15.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 0.1 ms, the swapchain made again 10.4 ms
+  GPU time per frame: 0.40 ms
+  GPU span per frame: 1.50 ms (from the first to the last GPU command of the frame, waiting included)
+  244 new sizes; the window put back to 2560 x 1369 (exactly as at the start: 2560 x 1369)
+blackhole.close_spin  Black Hole Lab, circling at the closest distance and the top spin
+  What it tests: A feeding hole at spin 0.99 (the top), the disc on, Real, the camera at 2.2 GM/c² (the closest) with a 360° view (the widest): dragged round 2 rad a second and up or down for 0.6 s, then let go to glide 0.6 s, over and over. Each ray's colour and light carry the camera's own shift.
+  Black Hole Lab: distance 2.2 GM/c², field of view 360°, pitch 1.745 rad (at the set-up)
+  Path: the sky and disc: the processor's table, because a step of the card's sky did not finish in time (the first full picture)
+  Frames counted: 4585
+  Average: 1.13 ms per frame = 881.7 fps
+  1 % low: 491.5 fps (average of the slowest 1 % of the frames)
+  New pictures: 184 in the 4.78 s the view moved (38.5 a second; 5.2 s counted)
+  Worst frame: 4.61 ms
+  Frames slower than 16.7 ms: 0 of 4585
+  CPU work per frame: 1.00 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 4.6 ms: frame thread 4.4 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.2 ms
+  Worst frame 2: 4.2 ms: frame thread 1.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 3.1 ms
+  Worst frame 3: 3.3 ms: frame thread 1.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 2.2 ms
+  GPU time per frame: 0.35 ms
+  GPU span per frame: 0.46 ms (from the first to the last GPU command of the frame, waiting included)
+orbit.true_light  Orbit Lab, True sunlight: Neptune followed, then Earth, in turn
+  What it tests: Lighting True sunlight (each body by its distance from the Sun, the exposure set for the followed one, its readout), 3D, true scale, moons on: Neptune followed close up (zoom 3.9) and Earth (zoom 4.5) in turn every 1.6 s, the camera turning 0.5 rad a second. Each switch sets a new exposure for every ball and ring.
+  Orbit Lab: zoom 3.90 (log10), picture 2560 x 1369 points
+  Frames counted: 3223
+  Average: 1.61 ms per frame = 619.7 fps
+  1 % low: 339.9 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.26 ms
+  Frames slower than 16.7 ms: 0 of 3223
+  CPU work per frame: 1.50 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.3 ms: frame thread 3.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.0 ms: frame thread 2.7 ms, waited for the card 0.0 ms, acquire 0.2 ms, present 0.1 ms
+  Worst frame 3: 3.0 ms: frame thread 2.9 ms, waited for the card 0.0 ms, acquire 0.1 ms, present 0.1 ms
+  GPU time per frame: 0.67 ms
+  GPU span per frame: 0.76 ms (from the first to the last GPU command of the frame, waiting included)
+orbit.sun_edge  Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse
+  What it tests: The Sun followed, filling the view (zoom 2.6), on 10 May 2024 00:00 UT (7 recorded sunspot groups, drawn as outlines), its edge by Neckel & Labs 1994, turning; after half the time Earth at the app's eclipse date (12 Aug 2026 17:46 UT), the Moon's shadow on it with the measured edge, turning.
+  Orbit Lab: zoom 2.60 (log10), picture 2560 x 1369 points
+  Frames counted: 4058
+  Average: 1.28 ms per frame = 780.3 fps
+  1 % low: 505.7 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 5.81 ms
+  Frames slower than 16.7 ms: 0 of 4058
+  CPU work per frame: 1.17 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 5.8 ms: frame thread 5.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 4.4 ms: frame thread 4.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 2.7 ms: frame thread 1.0 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, the benchmark's own step 1.5 ms
+  GPU time per frame: 0.67 ms
+  GPU span per frame: 0.75 ms (from the first to the last GPU command of the frame, waiting included)
+orbit.oort_region  Orbit Lab, zoomed out to the Oort cloud's model dots
+  What it tests: The heaviest view's settings (belts and the Oort cloud's 3,000 model dots, every extra, the full sky) zoomed out to show 100,000 AU (zoom -4.4), Sedna, 2012 VP113 and 2015 TG387 marked, the camera turning 0.5 rad a second.
+  Orbit Lab: zoom -4.40 (log10), picture 2560 x 1369 points
+  Frames counted: 4253
+  Average: 1.22 ms per frame = 817.8 fps
+  1 % low: 381.7 fps (average of the slowest 1 % of the frames)
+  New pictures: every frame
+  Worst frame: 3.47 ms
+  Frames slower than 16.7 ms: 0 of 4253
+  CPU work per frame: 1.11 ms (the waits for the card taken out)
+  Waited for the card per frame: 0.04 ms (the swapchain image's fence, its acquire, card batches waited for)
+  Worst frame 1: 3.5 ms: frame thread 3.4 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 2: 3.4 ms: frame thread 3.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  Worst frame 3: 3.4 ms: frame thread 3.3 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms
+  GPU time per frame: 0.64 ms
+  GPU span per frame: 0.69 ms (from the first to the last GPU command of the frame, waiting included)
+
+The graphics card's light paths, the last 40 lines of C:\PhysicsLabTest\pc0851\results\home_bench\gpu-paths-log.txt:
+[vulkan] [ 166081.9 ms] swapchain made again: 2026 x 1112, IMMEDIATE (does not wait)
+[vulkan] [ 166111.8 ms] swapchain made again: 1987 x 1093, IMMEDIATE (does not wait)
+[vulkan] [ 166141.3 ms] swapchain made again: 1949 x 1075, IMMEDIATE (does not wait)
+[vulkan] [ 166170.3 ms] swapchain made again: 1912 x 1057, IMMEDIATE (does not wait)
+[vulkan] [ 166198.6 ms] swapchain made again: 1875 x 1039, IMMEDIATE (does not wait)
+[vulkan] [ 166229.7 ms] swapchain made again: 1836 x 1021, IMMEDIATE (does not wait)
+[vulkan] [ 166255.9 ms] swapchain made again: 1800 x 1003, IMMEDIATE (does not wait)
+[vulkan] [ 166284.0 ms] swapchain made again: 1765 x 986, IMMEDIATE (does not wait)
+[vulkan] [ 166310.5 ms] swapchain made again: 1730 x 969, IMMEDIATE (does not wait)
+[vulkan] [ 166335.9 ms] swapchain made again: 1696 x 953, IMMEDIATE (does not wait)
+[vulkan] [ 166363.4 ms] swapchain made again: 1662 x 937, IMMEDIATE (does not wait)
+[vulkan] [ 166389.4 ms] swapchain made again: 1628 x 920, IMMEDIATE (does not wait)
+[vulkan] [ 166415.6 ms] swapchain made again: 1594 x 904, IMMEDIATE (does not wait)
+[vulkan] [ 166441.6 ms] swapchain made again: 1560 x 888, IMMEDIATE (does not wait)
+[vulkan] [ 166467.6 ms] swapchain made again: 1527 x 871, IMMEDIATE (does not wait)
+[vulkan] [ 166492.6 ms] swapchain made again: 1494 x 856, IMMEDIATE (does not wait)
+[vulkan] [ 166516.7 ms] swapchain made again: 1464 x 841, IMMEDIATE (does not wait)
+[vulkan] [ 166539.7 ms] swapchain made again: 1432 x 826, IMMEDIATE (does not wait)
+[vulkan] [ 166564.9 ms] swapchain made again: 1401 x 811, IMMEDIATE (does not wait)
+[vulkan] [ 166588.8 ms] swapchain made again: 1370 x 796, IMMEDIATE (does not wait)
+[vulkan] [ 166613.7 ms] swapchain made again: 1338 x 781, IMMEDIATE (does not wait)
+[vulkan] [ 166637.7 ms] swapchain made again: 1306 x 765, IMMEDIATE (does not wait)
+[vulkan] [ 166661.0 ms] swapchain made again: 1276 x 751, IMMEDIATE (does not wait)
+[vulkan] [ 166683.6 ms] swapchain made again: 1247 x 737, IMMEDIATE (does not wait)
+[vulkan] [ 166705.8 ms] swapchain made again: 1217 x 722, IMMEDIATE (does not wait)
+[vulkan] [ 166728.5 ms] swapchain made again: 1188 x 708, IMMEDIATE (does not wait)
+[vulkan] [ 166750.5 ms] swapchain made again: 1160 x 695, IMMEDIATE (does not wait)
+[vulkan] [ 166773.1 ms] swapchain made again: 1131 x 681, IMMEDIATE (does not wait)
+[vulkan] [ 166796.7 ms] swapchain made again: 1101 x 667, IMMEDIATE (does not wait)
+[vulkan] [ 166818.5 ms] swapchain made again: 1072 x 652, IMMEDIATE (does not wait)
+[vulkan] [ 166841.3 ms] swapchain made again: 1042 x 638, IMMEDIATE (does not wait)
+[vulkan] [ 166862.7 ms] swapchain made again: 1015 x 625, IMMEDIATE (does not wait)
+[vulkan] [ 166885.3 ms] swapchain made again: 986 x 611, IMMEDIATE (does not wait)
+[vulkan] [ 166908.2 ms] swapchain made again: 956 x 597, IMMEDIATE (does not wait)
+[vulkan] [ 166929.8 ms] swapchain made again: 929 x 583, IMMEDIATE (does not wait)
+[vulkan] [ 166950.6 ms] swapchain made again: 901 x 570, IMMEDIATE (does not wait)
+[vulkan] [ 166971.7 ms] swapchain made again: 881 x 561, IMMEDIATE (does not wait)
+[vulkan] [ 166993.5 ms] swapchain made again: 909 x 574, IMMEDIATE (does not wait)
+[vulkan] [ 167016.3 ms] swapchain made again: 938 x 588, IMMEDIATE (does not wait)
+[vulkan] [lines] [ 178353.7 ms] the Orbit Lab's picture was drawn anew for 30 frames in a row at rest; the key's parts that changed (frames of 30): the selection, follow and camera (yaw, pitch, the held place, the glide) 30; the view settings (zoom, switches, time speed) 1; the theme and the text and panel insets 2; the system's time and state 1; the bodies' places, trails and moons 1
+
+The card programs' guards (Vulkan):
+  vulkan: passed (ok)
+  groups: allowed, guarded (it has not passed yet with this version and driver)
+  outline: allowed, guarded (it has not passed yet with this version and driver)
+  rocks: passed (ok)
+  cloud: passed (ok)
+  slice: allowed, guarded (it has not passed yet with this version and driver)
+  jump: passed (ok)
+  molcloud: passed (ok)
+  lightpaths: off: The light paths on Vulkan stopped the app last time (in the step 'the helper died making the light paths' pipeline').
+  sky: off: The spinning hole's sky per pixel on Vulkan did not finish a step in time last time ('the first full picture').
+  lens: passed (ok)
+  rings: passed (ok)
+  classic: passed (ok)
+  nucdensity: allowed, guarded (it has not passed yet with this version and driver)
+  lines: passed (ok)
+  surface: passed (ok)

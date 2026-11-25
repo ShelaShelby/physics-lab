@@ -1,0 +1,173 @@
+pc_tests.ps1 on the owner's PC, release 0.85.1 (commit f6043ed), 25 Nov 2026. Three runs, in order.
+
+== Run 1: every part (the parts after bh were skipped by a runner bug, fixed in 0.85.1's second commit)
+Physics Lab hardware checks, 2026-11-25 17:05:12
+INFO setup  PhysicsLab.exe , 2026-11-25 14:50
+INFO device  Windows: AMD Radeon RX 9060 XT, driver 32.0.32029.2010, 2560 x 1440 at 255 Hz
+INFO device  Windows: AMD Radeon(TM) Graphics, driver 32.0.21045.29003, no screen
+INFO device  vulkaninfo: driverVersion      = 2.0.416
+INFO device  vulkaninfo: deviceType         = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+INFO device  vulkaninfo: deviceName         = AMD Radeon RX 9060 XT
+INFO device  vulkaninfo: driverName         = AMD proprietary driver
+INFO device  vulkaninfo: driverInfo         = 26.11.2 (LLPC)
+INFO device  vulkaninfo: apiVersion         = 1.4.359
+INFO device  vulkaninfo: apiVersion         = 1.4.315
+INFO device  vulkaninfo: driverVersion      = 2.0.353
+INFO device  vulkaninfo: deviceName         = AMD Radeon(TM) Graphics
+INFO device  vulkaninfo: deviceType         = PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+INFO device  vulkaninfo: driverName         = AMD proprietary driver
+INFO device  vulkaninfo: driverInfo         = 26.11.2 (AMD proprietary shader compiler)
+INFO device  python --version: none
+PASS 3b.smoke.orbit.start  the app started on Vulkan and ended with exit code 0 (exit 0, 2.5 s): Vulkan: AMD Radeon RX 9060 XT | driver AMD proprietary driver 2.0.416 (26.11.2 (LLPC)) | Vulkan 1.4.359 | FIFO (waits for the screen)
+PASS 3b.smoke.orbit.draws  the frame is not empty (4129 colours, 11603 of 35840 samples away from the main colour)
+PASS 3b.smoke.atom.start  the app started on Vulkan and ended with exit code 0 (exit 0, 1 s): Vulkan: AMD Radeon RX 9060 XT | driver AMD proprietary driver 2.0.416 (26.11.2 (LLPC)) | Vulkan 1.4.359 | FIFO (waits for the screen)
+PASS 3b.smoke.atom.draws  the frame is not empty (689 colours, 4331 of 35840 samples away from the main colour)
+PASS 3b.smoke.molecule.start  the app started on Vulkan and ended with exit code 0 (exit 0, 1 s): Vulkan: AMD Radeon RX 9060 XT | driver AMD proprietary driver 2.0.416 (26.11.2 (LLPC)) | Vulkan 1.4.359 | FIFO (waits for the screen)
+PASS 3b.smoke.molecule.draws  the frame is not empty (680 colours, 4221 of 35840 samples away from the main colour)
+PASS 3b.smoke.blackhole.start  the app started on Vulkan and ended with exit code 0 (exit 0, 1 s): Vulkan: AMD Radeon RX 9060 XT | driver AMD proprietary driver 2.0.416 (26.11.2 (LLPC)) | Vulkan 1.4.359 | FIFO (waits for the screen)
+PASS 3b.smoke.blackhole.draws  the frame is not empty (6067 colours, 20961 of 35840 samples away from the main colour)
+INFO 3c.vkcards  Vulkan: AMD Radeon RX 9060 XT (Vulkan 1.4), double precision in shaders: yes, validation off
+INFO 3c.vkcards  FAIL: Glow soft dots Wheel dark page (additive): the two pictures differ by at most 1 level(s) in any channel
+INFO 3c.vkcards  FAIL: scene 1 (6000 rocks): regression guard: the worst place error stays at the measured 0.00357 points + 1 % (0.005777)
+INFO 3c.vkcards  FAIL: scene 6 (48000 rocks): regression guard: the worst place error stays at the measured 0.00357 points + 1 % (0.005777)
+FAIL 3c.vkcards  vk_compare_tests:  (exit -1073741819, 27.6 s)
+PASS 3c.bh.sky.run  the sky comparison ran (exit 0, 7.2 s)
+PASS 3c.bh.sky.startup  the sky's start-up check passes on this driver
+PASS 3c.bh.sky.tonecheck  the start-up check's camera curve: every probe pixel within its limit (0 of 3840 over)
+PASS 3c.bh.tone.near  the camera curve's picture: 4 of 169866 disc pixels over 8 levels (max 28)
+PASS 3c.bh.tone.far  the camera curve's picture: 1 of 191770 disc pixels over 8 levels (max 44)
+PASS 3c.bh.tone.spin  the camera curve's picture: 5 of 205163 disc pixels over 8 levels (max 42)
+PASS 3c.bh.tone.streaks  the camera curve's picture: 1 of 216898 disc pixels over 8 levels (max 11)
+PASS 3c.bh.tone.pole  the camera curve's picture: 101 of 142146 disc pixels over 8 levels (max 255)
+PASS 3c.bh.tone.closetable  the camera curve's picture: 6 of 145909 disc pixels over 8 levels (max 60)
+FAIL 3c.bh.tone.close  the camera curve's picture: 102 of 5120 disc pixels over 8 levels (max 82)
+PASS 3c.bh.tone.closespin  the camera curve's picture: 218 of 145909 disc pixels over 8 levels (max 172)
+PASS 3c.bh.filmsoft.1.51076  Film's see-through disc: 2 of 13936 disc pixels over 8 levels
+PASS 3c.bh.filmsoft.1.62316  Film's see-through disc: 1 of 13251 disc pixels over 8 levels
+INFO 3c.bh.skypic.benchmark  a=0.9 b=6.47e-06 case=benchmark dir=1.21e-05 dirbad=0 dirbadfar=0.0 dirnear=2.08e-04 discpx=38458 discwrong=0 discwrongedge=1.00e+00 discwrongfar=0.0 discwrongout=0 dist=20 ends=0 endsfar=0 endsfarpx=0.0 g=7.01e-06 gas=5.53e-05 gasbad=0 gaspx=38458 lost=0 phi=2.25e-03 px=64000 r=5.71e-06 rbad=0 reflost=0 sky=61030 t=6.87e-04 th=1.39626 timebad=1 timepx=37690 u=2.95e-05 ubad=0
+INFO 3c.bh.skypic.film  a=0.6 b=8.29e-06 case=film dir=1.02e-05 dirbad=0 dirbadfar=0.0 dirnear=1.16e-01 discpx=4126 discwrong=0 discwrongedge=1.00e+00 discwrongfar=0.0 discwrongout=0 dist=74.1 ends=0 endsfar=0 endsfarpx=0.0 g=3.78e-06 gas=3.52e-05 gasbad=0 gaspx=4125 lost=0 phi=1.04e-05 px=64000 r=2.71e-05 rbad=0 reflost=0 sky=61858 t=1.86e-05 th=1.51076 timebad=0 timepx=4060 u=2.71e-05 ubad=0
+INFO 3c.bh.skypic.plane  a=0.9 b=4.58e-06 case=plane dir=1.86e-05 dirbad=0 dirbadfar=0.0 dirnear=5.16e-04 discpx=39414 discwrong=0 discwrongedge=1.00e+00 discwrongfar=0.0 discwrongout=0 dist=20 ends=0 endsfar=0 endsfarpx=0.0 g=1.00e-05 gas=4.14e-05 gasbad=0 gaspx=33605 lost=0 phi=8.85e-06 px=64000 r=2.64e-05 rbad=0 reflost=0 sky=57314 t=6.45e-04 th=1.57080 timebad=0 timepx=32693 u=2.64e-05 ubad=0
+INFO 3c.bh.skypic.top  a=0.99 b=2.79e-06 case=top dir=9.06e-04 dirbad=0 dirbadfar=0.0 dirnear=5.60e-03 discpx=44885 discwrong=0 discwrongedge=1.00e+00 discwrongfar=0.0 discwrongout=0 dist=6 ends=0 endsfar=0 endsfarpx=0.0 g=1.94e-04 gas=4.22e-05 gasbad=0 gaspx=44884 lost=0 phi=9.59e-04 px=64000 r=1.25e-03 rbad=1 reflost=0 sky=48012 t=9.86e-04 th=1.40000 timebad=0 timepx=43003 u=1.25e-03 ubad=1
+PASS 3c.bh.skyfull.count  Film at 2560 x 1369 compared at four tilts (4; exit 0, 18.8 s)
+PASS 3c.bh.skyfull.film86.56  every pixel within the limits (none over; dir 8.66e-05, r 1.57e-04, u 1.57e-04)
+PASS 3c.bh.skyfull.film88.00  every pixel within the limits (none over; dir 8.38e-05, r 1.42e-04, u 1.68e-04)
+PASS 3c.bh.skyfull.film90.00  every pixel within the limits (none over; dir 8.07e-05, r 1.21e-04, u 1.21e-04)
+PASS 3c.bh.skyfull.film92.00  every pixel within the limits (none over; dir 8.49e-05, r 1.42e-04, u 1.68e-04)
+PASS 3c.bh.precision.1000  the shadow's edge 5.031e-07 px, 0 on the wrong side, the bent sky 1.886e-06 rad, from 0.1 px of the edge 6.935e-07 rad (limits 1e-3 px, 1e-5 rad)
+FAIL 3c.bh.precision.27  the shadow's edge 3.139e-06 px, 0 on the wrong side, the bent sky 4.761e-06 rad, from 0.1 px of the edge 2.795e-05 rad (limits 1e-3 px, 1e-5 rad)
+PASS 3c.bh.precision.2.5  the shadow's edge 1.350e-06 px, 0 on the wrong side, the bent sky 4.577e-06 rad, from 0.1 px of the edge 9.750e-06 rad (limits 1e-3 px, 1e-5 rad)
+PASS 3e.edgeon.count  the edge-on views were compared (16 of 16; exit 0)
+PASS 3e.edgeon.57.5@1.575000  the card = the double lookup (0 of 638268 differ), the near disc smooth (0 of 505540 over 8 levels)
+PASS 3e.edgeon.1000@1.575000  the card = the double lookup (0 of 522988 differ), the near disc smooth (0 of 504730 over 8 levels)
+PASS 3e.edgeon.1000@1.570796  the card = the double lookup (0 of 517134 differ), the near disc smooth (0 of 508644 over 8 levels)
+PASS 3e.edgeon.57.5@1.570796  the card = the double lookup (4 of 628432 differ), the near disc smooth (0 of 509906 over 8 levels)
+PASS 3e.edgeon.57.5@1.567296  the card = the double lookup (2 of 636780 differ), the near disc smooth (0 of 506054 over 8 levels)
+PASS 3e.edgeon.57.5@1.568996  the card = the double lookup (2 of 633026 differ), the near disc smooth (0 of 507314 over 8 levels)
+PASS 3e.edgeon.57.5@1.570096  the card = the double lookup (2 of 630430 differ), the near disc smooth (4 of 508598 over 8 levels)
+PASS 3e.edgeon.57.5@1.571496  the card = the double lookup (2 of 630430 differ), the near disc smooth (2 of 508598 over 8 levels)
+PASS 3e.edgeon.57.5@1.574296  the card = the double lookup (2 of 636780 differ), the near disc smooth (0 of 506054 over 8 levels)
+PASS 3e.edgeon.57.5@1.572596  the card = the double lookup (2 of 633026 differ), the near disc smooth (0 of 507314 over 8 levels)
+PASS 3e.edgeon.1000@1.568996  the card = the double lookup (0 of 519946 differ), the near disc smooth (0 of 507314 over 8 levels)
+PASS 3e.edgeon.1000@1.567296  the card = the double lookup (0 of 522036 differ), the near disc smooth (0 of 506054 over 8 levels)
+PASS 3e.edgeon.1000@1.570096  the card = the double lookup (0 of 518494 differ), the near disc smooth (0 of 508154 over 8 levels)
+PASS 3e.edgeon.1000@1.572596  the card = the double lookup (0 of 519946 differ), the near disc smooth (0 of 507314 over 8 levels)
+PASS 3e.edgeon.1000@1.571496  the card = the double lookup (0 of 518494 differ), the near disc smooth (0 of 508154 over 8 levels)
+PASS 3e.edgeon.1000@1.574296  the card = the double lookup (0 of 522034 differ), the near disc smooth (0 of 506054 over 8 levels)
+DONE  44 passed, 3 failed
+
+== Run 2: vkcards, planets, bench, items, logs, validation
+INFO setup  PhysicsLab.exe , 2026-11-25 14:50
+INFO 3c.vkcards  Vulkan: AMD Radeon RX 9060 XT (Vulkan 1.4), double precision in shaders: yes, validation off
+INFO 3c.vkcards  FAIL: Glow soft dots Wheel dark page (additive): the two pictures differ by at most 1 level(s) in any channel
+INFO 3c.vkcards  FAIL: scene 1 (6000 rocks): regression guard: the worst place error stays at the measured 0.00357 points + 1 % (0.005777)
+INFO 3c.vkcards  FAIL: scene 6 (48000 rocks): regression guard: the worst place error stays at the measured 0.00357 points + 1 % (0.005777)
+INFO 3c.vkcards  FAIL: no card programs: it is the CPU's outline
+INFO 3c.vkcards  FAIL: no card programs: outline 2p z Cloud 3D against the card renderer's CPU-outline picture: the two pictures differ by at most 0 level(s) in any channel
+FAIL 3c.vkcards  vk_compare_tests:  (exit -1073741819, 25.9 s)
+PASS 3c.planets.true_Earth  GPU against CPU: 163 of 61456 pixels over 8 levels (at most 1 %; largest 219); radius 147.2460 px
+PASS 3c.planets.true_Jupiter  GPU against CPU: 31 of 48696 pixels over 8 levels (at most 1 %; largest 214); radius 131.1021 px
+PASS 3c.planets.true_Neptune  GPU against CPU: 194 of 58242 pixels over 8 levels (at most 1 %; largest 219); radius 143.6062 px
+PASS 3c.planets.eclipse_Earth  GPU against CPU: 192 of 61456 pixels over 8 levels (at most 1 %; largest 193); radius 147.2460 px
+PASS 3f.sun_groups  the Sun on 10 May 2024: the record's 7 groups drawn (7)
+PASS 3c.planets.sun  the Sun's edge and groups, GPU against CPU: 93 of 115920 pixels over 8 levels (largest 140)
+PASS 3d.bench  the benchmark ran and saved its result (physics-lab-benchmark-2026-11-25-171447.txt; 305 s)
+INFO 3d.bench  Display refresh rate: 255 Hz
+INFO 3d.bench  blackhole.close_spin        881.7     491.5     38.5        119.1 ms   no         processor (the pictures, made off the frame)  Black Hole Lab, circling at the closest distance and the top spin
+INFO 3d.bench  ui.resize_blackhole         151.3     62.9      83.4        37.0 ms    no         processor (the pictures, made off the frame)  Panels, the window resized over the Black Hole Lab
+INFO 3d.bench  orbit.true_light            619.7     339.9     619.7       -          yes        processor                                     Orbit Lab, True sunlight: Neptune followed, then Earth, in turn
+INFO 3d.bench  orbit.oort_region           817.8     381.7     817.8       -          yes        processor                                     Orbit Lab, zoomed out to the Oort cloud's model dots
+INFO 3d.bench  orbit.sun_edge              780.3     505.7     780.3       -          yes        processor                                     Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse
+INFO 3d.bench  Rules: "reaches" is yes when the 1 % low and the new pictures a second are both at least the display's refresh rate (255 Hz), and, for a Black Hole Lab scene, its lag (the worst time the shown picture was behind the settings) is at most 2 frames at that rate (7.8 ms; "-": not a Black Hole Lab scene). "Limited by" compares the frame's CPU work c with the GPU's busy time g: processor when c >= 1.5 g, graphics card when g >= 1.5 c, else both (no reliable GPU time: "processor?" when c is 80 % of the frame or more); where the new pictures a second fall under 90 % of the frames a second it names what makes the pictures off the frame. Slowest first by the lower of the 1 % low and the new pictures a second.
+INFO 3d.bench  rest.orbit            busy     2.4 % (29 % of a thread)  0.71 ms      765 times           idle    Orbit Lab at its defaults, time stopped
+INFO 3d.bench  rest.blackhole_glare  busy     46.2 % (555 % of a thread)  2.45 ms      766 times           idle    Black Hole Lab, a feeding hole with the eye's glare
+INFO 3d.bench  ui.resize_blackhole  Panels, the window resized over the Black Hole Lab
+INFO 3d.bench  blackhole.close_spin  Black Hole Lab, circling at the closest distance and the top spin
+INFO 3d.bench  orbit.true_light  Orbit Lab, True sunlight: Neptune followed, then Earth, in turn
+INFO 3d.bench  orbit.sun_edge  Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse
+INFO 3d.bench  orbit.oort_region  Orbit Lab, zoomed out to the Oort cloud's model dots
+INFO 3e.rest.orbit  rest.orbit  busy     2.5 % (30 % of a thread)  0.71 ms      765 times           idle    Orbit Lab at its defaults, time stopped
+INFO 3e.rest.orbit  why drawn anew: no run of 30 frames in a row was seen
+FAIL 3e.rest.orbit  the Orbit Lab at rest keeps its picture (the Orbit Lab's picture was drawn anew for 30 frames in a row at rest; the key's parts that changed (frames of 30): the selection, follow and camera (yaw, pitch, the held place, the glide) 25; the view settings (zoom, switches, time speed) 1; the theme and the text and panel insets 2; the system's time and state 1; the bodies' places, trails and moons 1; the card's lines still being decided (a new number each frame) 30)
+INFO 3e.item_glare_gas  rest.blackhole_glare  busy     23.0 % (276 % of a thread)  1.33 ms      375 times           busy    Black Hole Lab, a feeding hole with the eye's glare
+INFO 3e.item_glare_nogas  rest.blackhole_glare  busy     13.1 % (157 % of a thread)  0.35 ms      2 times             busy    Black Hole Lab, a feeding hole with the eye's glare
+INFO 3e.resize.maximised  Worst single frame: 19.8 ms, in ui.resize_blackhole
+INFO 3e.resize.maximised  ui.resize_blackhole  184.9     57.3      0.00        1462.0 ms  no         graphics card (the pictures, made off the frame)  Panels, the window resized over the Black Hole Lab
+INFO 3e.resize.maximised  ui.resize_blackhole  Panels, the window resized over the Black Hole Lab
+INFO 3e.resize.maximised  What it tests: A feeding hole spinning at 0.9, the disc on, the streaks and the clump: the window's size changed every 4 frames from its size at the start down to the smallest window and back, as a corner is dragged. Each size makes the swapchain and the pictures again. The window is put back after.
+INFO 3e.resize.maximised  the window from 2560 x 1369 (maximised) down to 880 x 560 and back, a new size every 4 frames
+INFO 3e.resize.maximised  Path: the sky and disc: the graphics card, every pixel from the closed formulas (its start-up check passed)
+INFO 3e.resize.maximised  Frames counted: 963
+INFO 3e.resize.maximised  Average: 5.41 ms per frame = 184.9 fps
+INFO 3e.resize.maximised  1 % low: 57.3 fps (average of the slowest 1 % of the frames)
+INFO 3e.resize.maximised  New pictures: 0 in the 5.21 s the view moved (0.0 a second; 5.2 s counted)
+INFO 3e.resize.maximised  Worst frame: 19.81 ms
+INFO 3e.resize.maximised  Frames slower than 16.7 ms: 6 of 963
+INFO 3e.resize.maximised  CPU work per frame: 4.98 ms (the waits for the card taken out)
+INFO 3e.resize.maximised  Waited for the card per frame: 0.05 ms (the swapchain image's fence, its acquire, card batches waited for)
+INFO 3e.resize.maximised  Worst frame 1: 19.8 ms: frame thread 12.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 0.1 ms, the swapchain made again 11.2 ms, the rest 7.0 ms (not counted above)
+INFO 3e.resize.maximised  Worst frame 2: 19.5 ms: frame thread 11.7 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 0.1 ms, the swapchain made again 10.2 ms, the rest 7.6 ms (not counted above)
+INFO 3e.resize.maximised  Worst frame 3: 19.2 ms: frame thread 11.5 ms, waited for the card 0.0 ms, acquire 0.0 ms, present 0.1 ms, events 0.1 ms, the swapchain made again 10.1 ms, the rest 7.5 ms (not counted above)
+INFO 3e.resize.maximised  GPU time per frame: 0.14 ms
+INFO 3e.resize.maximised  GPU span per frame: 0.14 ms (from the first to the last GPU command of the frame, waiting included)
+INFO 3e.resize.maximised  309 new sizes; the window put back to 2560 x 1369 (exactly as at the start: 2560 x 1369)
+PASS 3e.resize.maximised  the scene ran from a maximised window and left it maximised (settings: window=2560,1369,-,-,1)
+INFO 3e.fullscreen  skipped (-NoKeys)
+INFO logs.vulkan  home_bench : 239 [vulkan] lines (50 swapchain rebuilds)
+FAIL logs.vulkan  [vulkan] [lightpaths] the helper died making the light paths' pipeline (exit code 0xC0000005): switched off, the app never makes it (kept; Settings, Performance: Try again)   [home_bench]
+FAIL logs.vulkan  [vulkan] [sky] The step 'the first full picture' did not finish within its time limit: The spinning hole's sky per pixel on Vulkan is switched off (kept for this version)   [home_bench]
+FAIL logs.vulkan  [vulkan] [lines] the Orbit Lab's picture was drawn anew for 30 frames in a row at rest; the key's parts that changed (frames of 30): the selection, follow and camera (yaw, pitch, the held place, the glide) 30; the view settings (zoom, switches, time speed) 1; the theme and the text and panel insets 2; the system's time and state 1; the bodies' places, trails and moons 1   [home_bench]
+INFO logs.vulkan  home_bh_edgeon : 68 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_bh_precision : 68 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_bh_sky : 68 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_bh_skyfull : 68 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_item_glare_gas : 111 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_item_glare_nogas : 111 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_item_resize_max : 168 [vulkan] lines (50 swapchain rebuilds)
+INFO logs.vulkan  home_item_rest_orbit : 109 [vulkan] lines (0 swapchain rebuilds)
+FAIL logs.vulkan  [vulkan] [lines] the Orbit Lab's picture was drawn anew for 30 frames in a row at rest; the key's parts that changed (frames of 30): the selection, follow and camera (yaw, pitch, the held place, the glide) 25; the view settings (zoom, switches, time speed) 1; the theme and the text and panel insets 2; the system's time and state 1; the bodies' places, trails and moons 1; the card's lines still being decided (a new number each frame) 30   [home_item_rest_orbit]
+INFO logs.vulkan  home_planets_eclipse_Earth : 78 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_planets_sun : 78 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_planets_true_Earth : 78 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_planets_true_Jupiter : 78 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_planets_true_Neptune : 78 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_smoke_atom : 69 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_smoke_blackhole : 68 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_smoke_molecule : 65 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  home_smoke_orbit : 66 [vulkan] lines (0 swapchain rebuilds)
+INFO logs.vulkan  the owner's own log (%USERPROFILE%\AppData\Roaming\PhysicsLab\PhysicsLab\gpu-paths-log.txt) : 209 [vulkan] lines (50 swapchain rebuilds)
+FAIL logs.vulkan  [vulkan] [lightpaths] The light paths on Vulkan is switched off for this version: the app died inside the step 'the light paths' pipeline' (Settings, Performance: Try again)   [the owner's own log (%USERPROFILE%\AppData\Roaming\PhysicsLab\PhysicsLab\gpu-paths-log.txt)]
+FAIL logs.vulkan  [vulkan] [lightpaths] the helper's detective work, kKerrTableCS variant step: the helper died making it (exit code 0xC0000005)   [the owner's own log (%USERPROFILE%\AppData\Roaming\PhysicsLab\PhysicsLab\gpu-paths-log.txt)]
+FAIL logs.vulkan  [vulkan] [lightpaths] the helper's detective work, kKerrTableCS variant ray: the helper died making it (exit code 0xC0000005)   [the owner's own log (%USERPROFILE%\AppData\Roaming\PhysicsLab\PhysicsLab\gpu-paths-log.txt)]
+FAIL logs.vulkan  [vulkan] [lightpaths] the helper's detective work, kKerrTableCS variant short: the helper died making it (exit code 0xC0000005)   [the owner's own log (%USERPROFILE%\AppData\Roaming\PhysicsLab\PhysicsLab\gpu-paths-log.txt)]
+INFO 3g.validation  the Khronos validation layers are not installed: skipped
+DONE  8 passed, 10 failed
+
+== Run 3: vkcards (the third try)
+Physics Lab hardware checks, 2026-11-25 17:15:56
+INFO setup  PhysicsLab.exe , 2026-11-25 14:50
+INFO 3c.vkcards  Vulkan: AMD Radeon RX 9060 XT (Vulkan 1.4), double precision in shaders: yes, validation off
+INFO 3c.vkcards  FAIL: Glow soft dots Wheel dark page (additive): the two pictures differ by at most 1 level(s) in any channel
+INFO 3c.vkcards  FAIL: scene 1 (6000 rocks): regression guard: the worst place error stays at the measured 0.00357 points + 1 % (0.005777)
+INFO 3c.vkcards  FAIL: scene 6 (48000 rocks): regression guard: the worst place error stays at the measured 0.00357 points + 1 % (0.005777)
+FAIL 3c.vkcards  vk_compare_tests:  (exit -1073741819, 23.1 s)
+DONE  0 passed, 1 failed

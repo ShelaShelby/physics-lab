@@ -47,7 +47,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **source needed**: the sunspots' darkness: a measured contrast that fits group records (a whole group's mean intensity against wavelength, or umbra and penumbra contrasts with the umbral share). Mathew et al. 2007 (one wavelength, per spot and umbral radius) does not fit (REPORT 0.85.0). Until then the groups are outlines. On the owner's files list (native/PLAN_REVIEW.md).
 - **source needed**: the Oort cloud model's inner part as numbers (its lean towards the ecliptic: Vokrouhlicky et al. 2019 give it only as Fig. 7). Duncan, Quinn & Tremaine 1987 (ADS refused: 500, 504). Until then the dots' directions are spread evenly (the card says so).
 - The sunspot groups turn as one body within the half day to the shown time; differential rotation and the spots' evolution are not drawn. NOAA's SRS after the last saved date needs a new fetch (the table ends 24 Nov 2026).
-- **fix**: the Orbit Lab at rest drew its picture anew every frame on the owner's PC (0.75.0: rest.orbit 766 drawings in 3 s). The build machine does not reproduce it. Read the changed key part (main.cpp orbitFrameKey) in his next benchmark, then fix it.
+- **fix**: the Orbit Lab at rest draws its picture anew (rest.orbit 765 drawings in 3 s on the owner's PC, native/docs/hardware/pc_0.85.1.md 3e.1). The key's part that changes is the selection, follow and camera (yaw, pitch, the held place, the glide), in 25-30 of 30 frames (main.cpp orbitFrameKey).
 - **fix**: outside 1800-2100 the moons start at made-up angles and planes. Use JPL's mean elements (saved: data/jpl/sats_mean_elements_2026-11-23.html) and their reference planes.
 - **source needed**: a measured phase law for each main ring (A, B, C, Cassini Division; brightness against phase angle up to the forward-scattering side), to replace the rings' even scattering (0.78.0 item 2, skipped after 2 tries: Déau et al. 2009, arXiv:0902.0289, has the opposition surge only; the UVIS power law is far-UV only).
 - **source needed**: a published syndyne or synchrone with readable numbers (Finson & Probstein 1968: the ADS scan did not load on 2026-11-24) to check one dust tail curve. The comets' dust: grain ejection speeds (the tail's width) and the gas tail's length are not modelled.
@@ -70,11 +70,15 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Celestial mechanics in the Data panel: ephemeris tables, an integrator drift check, Lagrange points, Kirkwood gaps, a Lambert solver with porkchop plots.
 
 ## Black Hole Lab
+- **fix**: the spinning hole's sky per pixel switches itself off on the owner's PC in the benchmark: 'the first full picture' did not finish within its time limit (begun 1.3 s, stopped 11.3 s), so every spinning-hole scene ran on the CPU table (native/docs/hardware/pc_0.85.1.md 3b.7). In the comparison runs the same path passes.
+- **fix**: the camera curve's picture at the closest distance with no spin (toneCompare case close) is 1.99 % over 8 levels on the owner's Radeon (limit 1 %, max 82; native/docs/hardware/pc_0.85.1.md 3c.8). The app prints ok=1 for it: its own limit does not match the test's.
+- **fix**: the bent sky at 27 GM/cÂ², 0.1 px or more from the shadow's edge, is 2.8e-5 rad off the double reference on the owner's Radeon (limit 1e-5; native/docs/hardware/pc_0.85.1.md 3c.12).
+- **fix**: ui.resize_blackhole from the owner's maximised window (2560 x 1369) makes no new picture while it resizes (0 in 5.2 s, lag 1380 ms; at 1400 x 860: 94 a second; native/docs/hardware/pc_0.85.1.md 3e.3).
 - 0.87.0, the outside review (native/PLAN_REVIEW.md R9-R12): the colour-correction factor (Done et al. 2012), limb darkening (Chandrasekhar 1946 Table 2), returning radiation (Cunningham 1976, tested against its Tables 1-2), the thickness round a spinning hole.
 - **source needed**: a colour temperature (or spectrum) for each pixel of the Gaia sky map, so the held camera's own shift can change the map's colour and light as it does the stars' (0.84.0: the map is not shifted; shown only with Sky beside the disc: Shown).
 - **fix**: the GPU light paths crash the owner's Radeon driver when their pipeline is made (off there by the guard). The crash is in the "step" part of kKerrTableCS: split it into smaller parts.
-- rest.blackhole_glare is busy at rest on the owner's PC (45 % CPU). Suspected cause: the moving gas remakes the glare on the CPU. Check his next run with the gas off.
-- Scenes below 255 Hz in the owner's 0.68.1 run: film_tilt, real_move, extreme, all_light (1 % low 152-172). Their slow frames mostly wait for a swapchain image (6-9 ms, 2 images). Measure first.
+- **fix**: rest.blackhole_glare is busy at rest on the owner's PC (46 % CPU, 766 redraws). With the moving gas off: still 13 % CPU, 2 redraws (native/docs/hardware/pc_0.85.1.md 3e.5). The gas causes the redraws. Find what else uses the CPU.
+- Scenes below 255 Hz in the owner's 0.85.1 run: film_tilt, real_move, extreme, all_light (7-44 new pictures a second), all on the CPU table there (the **fix** of the sky's first full picture below). Measure again once that is fixed.
 - **fix**: the CPU spin table (the fallback) is off on the far disc nearly edge on: the exposure's log-average 1.4 % at spin 0.9, up to 33 of 3871 pixels another image at spin 0.99.
 - **fix**: the CPU path seen nearly edge on still changes the disc at the stop (largest patch up to 132 px). Next try: more columns inside the shadow only.
 - The ring round the shadow: the sky in the gap is drawn at the map's brightness beside a disc on its exposure. Say so in the guide, or dim that sky by the disc's exposure.
@@ -90,7 +94,6 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Moving gas, what is left: the streaks and the clump on the CPU path (the fallback draws the surface but no moving gas), a check of the clump's light curve against a published curve.
 - **fix** (0.87.0, PLAN_REVIEW.md R12): the disc's thickness round a spinning hole. Zhu's (6), ALP97's (27) and AF13's (92) print the spin term differently. Only AF13's L^2 - a^2 (E^2 - 1) gives AF13 (40)'s vertical frequency. Until then a spinning hole's disc is drawn in its plane.
 - The camera inside the disc's thickness (|z| below h at its own radius, for example 57.5 GM/c² and 0.2 degrees from the plane) is drawn like any other view and equals the CPU reference, but the gas there is optically thick and the lab has no model of what is seen from inside it. **owner decides**: keep the camera outside the thickness (with a line in the app), or draw it as it is.
-- The static near the disc's plane was a float error in the GPU's coverage window (REPORT 0.82.1). It was not seen on the owner's Radeon at 1000 GM/c² here (no Radeon): check his next run at pitch near 90 degrees.
 - The disc's surface: rays that graze it without crossing the plane near it are not drawn (0.3 % of the disc's pixels at 20 M, 5 degrees above; REPORT 0.79.0).
 - **source needed**: Sagittarius A*'s hot flow (src/blackhole/hot.h, 0.80.0: tested, nothing drawn). BL06 as printed passes both checks (1.3 mm 3 Jy +- 30 %, Broderick et al. 2011; 2.2 um 0.28-6.9 mJy, GRAVITY 2020) under no reading: lengths in M, 0.3 of the energy 4.54 Jy and 0.155 mJy, of the field 2.13 Jy and 0.040 mJy; lengths in r_S 19.8 Jy and 2.77 mJy, 13.4 Jy and 0.70 mJy. Its near infrared is 20 times below BL06 Fig. 1's own curve; Yuan, Quataert & Narayan 2003 and Broderick & Loeb 2005a do not close the gap. Needed: BL06's definition of its non-thermal electrons or its spectrum in numbers (Broderick & Blandford 2004, Broderick's 2006 thesis). The GPU table, the Hard scene blackhole.hot_flow and the guide text wait for a model that passes both checks.
 - **source needed**: a semi-analytic model of M87*'s flow with fitted numbers (Broderick & Loeb 2009, ApJ 697, 1164, is a candidate). T_eff inside the ISCO at 0.1 L_Edd. The hot flow's structure strength (to measure from the Illinois GRMHD data, CC BY 4.0).
@@ -100,6 +103,9 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look at 1.3 mm.
 
 ## Whole app
+- **fix**: the full tests of 0.85.0 (62a4a24) failed ui_orbit: check_shell_state.py 'the same fields', 1 of 121 (the saved and the read-back state differ: gr=1 against gr=0, light= new).
+- **fix**: vk_compare_tests crashes on the owner's Radeon (3 of 3 runs, 0xC0000005: twice in amdvlk64.dll at one offset, once in vk_compare_tests.exe; native/docs/hardware/pc_0.85.1.md 3c.1). Its stdout is buffered, so the check it died in is not known: make its output unbuffered, then find the check.
+- **fix**: vk_compare_tests on the owner's Radeon: Glow soft dots, Wheel, dark page (additive) differ by 2 levels at 585 of 200000 pixels (limit 1); the rocks' regression guard 0.00578 points against 0.005777; 'no card programs' outline 2p z Cloud 3D differs from the CPU-outline picture (native/docs/hardware/pc_0.85.1.md 3c.2-3c.4).
 - **owner decides**: the benchmark's lag is the age of the shown picture (blackhole_view.h lagMs), not behindWorst. behindWorst counts from the first frame behind and grows for the whole movement (REPORT 0.83.0).
 - A GPU timing of the Black Hole sky pass alone (timestamps around one pass), if needed again.
 - The Glow and Density clouds' exposure grid is read back in the frame that draws it. A grid one frame late would remove the wait.
@@ -115,6 +121,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Worked calculations: the mass formula against AME2020, heat capacity against NIST-JANAF, a Bateman decay chain. IR absorption beside measured spectra (**source needed**).
 
 ## Waiting for the owner
+- **owner decides**: install Python 3 and the Vulkan validation layers (LunarG's Vulkan SDK) on the owner's PC, so the UI check scripts and a validation run can be done there (0.85.1: neither is installed).
 - Camera part 3, free flight (WASD or arrows, mouse look, speed scaling with distance). Not now (23 Nov 2026).
 - After the owner's 0.63.1 benchmark: the three worst frames of blackhole.film_tilt (969 ms), orbit.heaviest (20.7 ms) and atom.nucleus_zoom (19.1 ms).
 - Paused (14 Nov 2026): element jumps with every electron for the other atoms (native/PLAN_JUMPS.md).
