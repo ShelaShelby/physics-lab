@@ -62,7 +62,7 @@ inline double mcewenLunar(double cosI, double cosE, double phaseDeg) {
 // The share of the Sun's disc that a round body hides, seen from a point: two discs on the sky, the Sun's of angular radius a, the body's of angular
 // radius b, their centres theta apart (all radians). The overlap of two circles (the lens area: the two circular segments), over the Sun's disc pi a^2.
 // Flat-sky geometry: exact for small discs; the Sun is at most 0.83 deg across from Mercury, and a body much bigger than the Sun is only crossed by it
-// near its own edge, where its outline is straight to within (a/b)^2. The Sun is taken as evenly bright (its limb darkening is left out: the app says so).
+// near its own edge, where its outline is straight to within (a/b)^2. Here the Sun is evenly bright: 0.85.0 draws with render/sun_limb.h sunCoveredLimb (the measured edge); this uniform form stays as its check (A = 1, 0, ...).
 // 0 = no eclipse, 1 = total (the body's disc covers the Sun's).
 inline double sunCovered(double a, double b, double theta) {
     if (a <= 0 || b <= 0 || theta >= a + b) return 0;

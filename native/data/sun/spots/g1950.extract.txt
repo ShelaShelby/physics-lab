@@ -1,0 +1,19 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/spots/g1950.txt
+# Reference: Royal Greenwich Observatory - USAF/NOAA sunspot group records, NASA Marshall Space Flight Center (D. Hathaway): g1950.txt, unzipped as received from RGO_NOAA1874_2013.zip (the archive is saved beside it)
+# URL: https://solarscience.msfc.nasa.gov/greenwch/RGO_NOAA1874_2013.zip
+# Date read: 2026-11-25
+# sha256 of the original: bcd0587497fd966b2699259c3879e5889a522d36b2b2c9c0478e776da4e370c9
+# Place in the original: rows of the year (format.txt gives the columns)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: tests/test_review085.inc (the packed table read back; the disc places against the Sun's IAU frame)
+#--- begin row 1
+1950 117.283   1637802 6   26   86   18   59 0.676  62.5 311.7  14.3 -38.2
+#--- end
+#--- begin row 2
+1950 425.441   1648402 9    4   21    4   20 0.844  99.4  78.3 -10.4 -57.8
+#--- end
+#--- begin row 3
+1950 726.377   1657705 0    2   11    4   23 0.966 111.8 287.8 -19.4 -72.0
+#--- end

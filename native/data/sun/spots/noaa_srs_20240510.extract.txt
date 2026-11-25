@@ -1,0 +1,21 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/spots/noaa_srs_20240510.txt
+# Reference: Joint USAF/NOAA Solar Region Summary (SRS), NOAA SWPC, archived by NOAA NCEI: the report of 10 May 2024, as received
+# URL: https://www.ngdc.noaa.gov/stp/space-weather/swpc-products/daily_reports/solar_region_summaries/2024/05/20240510SRS.txt
+# Date read: 2026-11-25
+# sha256 of the original: 5fa32fddf22b299cbdde88013129038abd315d6e391909c9d57fae42efc21f5c
+# Place in the original: part I, Regions with Sunspots
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: tests/test_review085.inc (the table's day of 10 May 2024); tests/check_orbit_ui.py planets (7 groups drawn)
+#--- begin part I
+I.  Regions with Sunspots.  Locations Valid at 09/2400Z
+Nmbr Location  Lo  Area  Z   LL   NN Mag Type
+3663 N25W83   037  0300 Fkc  17   10 Beta-Gamma
+3664 S19W34   348  1090 Fkc  20   81 Beta-Gamma-Delta
+3666 N08W65   019  0050 Hsx  02   01 Alpha
+3667 N27E07   307  0130 Hsx  02   01 Alpha
+3670 N16E31   283  0040 Hsx  03   01 Alpha
+3671 N20E33   281  0040 Hax  50   01 Alpha
+3672 N18E58   256  0030 Cro  04   05 Beta
+#--- end

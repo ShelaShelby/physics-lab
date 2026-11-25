@@ -42,6 +42,7 @@ struct ViewSettings {
     SkyMode sky = SkyMode::Soft;
     ConsMode cons = ConsMode::Off;
     bool realPlanets = false;   // Planet physics: Simple (false) / Real (true), see orbit/nbody.h
+    bool trueLight = false;     // 0.85.0 (R1): Lighting: True sunlight (each body by its distance from the Sun, a camera's exposure; orbit/true_light.h) / Even (every body as if at 1 au; not realistic)
     bool exaggerateWobble = true;   // Real only: draw the Sun's path round the barycentre kSunWobbleScale times too big (on by default: the real path is under 2.3 Sun radii)
     bool relativity = true;     // Real only: "General relativity (1PN)" for the planets (0.29: on by default; with the accurate step it brings Mercury from 40,962 to 24 km of JPL; no effect in Simple)
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
@@ -120,6 +121,7 @@ public:
     bool cardOk = false;
     Selection cardSel;                           // the selection lastCard is for (the shell uses the card only when it is the current one)
     double scaleLen = 0;                         // 0.22 stage 6: the scale bar's length in points (the readout draws the bar itself)
+    std::string exposureText;                    // 0.85.0 (R1): the true sunlight's readout (orbit/true_light.h exposureReadout); empty with even lighting
     std::string scaleText, lightText;            // 0.15 stage 3: the scale bar's words ("1 AU" / "light takes 8.3 minutes"), kept for the readout
     // The selected thing's place on the picture (points) and its radius, as last drawn. False: nothing is selected, or it has no round mark.
     bool selectedScreen(double& x, double& y, double& r) const;

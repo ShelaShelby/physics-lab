@@ -5,6 +5,8 @@
 // planetUV for the map, the map's mip levels made as the GPU makes them (each level the mean of 2 x 2 texels of the one above, in linear light) and read
 // as the GPU's sampler does (bilinear in a level, linear between levels, longitude repeated, latitude clamped), the level from the pixel's footprint
 // (the uv change to the next pixel right and down), albedoScaled, Lambert or McEwen's lunar law, then sRGB over the colour of space.
+// 0.85.0: times the sunlight factor (PLPLANET's last field; orbit/true_light.h); the eclipses with the Sun's measured edge per channel (render/sun_limb.h).
+//   planet_picture out.bin sun <the fields of a PLSUN line>: the CPU twin of kPlanetFS uMode 4, the Sun: Neckel & Labs 1994's edge per channel and the sunspot outlines.
 // Writes "PLCPU w h x0 y0\n" and w * h RGBA bytes: A = 255 inside 0.95 of the outline (the smooth edge is left out), 0 elsewhere.
 #include <algorithm>
 #include <cmath>
@@ -15,6 +17,7 @@
 #include "render/ellipsoid.h"
 #include "render/planet_maps.h"
 #include "render/shading.h"
+#include "render/sun_limb.h"
 
 namespace {
 struct Level { int w = 0, h = 0; std::vector<float> rgb; };   // 4 floats a texel: linear r, g, b and the alpha (Earth's cloud cover)
@@ -52,12 +55,53 @@ void bilinear(const Level& l, double u, double v, double out[4]) {
 }
 }  // namespace
 
+int sunPicture(const char* outPath, const std::vector<double>& f) {   // x y r K[9] n, then 4 per spot (unit vector, angular radius)
+    if (f.size() < 13 || f.size() != 13 + 4 * std::size_t(f[12])) { std::fprintf(stderr, "PLSUN: %zu fields\n", f.size()); return 2; }
+    const double X = f[0], Y = f[1], R = f[2];
+    float K[9]; for (int i = 0; i < 9; i++) K[i] = static_cast<float>(f[3 + i]);
+    const int ns = static_cast<int>(f[12]);
+    const render::SunLimb& lim = render::sunLimb();
+    const int x0 = static_cast<int>(std::floor(X - R)), y0 = static_cast<int>(std::floor(Y - R)), w = static_cast<int>(std::ceil(2 * R)) + 2, h = w;
+    std::vector<unsigned char> out(std::size_t(w) * h * 4, 0);
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++) {
+            const double px = x0 + i + 0.5, py = y0 + j + 0.5;
+            const render::EllipsoidHit hit = render::ellipsoidHit(K, 1, 1, (px - X) / R, (py - Y) / R);
+            if (!hit.hit || hit.d > 0.95) continue;
+            const render::EllipsoidHit hx = render::ellipsoidHit(K, 1, 1, (px + 1 - X) / R, (py - Y) / R), hy = render::ellipsoidHit(K, 1, 1, (px - X) / R, (py + 1 - Y) / R);
+            const auto dist = [&](const render::EllipsoidHit& a) { return std::sqrt(std::pow(a.b[0] - hit.b[0], 2) + std::pow(a.b[1] - hit.b[1], 2) + std::pow(a.b[2] - hit.b[2], 2)); };
+            const double pw = std::max(dist(hx), dist(hy));
+            double line = 0;
+            for (int k = 0; k < ns; k++) {
+                const double* sp = &f[13 + 4 * std::size_t(k)];
+                const double ang = std::acos(std::clamp(hit.b[0] * sp[0] + hit.b[1] * sp[1] + hit.b[2] * sp[2], -1.0, 1.0));
+                const double e = std::fabs(ang - sp[3]), t = std::clamp((e - 0.5 * pw) / pw, 0.0, 1.0);
+                line = std::max(line, 1 - t * t * (3 - 2 * t));   // 1 - smoothstep(0.5 pw, 1.5 pw, e)
+            }
+            const double mu = std::clamp(hit.n[2], 0.0, 1.0);
+            unsigned char* o = &out[4 * (std::size_t(j) * w + i)];
+            for (int c = 0; c < 3; c++) o[c] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(lim.centre[c] * std::max(render::limbP(lim.poly[c], mu), 0.0) * (1 - 0.75 * line))));
+            o[3] = 255;
+        }
+    std::FILE* fp = std::fopen(outPath, "wb");
+    if (!fp) return 1;
+    std::fprintf(fp, "PLCPU %d %d %d %d\n", w, h, x0, y0);
+    std::fwrite(out.data(), 1, out.size(), fp);
+    std::fclose(fp);
+    return 0;
+}
+
 int main(int argc, char** argv) {
-    if (argc < 3) { std::fprintf(stderr, "usage: planet_picture out.bin <PLPLANET fields>\n"); return 2; }
+    if (argc < 3) { std::fprintf(stderr, "usage: planet_picture out.bin <PLPLANET fields> | planet_picture out.bin sun <PLSUN fields>\n"); return 2; }
+    if (std::string(argv[2]) == "sun") {
+        std::vector<double> g;
+        for (int i = 3; i < argc; i++) g.push_back(std::atof(argv[i]));
+        return sunPicture(argv[1], g);
+    }
     std::vector<double> f;
     for (int i = 2; i < argc; i++) f.push_back(std::atof(argv[i]));
-    if (f.size() < 27) { std::fprintf(stderr, "a PLPLANET line has 26 fields and PLPLANETX at least 1, got %zu\n", f.size()); return 2; }
-    // map x y r lx ly lz K[9] shapeY shapeZ lunar albedoK nring nocc air spaceR spaceG spaceB
+    if (f.size() < 28) { std::fprintf(stderr, "a PLPLANET line has 27 fields and PLPLANETX at least 1, got %zu\n", f.size()); return 2; }
+    // map x y r lx ly lz K[9] shapeY shapeZ lunar albedoK nring nocc air spaceR spaceG spaceB lightK
     const auto map = static_cast<render::Map>(static_cast<int>(f[0]));
     const double X = f[1], Y = f[2], R = f[3];
     float K[9]; for (int i = 0; i < 9; i++) K[i] = static_cast<float>(f[7 + i]);
@@ -65,9 +109,10 @@ int main(int argc, char** argv) {
     const bool lunar = f[18] != 0;
     const bool air = f[22] != 0, clouds = map == render::Map::Earth;
     const int nring = static_cast<int>(f[20]), nocc = static_cast<int>(f[21]);
-    if (f.size() != std::size_t(27 + 3 * nring + 4 * nocc)) { std::fprintf(stderr, "PLPLANETX: %zu fields, want %d\n", f.size() - 26, 1 + 3 * nring + 4 * nocc); return 2; }
-    const double sunAng = f[26];
-    const double* ring = f.data() + 27;
+    if (f.size() != std::size_t(28 + 3 * nring + 4 * nocc)) { std::fprintf(stderr, "PLPLANETX: %zu fields, want %d\n", f.size() - 27, 1 + 3 * nring + 4 * nocc); return 2; }
+    const double lightK = f[26];
+    const double sunAng = f[27];
+    const double* ring = f.data() + 28;
     const double* occ = ring + 3 * nring;
     const double space[3] = {f[23], f[24], f[25]};
     double L[3] = {f[4], -f[5], f[6]};
@@ -124,21 +169,25 @@ int main(int argc, char** argv) {
                     }
                 }
             }
-            double sunF = 1;
-            if (nocc > 0 && hit.n[0] * L[0] + hit.n[1] * L[1] + hit.n[2] * L[2] > 0) {   // eclipses: the point in the screen frame, K^T b
+            double sunF[3] = {1, 1, 1};
+            if (nocc > 0 && hit.n[0] * L[0] + hit.n[1] * L[1] + hit.n[2] * L[2] > 0) {   // eclipses: the point in the screen frame, K^T b; 0.85.0: the measured edge, per channel
                 double sp[3];
                 for (int q = 0; q < 3; q++) sp[q] = K[q] * hit.b[0] + K[3 + q] * hit.b[1] + K[6 + q] * hit.b[2];
-                for (int q = 0; q < nocc; q++) sunF *= render::sunlightPast(sp, occ + 4 * q, occ[4 * q + 3], L, sunAng);
+                for (int q = 0; q < nocc; q++) {
+                    const double oc[3] = {occ[4 * q], occ[4 * q + 1], occ[4 * q + 2]};
+                    double s3[3];
+                    render::sunlightPastLimb(sp, oc, occ[4 * q + 3], L, sunAng, s3);
+                    for (int c = 0; c < 3; c++) sunF[c] *= s3[c];
+                }
             }
             unsigned char* o = &out[4 * (std::size_t(j) * w + i)];
             if (air) {   // kPlanetFS's air branch: earthAirLight, times the ring shadow's factor (lit / mu0) and the eclipse's
                 const double mu0 = hit.n[0] * L[0] + hit.n[1] * L[1] + hit.n[2] * L[2], mu = hit.n[2];
                 const double ringF = mu0 > 0 ? lit / mu0 : 0;
                 for (int q = 0; q < 3; q++)
-                    o[q] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(render::srgbDecode(space[q]) + render::earthAirLight(q, c[q], mu0, mu, -L[2]) * ringF * sunF)));
+                    o[q] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(render::srgbDecode(space[q]) + render::earthAirLight(q, c[q], mu0, mu, -L[2]) * ringF * sunF[q] * lightK)));
             } else {
-                lit *= sunF;
-                for (int q = 0; q < 3; q++) o[q] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(render::srgbDecode(space[q]) + c[q] * std::max(lit, 0.0))));
+                for (int q = 0; q < 3; q++) o[q] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(render::srgbDecode(space[q]) + c[q] * std::max(lit, 0.0) * sunF[q] * lightK)));
             }
             o[3] = 255;
         }

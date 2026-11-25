@@ -1,21 +1,22 @@
-# 0.84.1: Research: the sources for every fix of the outside review (25 Nov 2026); a plan file; no change to what the app does
+# 0.85.0: Orbit Lab: true sunlight, the Sun's measured edge, real sunspot groups, the Oort cloud from a published model (PLAN_REVIEW R1-R4)
 
 ## What changed
-- Step 0: the full-test run of 0.84.0 (fe8bd82, "Native full tests" run 45587630152) passed. Nothing added to ROADMAP.
-- Saved 63 files in the private repo (sources commit 20be64d), each with a SOURCES.md line. 16 new extracts. Scans with no text layer have typed lines (_typed.txt), checked against the page images.
-- Found: (a) Neckel & Labs 1994 Table I (ADS legacy scan). (b) Greenwich + USAF/NOAA groups May 1874 to 2 Oct 2016, NOAA's daily reports 1996-2026 (NCEI). (c) Oort: discovery papers and JPL SBDB. (d) Shimura & Takahara 1995, Done et al. 2012, Chandrasekhar 1946 Table 2. (e) Cunningham 1976. (f) Abramowicz, Lanza & Percival (astro-ph/9611101). (g) Yerokhin & Shabaev 2015 (2) (already saved). (h) IUP Bremen ozone, AFGL Handbook 1985 ch. 18. (i) Deau 2009, Dyudina 2016, Mayorga 2016, Heng & Li 2021, Irwin 2021/2022.
-- native/PLAN_REVIEW.md: R1-R14, each with source, formula, tests, what the user sees, limits and GPU path. Order: 0.85.0 Orbit Lab, 0.86.0 Atom Lab and Film, 0.87.0 the disc.
-- DECISIONS.md (25 Nov), ROADMAP.md, folder READMEs (sun, oort, blackhole, atmosphere, planets, lamb), changelog, VERSION 0.84.1. No app code changed.
+- Read: CLAUDE.md, REPORT 0.84.1, ROADMAP (Orbit Lab), DECISIONS 25 Nov, PLAN_REVIEW R1-R4; by grep and line ranges shaders.h (kFragmentShader, kPlanetFS, kRingsPart), shading.h, renderer2d.h/.cpp/_vk.cpp, ring_card.h, ring_check.cpp, orbit_view.cpp, card_text.cpp, belts.h/.cpp, date_text.h, sky.h/.cpp, spin.h, sun_facts.h, realest.cpp, shell_orbit.cpp, orbit_actions.cpp, settings.cpp, learn_data.inc, app_text.inc, bench_scenes, benchmark.cpp, main.cpp, planet_picture.cpp, check_orbit_ui.py, test_app.cpp.
+- R1: Lighting True sunlight / Even (not realistic); the dot and Most realistic pick True. Factor (d_exposure / d)^2 on balls, moons, rings (GPU uniform uLightK, lit-ball light length; CPU the same). Readout under the choice. Learn "Brightness" has the limits. Markers keep their brightness.
+- R2: Neckel & Labs 1994 per channel (render/sun_limb.h; inputs by tools/make_sun_limb_data.py). The Sun is a ball in kPlanetFS uMode 4. Eclipses per channel, 16-point Gauss-Legendre. Alpha Centauri keeps the old blend.
+- R3: patches gone. Group outlines from tools/make_sunspot_table.py (255,250 rows, 1874-05-09 to 2026-11-24, built in). Card and sentences for no record, spotless, unknown. Measured here: from 1992 the g-file places match 24:00 UT, not the printed .500 (rows shifted). 58 rows print Carrington longitude 360.1-408.9 (taken mod 360). 1874-2016 has 246,266 rows (0.84.1: 246,265).
+- R4: Oort dots sample Vokrouhlicky, Nesvorny & Dones 2019 (n(r) ~ r^-0.72, -1.35, -1.5; joined continuously by the app; directions even). Sedna, 2012 VP113, 2015 TG387 as far objects on full-precision SBDB elements, cards with the owner's sentence. About lists every source. Owner raised the benchmark limit once to 4.9 min: 3 Hard scenes, response.sunspot_table.
 
 ## Tests run
-- check_sources.py on a full checkout of the sources repo: ok (758 manifest lines, 62 extracts, 154 blocks).
-- Typed tables checked by their own relations: NL94 rows by Sum A_n = 1 and Equation (6); Chandrasekhar's Table 2 by its column sums, ratios and polarisation degree.
-- check.sh job: quick 18 of 18 passed, ui_smoke passed (full build of 0.84.1 on the build machine).
+- orbit_tests 2872 checks, 0 failed (testReview085 new: does not build on 0.84.1). app_tests 202,426, 0 failed.
+- check_orbit_ui.py review085 (new, 26 s): GPU vs CPU true_Earth 0.27 %, true_Jupiter 0.07 %, true_Neptune 0.33 %, eclipse_Earth 0.31 %, Sun with 7 groups 0.08 %. planets: 6 of 6 as before.
+- Benchmark: the 3 scenes and the response line ran once (validation 0 errors; the table reads in 11 ms here). check_sources.py: ok (774 lines, 74 extracts). check.sh job: quick 18 of 18, ui_smoke passed.
 
 ## Not done
-- Doubtful values in sources: NL94's 365.875 nm row as printed sums to 0.99800 and gives F/I 0.74354, not 0.7445 (ultraviolet: the app does not use it). The disc's spin term: Zhu 2012 (6) and ALP97 (27) differ from AF13 (92). Only AF13's matches AF13 (40) (measured here: ALP97 up to 0.9 % off, Zhu up to 3 %). PLAN_REVIEW.md R12 uses AF13.
-- Refused: ADS's new scan service (202), Debrecen (403, no answer), SWPC warehouse (503), DTIC (403 twice), AMS (403). Owner's files list in ROADMAP.
-- source needed (ROADMAP): the sunspots' contrast, Uranus's and Neptune's limb darkening in numbers, an ozone column, phase laws beyond the surge. Chandrasekhar's 1946 table is the third approximation (flux 0.991 of 1 by a fit, measured here).
+- Spots' darkness (3 tries: two searches, Mathew 2007: one wavelength, per spot, needs umbral radii). Outlines labelled. Owner's files list.
+- Oort inner-cloud lean: figure only (VND19 Fig. 7). DQT 1987: ADS 500/504. Kaib & Quinn 2008: laws in figures.
+- Brown et al. 2004: the saved arXiv page gives ApJ 617, 589-599 (not checked against the journal). The app cites arXiv:astro-ph/0404456 only.
 
 ## References changed on purpose
-- None. No test changed.
+- test_app: 30 Hard and 69 scenes (+3 ids), 45 waits, limit 294 s (owner, 25 Nov 2026).
+- check_orbit_ui planets: PLPLANET line gained the factor (planet_picture reads 27 fields).

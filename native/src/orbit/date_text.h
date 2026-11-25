@@ -104,7 +104,7 @@ inline std::string dateNotes(bool after2050, bool real, bool realMoon) {
     // 0.46.3: Earth's Moon is real in Simple too, and the 13 other big moons have been real since 0.27 (orbit/moon_sats.h); the belt rocks are real asteroids on fixed orbits (orbit/belts.h)
     if (realMoon) n += "Earth’s Moon and the 13 other big moons are at their real places (1800 to 1 Jan 2100). ";
     else n += "The moons are real only from 1800 to 1 Jan 2100, so here they are on simple orbits that start at made-up places. ";
-    n += "The belt rocks are real asteroids on fixed orbits (they drift like the comets); the Oort cloud dots are made up.";
+    n += "The belt rocks are real asteroids on fixed orbits (they drift like the comets); the Oort cloud’s dots are a sample of a published model (no object in it has been seen).";
     return n;
 }
 

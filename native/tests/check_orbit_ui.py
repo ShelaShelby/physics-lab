@@ -4,6 +4,7 @@
 #   airedge   0.50: just outside Earth's limb the picture is the sky (no blue rim of air)
 #   nightside 0.50: Jupiter's night side is the sky's colour (no ambient light)
 #   planets   0.77.0: the GPU picture of planets and moons with maps (their measured brightness) against the CPU twin (tests/planet_picture.cpp)
+#   review085 0.85.0: true sunlight, an eclipse with the Sun's measured edge, the Sun with its sunspot outlines, against the same twin
 #   rings, ringslant, flyby, cardlines: Saturn's rings, the fly-by and the lines on the card against the processor or the formulas (see the parts)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -73,58 +74,94 @@ def body_shot(binary, work, name, sel, zoom, extra=None):
 def near(a, b, tol=4):
     return all(abs(p - q) <= tol for p, q in zip(a, b))
 
+def compare_cpu(tool, work, r, name, args, minpx=5000):
+    # the GPU's picture (r.bmp) against tests/planet_picture.cpp's: at most 1 % of the pixels inside 0.95 of the outline differ by more than 8 levels in a channel
+    import subprocess
+    out = os.path.join(work, "planet_cpu_" + name + ".bin")
+    p = subprocess.run([tool, out] + args, capture_output=True, text=True)
+    check(p.returncode == 0, f"{name}: planet_picture ran ({p.stderr.strip()})")
+    if p.returncode != 0:
+        return
+    d = open(out, "rb").read()
+    nl = d.index(b"\n")
+    _, w, h, x0, y0 = d[:nl].split()
+    w, h, x0, y0 = int(w), int(h), int(x0), int(y0)
+    px = d[nl + 1:]
+    bmp = Bmp(r.bmp)
+    n = bad = 0
+    worst = 0
+    for j in range(h):
+        for i in range(w):
+            o = 4 * (j * w + i)
+            if px[o + 3] == 0:
+                continue
+            x, y = x0 + i, y0 + j
+            if not (0 <= x < bmp.w and 0 <= y < bmp.h):
+                continue
+            g = bmp.px(x, y)
+            dmax = max(abs(g[c] - px[o + c]) for c in range(3))
+            n += 1
+            worst = max(worst, dmax)
+            bad += dmax > 8
+    check(n > minpx and bad <= 0.01 * n, f"{name}: GPU against CPU, {bad} of {n} pixels differ by more than 8 levels (at most 1 %; largest {worst})")
+    print(f"planets {name}: {bad} of {n} pixels over 8 levels, largest {worst}")
+
 def part_planets(binary, work):
     # 0.77.0 (outside review item 1): each map is scaled to its body's measured geometric albedo (render/planet_maps.h mapAlbedo) in kPlanetFS. The GPU's
     # picture of the ball against the CPU twin (render/shading.h albedoScaled, ellipsoid.h; tests/planet_picture.cpp): at most 1 % of the pixels inside
     # 0.95 of the outline differ by more than 8 levels in a channel. Bodies without air (ring shadows and eclipses are in the twin): Jupiter (clipped bright zones), Mars, the Moon
     # (McEwen's law, a factor below 1), Europa (a factor its ceiling cannot reach), Pluto, Earth (its clouds and air, 0.77.0 item 2). The axis line and the label may cross a few pixels.
-    import subprocess
+    # (0.85.0: the true sunlight, the eclipse with the measured edge and the Sun are part review085)
     tool = os.path.join(os.path.dirname(os.path.abspath(binary)), "planet_picture")
     check(os.path.exists(tool), "the CPU twin planet_picture is built next to the app")
     if not os.path.exists(tool):
         return
-    for sel, zoom in (("Jupiter", "3.4"), ("Mars", "4.5"), ("moon:Earth", "6"), ("moon:Jupiter:1", "7"), ("Pluto", "6"), ("Earth", "4.5")):
+    balls(binary, work, tool, [(sel, zoom, {}) for sel, zoom in (("Jupiter", "3.4"), ("Mars", "4.5"), ("moon:Earth", "6"), ("moon:Jupiter:1", "7"), ("Pluto", "6"), ("Earth", "4.5"))])
+
+def part_review085(binary, work):
+    # 0.85.0 (outside review R1-R3, PLAN_REVIEW.md): the GPU against the CPU twin (tests/planet_picture.cpp), at most 1 % of the pixels over 8 levels:
+    # True sunlight with Earth, Jupiter and Neptune followed (the exposure set for each; the PLPLANET line's factor is read by the twin); Earth in the Moon's
+    # shadow on 8 Apr 2024 18:18 UT (the eclipse with the Sun's measured edge, per channel); the Sun close up on 10 May 2024 00:00 UT (Neckel & Labs's edge
+    # and that day's 7 sunspot groups as outlines: kPlanetFS uMode 4).
+    tool = os.path.join(os.path.dirname(os.path.abspath(binary)), "planet_picture")
+    check(os.path.exists(tool), "the CPU twin planet_picture is built next to the app")
+    if not os.path.exists(tool):
+        return
+    balls(binary, work, tool, [("Earth", "4.5", {"PL_TRUELIGHT": "1", "tag": "true_Earth"}), ("Jupiter", "3.4", {"PL_TRUELIGHT": "1", "tag": "true_Jupiter"}),
+                               ("Neptune", "3.9", {"PL_TRUELIGHT": "1", "tag": "true_Neptune"}),
+                               ("Earth", "4.5", {"PL_DATE": "2024-04-08", "PL_TIME": "18:18", "PL_PAUSED": "1", "tag": "eclipse_Earth"})])
+    r = run_app(binary, work, "planets_sun", {"PL_NEWUI": "on", "PL_SELECT": "Sun", "PL_ZOOM": "2.6", "PL_LOG_PLANET": "1", "PL_SKYOFF": "1", "PL_DATE": "2024-05-10",
+                                              "PL_TIME": "00:00", "PL_PAUSED": "1"}, frames=40)
+    suns = [l.split()[1:] for l in r.out.splitlines() if l.startswith("PLSUN ")]
+    check(bool(suns), f"the Sun: the app logged its ball ({len(suns)} PLSUN lines)")
+    if suns:
+        f = suns[-1]
+        check(float(f[2]) > 60, f"the Sun: drawn big enough to compare ({f[2]} px)")
+        check(int(f[12]) == 7, f"the Sun on 10 May 2024: the record's 7 groups (NOAA SRS of that date) are drawn ({f[12]})")
+        compare_cpu(tool, work, r, "sun", ["sun"] + f)
+
+def balls(binary, work, tool, cases):
+    for sel, zoom, extra in cases:
+        tag = extra.pop("tag", sel.replace(":", "_"))
         env = {"PL_NEWUI": "on", "PL_SELECT": sel, "PL_ZOOM": zoom, "PL_LOG_PLANET": "1", "PL_LOG_BODYPX": "1", "PL_SKYOFF": "1"}
-        r = run_app(binary, work, "planets_" + sel.replace(":", "_"), env, frames=40)
+        env.update(extra)
+        r = run_app(binary, work, "planets_" + tag, env, frames=40)
         rows = r.out.splitlines()
         lines = [rows[i].split() + rows[i + 1].split()[1:] for i in range(len(rows) - 1) if rows[i].startswith("PLPLANET ") and rows[i + 1].startswith("PLPLANETX")]
         # the selected body: the biggest ball drawn in the last frame with this body's map
-        want = {"Jupiter": 5, "Mars": 4, "moon:Earth": 3, "moon:Jupiter:1": 11, "Pluto": 9, "Earth": 2}[sel]
+        want = {"Jupiter": 5, "Mars": 4, "moon:Earth": 3, "moon:Jupiter:1": 11, "Pluto": 9, "Earth": 2, "Neptune": 8}[sel]
         mine = [l for l in lines[len(lines) * 3 // 4:] if int(l[1]) == want and 0 <= float(l[2]) < 1280 and 0 <= float(l[3]) < 800]
         mine.sort(key=lambda l: float(l[4]))
-        check(bool(mine), f"{sel}: the app logged its ball ({len(lines)} PLPLANET lines)")
+        check(bool(mine), f"{tag}: the app logged its ball ({len(lines)} PLPLANET lines)")
         if not mine:
             continue
         f = mine[-1][1:]
-        check(float(f[3]) > 60, f"{sel}: drawn big enough to compare ({f[3]} px)")
-        out = os.path.join(work, "planet_cpu_" + sel.replace(":", "_") + ".bin")
-        p = subprocess.run([tool, out] + f, capture_output=True, text=True)
-        check(p.returncode == 0, f"{sel}: planet_picture ran ({p.stderr.strip()})")
-        if p.returncode != 0:
-            continue
-        d = open(out, "rb").read()
-        nl = d.index(b"\n")
-        _, w, h, x0, y0 = d[:nl].split()
-        w, h, x0, y0 = int(w), int(h), int(x0), int(y0)
-        px = d[nl + 1:]
-        bmp = Bmp(r.bmp)
-        n = bad = 0
-        worst = 0
-        for j in range(h):
-            for i in range(w):
-                o = 4 * (j * w + i)
-                if px[o + 3] == 0:
-                    continue
-                x, y = x0 + i, y0 + j
-                if not (0 <= x < bmp.w and 0 <= y < bmp.h):
-                    continue
-                g = bmp.px(x, y)
-                dmax = max(abs(g[c] - px[o + c]) for c in range(3))
-                n += 1
-                worst = max(worst, dmax)
-                bad += dmax > 8
-        check(n > 5000 and bad <= 0.01 * n, f"{sel}: GPU against CPU, {bad} of {n} pixels differ by more than 8 levels (at most 1 %; largest {worst})")
-        print(f"planets {sel}: {bad} of {n} pixels over 8 levels, largest {worst}")
+        check(float(f[3]) > 60, f"{tag}: drawn big enough to compare ({f[3]} px)")
+        if tag.startswith("true_"):
+            check(abs(float(f[26]) - 1) < 1e-5, f"{tag}: the followed body's sunlight factor is 1 (the exposure is set for it): {f[26]}")
+        if tag.startswith("eclipse_"):
+            check(int(f[21]) > 0, f"{tag}: the Moon is among the bodies that can eclipse the Sun there ({f[21]})")
+        compare_cpu(tool, work, r, tag, f)
 
 def part_airedge(binary, work):
     # review item 2: the blue ring from 0.96 R to 1.16 R round Earth (about 1,100-1,300 km on screen, on the night side too) had no source; the air's scale height is 8.5 km
@@ -408,7 +445,7 @@ def main():
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("airedge", part_airedge), ("nightside", part_nightside), ("planets", part_planets), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines)):
+    for name, fn in (("airedge", part_airedge), ("nightside", part_nightside), ("planets", part_planets), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines), ("review085", part_review085)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

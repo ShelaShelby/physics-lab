@@ -68,6 +68,23 @@ constexpr double kOortInnerAU = 2000, kOortInnerEdgeFarAU = 5000, kOortOuterEdge
 // The Journey's Oort cloud caption; the travel time is worked out from Voyager 1's speed (orbit/sky.h), so it always agrees with the distances in it.
 std::string oortCaption();
 
+// 0.85.0 (PLAN_REVIEW.md R4): the published model the Oort cloud's dots are a sample of. D. Vokrouhlicky, D. Nesvorny, L. Dones, "Origin and evolution of
+// long-period comets", AJ 157, 181 (2019), arXiv:1904.00728 (saved: data/oort/arxiv/1904.00728_vokrouhlicky_2019.pdf; extract
+// native/data/oort/arxiv/1904.00728_vokrouhlicky_2019.extract.txt), section 4.1 and Figure 8: the number of bodies per distance, n(r) = dn/dr, "may be in parts
+// approximated with n(r) proportional to r^-alpha. In the inner cloud, we find alpha = 0.72, while in the outer cloud, we find alpha = 1.35, steepening to a
+// thermalized value of 1.5 at the very outer edge of the cloud (beyond 50000 au)". Below r = 2000 au "the population abruptly drops". The inner and outer parts
+// are divided at 15,000 au ("15000 au approximately represents the division between the non-isotropic and isotropic portions"). The app joins the three power
+// laws so that n(r) is continuous at 15,000 and 50,000 au (its choice: the paper's fits are "in parts"), from kOortInnerAU (2,000) to kOortOuterAU (100,000 au).
+// The shape: "In the outer part of the Oort cloud, beyond semimajor axes 15000 au, the inclination distribution becomes nearly isotropic in space." The inner
+// part (1,500 to 15,000 au) is not isotropic: its orbits gather near 35 degrees to the ecliptic, with a weaker gathering near 150 degrees (the paper's Figure 7,
+// a plot with no table). The app spreads every dot's direction evenly: the inner part's lean is not drawn (the card says so; ROADMAP: source needed).
+constexpr double kOortModelBreak1AU = 15000, kOortModelBreak2AU = 50000;
+constexpr double kOortModelAlpha[3] = {0.72, 1.35, 1.5};
+// the model's share of the bodies between r1 and r2 (au, clamped to the edges)
+double oortModelShare(double r1AU, double r2AU);
+// the distance (au) below which a share u (0..1) of the model's bodies lie: the dots' distances (u uniform)
+double oortModelInverse(double u);
+
 const char* beltTitle(const std::string& key);
 std::vector<std::string> beltLines(const std::string& key);
 

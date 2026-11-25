@@ -489,6 +489,7 @@ int main(int argc, char** argv) {
             for (const auto& b : app.sys.bodies)
                 if (b.name == planet) { app.set.moons = true; app.view.select({orbit::Selection::Moon, b.id, idx}, true); }
         }
+        if (std::string(name) == "Sun") app.view.select({orbit::Selection::Star}, true);   // 0.85.0, for automatic checks: the Sun followed
         if (std::string(name).rfind("far:", 0) == 0) { app.set.far = true; app.view.select({orbit::Selection::Far, 0, orbit::farIndexOf(std::string(name).substr(4))}, true); }   // e.g. far:sgra
     }
     if (const char* z = SDL_getenv("PL_ZOOM")) { ui::setZoom(app, std::atof(z)); app.fitStart = -1; }
@@ -496,6 +497,7 @@ int main(int argc, char** argv) {
     if (const char* tl = SDL_getenv("PL_TILT")) { double yw = 0, pt = 0; if (std::sscanf(tl, "%lf,%lf", &yw, &pt) == 2) { app.view.yaw = yw; app.view.pitch = pt; } }   // for automatic checks: PL_TILT=yaw,pitch (radians) of the 3D view
     if (const char* ph = SDL_getenv("PL_PHYSICS")) { bool r = false; if (orbit::planetPhysicsFromText(ph, r)) app.set.realPlanets = r; }   // for automatic checks: Planet physics Simple / Real
     if (const char* g = SDL_getenv("PL_GR")) app.set.relativity = std::atoi(g) != 0;   // for automatic checks: General relativity (1PN) on (1) / off (0)
+    if (const char* tl = SDL_getenv("PL_TRUELIGHT")) app.set.trueLight = std::atoi(tl) != 0;   // 0.85.0, for automatic checks: Lighting True sunlight (1) / Even (0)
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, SDL_getenv("PL_TIME") ? SDL_getenv("PL_TIME") : "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
     if (SDL_getenv("PL_PAUSED")) { app.paused = true; app.set.paused = true; }   // for automatic checks and pictures (0.51.2): time stands still at the date given
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);

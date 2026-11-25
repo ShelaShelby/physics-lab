@@ -1,6 +1,7 @@
 #include "belts.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "format.h"
@@ -70,13 +71,15 @@ std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
     build("main", "#8a7f72", 0);
     build("trojan", "#c4783a", 1);
     build("kuiper", "#4a6f9e", 2);
-    {   // Oort cloud: made-up dots in a round shell from kOortInnerAU to kOortOuterAU, evenly spread in log(r) (0.49: NASA calls it "a vast, extremely distant spherical
-        // shell"; until 0.48 an inner part was flattened to 0.3 and the shell reached 200,000 AU, neither with a source)
+    {   // Oort cloud. 0.85.0 (outside review, PLAN_REVIEW.md R4, the owner's answer of 25 Nov 2026): the dots are a sample of a published model of the cloud, not
+        // objects: their distances follow oortModelInverse (belts.h, Vokrouhlicky, Nesvorny & Dones 2019) between NASA's edges; their directions are spread evenly
+        // (the model's outer part is "nearly isotropic in space"; its inner part's lean is given only as a figure: belts.h). Until 0.84.1 the distances were
+        // made up (evenly spread in log r).
         BeltGroup g;
         g.key = "oort"; g.color = "#8c98bb"; g.n = 3000 * scale; g.isStatic = true; g.alpha = 0.55f; g.serial = nextSerial++;
         g.x.resize(g.n); g.y.resize(g.n); g.z.resize(g.n);
         for (int k = 0; k < g.n; k++) {
-            const double r = kOortInnerAU * std::pow(kOortOuterAU / kOortInnerAU, rnd()) * kAU;
+            const double r = oortModelInverse(rnd()) * kAU;
             const double zz = 2 * rnd() - 1, ph = rnd() * 6.2832, sq = std::sqrt(1 - zz * zz);
             g.x[k] = static_cast<float>(r * sq * std::cos(ph));
             g.y[k] = static_cast<float>(r * sq * std::sin(ph));
@@ -85,6 +88,48 @@ std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
         groups.push_back(std::move(g));
     }
     return groups;
+}
+
+// 0.85.0: the Oort cloud model of belts.h. n(r) = c_k r^-alpha_k on the three parts, continuous at the breaks, normalised over kOortInnerAU..kOortOuterAU.
+namespace {
+struct OortPart { double r0, r1, alpha, c; };
+const std::array<OortPart, 3>& oortParts() {
+    static const std::array<OortPart, 3> P = [] {
+        std::array<OortPart, 3> p{{{kOortInnerAU, kOortModelBreak1AU, kOortModelAlpha[0], 1}, {kOortModelBreak1AU, kOortModelBreak2AU, kOortModelAlpha[1], 1},
+                                    {kOortModelBreak2AU, kOortOuterAU, kOortModelAlpha[2], 1}}};
+        p[1].c = p[0].c * std::pow(p[1].r0, p[1].alpha - p[0].alpha);   // c0 r^-a0 = c1 r^-a1 at the break
+        p[2].c = p[1].c * std::pow(p[2].r0, p[2].alpha - p[1].alpha);
+        return p;
+    }();
+    return P;
+}
+double partIntegral(const OortPart& p, double a, double b) {   // Int_a^b c r^-alpha dr
+    const double k = 1 - p.alpha;
+    return p.c * (std::pow(b, k) - std::pow(a, k)) / k;
+}
+double oortTotal() { double t = 0; for (const auto& p : oortParts()) t += partIntegral(p, p.r0, p.r1); return t; }
+}  // namespace
+
+double oortModelShare(double r1AU, double r2AU) {
+    double s = 0;
+    for (const auto& p : oortParts()) {
+        const double a = std::max(p.r0, r1AU), b = std::min(p.r1, r2AU);
+        if (b > a) s += partIntegral(p, a, b);
+    }
+    return s / oortTotal();
+}
+
+double oortModelInverse(double u) {
+    double want = std::clamp(u, 0.0, 1.0) * oortTotal();
+    for (const auto& p : oortParts()) {
+        const double whole = partIntegral(p, p.r0, p.r1);
+        if (want <= whole || &p == &oortParts()[2]) {
+            const double k = 1 - p.alpha;
+            return std::min(p.r1, std::pow(std::pow(p.r0, k) + want * k / p.c, 1 / k));
+        }
+        want -= whole;
+    }
+    return kOortOuterAU;
 }
 
 double solveKepler(double e, double M) {
@@ -147,10 +192,12 @@ static std::vector<std::string> beltLinesRaw(const std::string& key) {
         const auto years = [](double au) { return fmt::commas(std::stod(fmt::precision(voyagerYearsFromSun(au), 2))); };   // two figures, as the far card does
         const double ly = farDistanceLy("prox");                       // one value: the light years and the AU below both come from it
         return {"Inner edge about " + fmt::commas(kOortInnerAU) + " – " + fmt::commas(kOortInnerEdgeFarAU) + " AU, outer edge about " + fmt::commas(kOortOuterEdgeNearAU) + " – " +
-                    fmt::commas(kOortOuterAU) + " AU (NASA)", "Inferred from comets: the home of long-period comets", "Its dots are made up: no one has seen it",
+                    fmt::commas(kOortOuterAU) + " AU (NASA)", "Inferred from comets: the home of long-period comets",
+                "Estimated from models: no object in it has been seen",
                 "Hundreds of billions, maybe trillions, of icy bodies (NASA)", "Total mass: roughly 5 Earths (estimates vary a lot)",
                 "Voyager 1 (" + fmt::kms(voyagerKms()) + ") would need about " + years(kOortInnerAU) + " years to reach " + fmt::commas(kOortInnerAU) + " AU and about " + years(kOortOuterAU) + " years to reach " + fmt::commas(kOortOuterAU) + " AU",
-                "The nearest star, Proxima Centauri, is " + fmt::fixed(ly, 2) + " light years away (" + fmt::commas(std::stod(fmt::precision(ly * units::kLightYearAU, 3))) + " AU)", "Dots here: 3,000 stand in for trillions"};
+                "The nearest star, Proxima Centauri, is " + fmt::fixed(ly, 2) + " light years away (" + fmt::commas(std::stod(fmt::precision(ly * units::kLightYearAU, 3))) + " AU)", "Dots here: 3,000 points sampled from a published model of the cloud (how many bodies at each distance: Vokrouhlický, Nesvorný & Dones 2019); they are not objects",
+                "The model's inner part (inside 15,000 AU) leans towards the ecliptic; the dots do not show that lean (it is given only as a figure)"};
     }
     if (key == "trojan") return {"They share Jupiter's orbit: 60° ahead and behind", "About a million rocks wider than 1 km", "Some orbits tilt up to 40° from Jupiter's plane",
                                  "Held in place by the Sun and Jupiter together", "Dots here: the 300 largest known, at their real places (JPL)"};

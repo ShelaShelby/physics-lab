@@ -1,0 +1,13 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/spots/g1976.txt
+# Reference: Royal Greenwich Observatory - USAF/NOAA sunspot group records, NASA Marshall Space Flight Center (D. Hathaway): g1976.txt, unzipped as received from RGO_NOAA1874_2013.zip (the archive is saved beside it)
+# URL: https://solarscience.msfc.nasa.gov/greenwch/RGO_NOAA1874_2013.zip
+# Date read: 2026-11-25
+# sha256 of the original: 721ff38ca02218ad24495a2d3ee5a3590b76bde56cea699040412dbf03095ed4
+# Place in the original: rows of the year (format.txt gives the columns)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: tests/test_review085.inc (the packed table read back; the disc places against the Sun's IAU frame)
+#--- begin row 1
+1976 317.644   2369000 3    7   37    4   21 0.471  92.7 190.9  -7.5 -28.3
+#--- end

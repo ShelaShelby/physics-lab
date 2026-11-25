@@ -1,0 +1,69 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/oort/arxiv/1904.00728_vokrouhlicky_2019.txt.gz
+# Reference: D. Vokrouhlický, D. Nesvorný, L. Dones, "Origin and evolution of long-period comets", Astron. J. 157, 181 (2019), doi:10.3847/1538-3881/ab13aa, arXiv:1904.00728v1; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1904.00728v1
+# Date read: 2026-11-25
+# sha256 of the original: 18a3478d9404a13a38127157e51ac763308709d93aa36c659c8fe56ef0d04e0a
+# Place in the original: p. 1 (title), p. 16 (Figures 7 and 8, section 4.1), p. 17 (section 4.1)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/src/orbit/belts.h (the Oort cloud model), tests/test_review085.inc
+#--- begin the title
+                                                                                       Origin and evolution of long-period comets
+                                                                            David Vokrouhlický,1 David Nesvorný,2 and Luke Dones2
+#--- end
+#--- begin Figure 8 caption: n(r) power laws, the drop below 2000 au
+                                                                  Figure 8. Radial distribution of particles remaining in the
+                                                                  simulation C1V1 at 4.5 Gyr: the symbols give the number
+                                                                  of particles dn in bins dr = 500 au (for the distribution law
+                                                                  dn = n(r) dr). The dashed vertical lines roughly delimit
+                                                                  the inner and outer parts of the cloud, where the power-
+                                                                  law approximations n(r) ∝ r −α have different exponents: (i)
+                                                                  α ≃ 0.72 in the inner part, and (ii) α ≃ 1.35 in the outer
+                                                                  part. Below r ≃ 2000 au the population abruptly drops (also
+                                                                  see Fig. 7).
+
+
+#--- end
+#--- begin Figure 7 caption and section 4.1: the inner and outer parts, 15000 au, the 35 degree lean
+tricity (top), (ii) semimajor axis vs. inclination with respect
+                                                                  ily explained by the orbital evolution due to galactic
+to the ecliptic plane (middle), and (iii) semimajor axis vs.
+inclination with respect to the galactic plane (bottom). The      tides (e.g., Higuchi et al. 2007; Higuchi & Kokubo 2015;
+gray line at the top denotes q = 30 au (Neptune’s heliocen-       Fouchard et al. 2017b). In this region the tides are too
+tric distance); the dashed lines in the middle and bottom         weak, such that orbits pulled from the tail of the scat-
+panels denote polar orbits with i = 90◦ (or igal = 90◦ ). The     tered disk perform less than one cycle of their secular
+scattering disk (active, detached and the outer resonant pop-     evolution (see, e.g., Fig. 3 in Fouchard et al. 2017b).
+ulations) contains some 4600 particles up to semimajor axis       The slow evolution towards small eccentricity values
+a ≃ 1500 au (with a majority of ≃ 85% with a < 200 au.
+                                                                  produces the visible edge of the inner Oort cloud and
+The inner and outer parts of the Oort cloud contain ≃ 21500
+and ≃ 24300 particles with a < 15000 au and a > 15000 au,         also implies that inclinations with respect to the galac-
+respectively; 15000 au approximately represents the division      tic plane are strongly concentrated towards 90◦ , where
+between the non-isotropic and isotropic portions of the pop-      the secular evolution spends most of the time (e.g.,
+ulations.                                                         Higuchi et al. 2007). Because the mean inclination of
+                                                                  the scattered disk is ≃ 60◦ in this reference frame, the
+and a < 1000 au seen in Fig. 7. One would classify                orbits do not overcome the 90◦ limit in the quadrupole
+them as an extreme Centaur population, which will fur-            tidal model. They may scatter over this limit only by
+ther evolve toward short-period comets. Some of these             occasional tugs due to passing stars. Transformed to the
+objects may also be considered in our analysis below as           ecliptic frame, this concentration occurs at ≃ 35◦ , with
+returning long-period comets (unless they already per-            a weaker concentration near ≃ 150◦ . In the outer part
+formed so many returns that they would be classiﬁed               of the Oort cloud, beyond semimajor axes ≃ 15000 au,
+as faded objects). Large surviving comets in this region          the inclination distribution becomes nearly isotropic in
+continue their evolution towards the class of Halley-type         space. Orbits in this region have performed at least
+comets (e.g., Nesvorný et al. 2017).                             several secular cycles due to the tides, helping in their
+                                                                  mixing. More importantly, beyond about ≃ 40000 au
+#--- end
+#--- begin section 4.1: alpha 0.72 inner, 1.35 outer, 1.5 beyond 50000 au
+  Figure 8 shows the radial heliocentric distribution of            thermal exponent 1.5 extending throughout the whole
+comets in the Oort cloud at the end of our simulation               cloud). However, the results here are comparable to
+C1V1. We plot the number of objects dn in uniform ra-               several other models such as Dones et al. (2004). Note
+dial steps dr = 500 au. While not exactly a power law,              that the Oort cloud ﬁlls in from the outer parts to the
+the incremental distribution function n(r) = dn/dr may              inner zone. Therefore, details of the population in the
+be in parts approximated with n(r) ∝ r−α . In the inner             inner cloud depend sensitively on the late deposition of
+cloud, we ﬁnd α ≃ 0.72, while in the outer cloud, we                planetesimals in the tail of the scattered disk in the mi-
+ﬁnd α ≃ 1.35, steepening to a thermalized value of 1.5              gration scenario. We ﬁnd that the inner zone starts to
+at the very outer edge of the cloud (beyond ≃ 50000 au).            ﬁll eﬀectively at ≃ 250 − 300 Myr (compare with Fig. 8
+[Note our α = 1.5 corresponds to α = −3.5 as deﬁned                 of Dones et al. 2004). This explains why our C1 and
+by Duncan et al. (1987)]. The population of the inner               C2 models (see Table 1) produce rather comparable re-
+#--- end

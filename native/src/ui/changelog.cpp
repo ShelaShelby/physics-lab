@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.85.0", "Orbit Lab: true sunlight, the Sun's measured edge, real sunspots, a modelled Oort cloud",
+     "New Lighting choice, True sunlight (the realistic one): each planet, moon, dwarf planet and ring gets the sunlight at its real distance, as a camera set "
+     "for the body you follow would show it, so Neptune followed makes Earth glare white and Earth followed leaves Neptune nearly black. A line says how the "
+     "exposure is set. Even lighting stays, marked as not realistic. The Sun's edge is now darker and redder by a measured law (Neckel and Labs 1994), also in "
+     "the eclipses. The made-up patches on the Sun are gone: on dates from May 1874 to today the Sun shows the outlines of the sunspot groups that were really "
+     "measured that day (Greenwich and US Air Force and NOAA records, NOAA's daily reports); a date with no record says so. The Oort cloud's dots are now a "
+     "sample of a published model of the cloud (Vokrouhlicky, Nesvorny and Dones 2019), not objects, and Sedna, 2012 VP113 and 2015 TG387 are shown on their "
+     "JPL orbits."},
     {"0.84.1", "Research only, no change to what the app does",
      "An outside review asked for fixes in three labs. This version finds and saves the sources for them first: the Sun's measured edge darkening "
      "(Neckel and Labs 1994), the measured sunspots since 1874 (the Greenwich and US Air Force and NOAA records), what is really known to belong to the Oort "

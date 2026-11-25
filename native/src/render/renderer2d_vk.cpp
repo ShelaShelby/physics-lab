@@ -12,6 +12,7 @@
 
 #include "app/gpu_guard.h"
 #include "shading.h"
+#include "sun_limb.h"
 #include "vk_blackhole.h"
 #include "vk_card.h"
 #include "vk_draw2d.h"
@@ -386,7 +387,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setMat3T(VkDraw2D::kPlanet, "uK", sg.K);
             V.setI(VkDraw2D::kPlanet, "uMode", &mode, 1);
             V.setI(VkDraw2D::kPlanet, "uLunar", &lunar, 1);
-            const float albedoK = sg.mode == 1 ? sg.albedoK : 1.0f;   // 0.77.0 (the sky, modes 2 and 3, does not read it)
+            const float albedoK = sg.mode == 1 ? sg.albedoK : 1.0f;   // 0.77.0 (the sky, modes 2 and 3, and the Sun, mode 4, do not read it)
             V.setF(VkDraw2D::kPlanet, "uAlbedoK", &albedoK, 1);
             const int clouds = sg.mode == 1 && sg.map == static_cast<int>(Map::Earth) ? 1 : 0;   // 0.77.0: Earth's map carries its clouds in alpha
             V.setI(VkDraw2D::kPlanet, "uClouds", &clouds, 1);
@@ -406,6 +407,18 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             if (sg.nocc > 0 && (sg.mode != 2 && sg.mode != 3)) { V.setF(VkDraw2D::kPlanet, "uOcc", sg.occ, 4, sg.nocc); V.setF(VkDraw2D::kPlanet, "uSunAng", &sg.sunAng, 1); }
             const int air = (sg.mode != 2 && sg.mode != 3) && sg.air ? 1 : 0;
             V.setI(VkDraw2D::kPlanet, "uAir", &air, 1);
+            V.setF(VkDraw2D::kPlanet, "uLightK", &sg.lightK, 1);                 // 0.85.0 (R1)
+            {   // 0.85.0 (R2): the Sun's measured edge (the Sun's disc, uMode 4, and the eclipses), and (R3) the sunspot groups' outlines
+                const SunLimb& lim = sunLimb();
+                float limb[18], sc[3];
+                for (int n = 0; n < 6; n++) for (int c = 0; c < 3; c++) limb[3 * n + c] = static_cast<float>(lim.poly[c][n]);
+                for (int c = 0; c < 3; c++) sc[c] = static_cast<float>(lim.centre[c]);
+                V.setF(VkDraw2D::kPlanet, "uLimb", limb, 3, 6);
+                V.setF(VkDraw2D::kPlanet, "uSunC", sc, 3);
+                const int spotN = sg.mode == 4 ? sg.spotN : 0;
+                V.setI(VkDraw2D::kPlanet, "uSpotN", &spotN, 1);
+                if (spotN > 0) V.setF(VkDraw2D::kPlanet, "uSpot", sunSpots_.data() + 4 * sg.spotFirst, 4, spotN);
+            }
             // (a plain ball binds the white texture: the shader does not read it then)
             V.draw(VkDraw2D::kPlanet, VkDraw2D::kNormal, vb, sg.first, sg.count, 0, 0, 0, vkMap_[sg.map] ? sg.map : 0);
             break;

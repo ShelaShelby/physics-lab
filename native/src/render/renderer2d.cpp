@@ -54,6 +54,7 @@ void Renderer2D::begin(double w, double h) {
     surfaceDraws_.clear();
     lens_.clear();
     segments_.clear();
+    sunSpots_.clear();
     triStart_ = 0;
 }
 
@@ -127,13 +128,13 @@ void Renderer2D::planet(double x, double y, double r, Color base, double lx, dou
     if (light) {
         sg.nocc = std::clamp(light->nOcc, 0, 4);
         for (int i = 0; i < 4 * sg.nocc; i++) sg.occ[i] = light->occ[i];
-        sg.sunAng = light->sunAng; sg.air = light->air;
+        sg.sunAng = light->sunAng; sg.air = light->air; sg.lightK = light->k;
     }
     static const bool logPlanet = std::getenv("PL_LOG_PLANET") != nullptr;   // 0.77.0, for the GPU-vs-CPU picture check only (tests/planet_picture.cpp reads these fields)
     if (logPlanet && has)
-        std::printf("PLPLANET %d %.4f %.4f %.4f %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %d %.7g %d %d %d %.6f %.6f %.6f\n", static_cast<int>(map), x, y, r,
+        std::printf("PLPLANET %d %.4f %.4f %.4f %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %d %.7g %d %d %d %.6f %.6f %.6f %.9g\n", static_cast<int>(map), x, y, r,
                     lx, ly, lz, K[0], K[1], K[2], K[3], K[4], K[5], K[6], K[7], K[8], shapeY, shapeZ, lunar ? 1 : 0, double(sg.albedoK), sg.nring, sg.nocc, sg.air ? 1 : 0,
-                    double(space_.r), double(space_.g), double(space_.b));
+                    double(space_.r), double(space_.g), double(space_.b), double(sg.lightK));   // (0.85.0: + the sunlight factor)
     if (logPlanet && has) {   // then: the Sun's angular radius, the ring bands (3 each), the eclipsing bodies (4 each)
         std::printf("PLPLANETX %.9g", double(sg.sunAng));
         for (int i = 0; i < 3 * sg.nring; i++) std::printf(" %.9g", double(sg.ring[i]));
@@ -496,11 +497,38 @@ void Renderer2D::disc(double x, double y, double r, Color c) {
     quad(x, y, half, c, 1, 0, 0, static_cast<float>(half / r));
 }
 
-void Renderer2D::sphere(double x, double y, double r, Color c, double lx, double ly, double lz) {
+void Renderer2D::sphere(double x, double y, double r, Color c, double lx, double ly, double lz, double lightK) {
     PL_KIND(kdSphere);
     if (r <= 0) return;
     const double half = r + 1.5;
-    quad(x, y, half, c, 2, static_cast<float>(lx), static_cast<float>(ly), static_cast<float>(half / r), static_cast<float>(lz));
+    // 0.85.0: the light's direction carries the sunlight factor as its length (kFragmentShader mode 2)
+    const double ll = std::sqrt(lx * lx + ly * ly + lz * lz), k = ll > 0 ? lightK / ll : 0;
+    quad(x, y, half, c, 2, static_cast<float>(lx * k), static_cast<float>(ly * k), static_cast<float>(half / r), static_cast<float>(lz * k));
+}
+
+void Renderer2D::sunBall(double x, double y, double r, const float* K, const float* spots, int nSpots) {
+    PL_KIND(kdSunDisc);
+    if (r <= 0) return;
+    closeTriangles();
+    const double half = r + 1.5;
+    quad(x, y, half, Color{1, 1, 1, 1}, 2, 0, 0, static_cast<float>(half / r), 1);
+    Segment sg{};
+    sg.kind = Kind::Planet; sg.first = static_cast<int>(triStart_); sg.count = 6; sg.map = 0; sg.mode = 4; sg.r = static_cast<float>(r);
+    static const float I[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    for (int i = 0; i < 9; i++) sg.K[i] = K ? K[i] : I[i];
+    sg.spotN = spots ? std::clamp(nSpots, 0, kMaxSunSpots) : 0;
+    sg.spotFirst = static_cast<int>(sunSpots_.size());
+    sunSpots_.insert(sunSpots_.end(), spots, spots + 4 * sg.spotN);
+    segments_.push_back(sg);
+    triStart_ = verts_.size();
+    static const bool logPlanet = std::getenv("PL_LOG_PLANET") != nullptr;   // for the GPU-vs-CPU picture check (tests/planet_picture.cpp sun)
+    if (logPlanet) {
+        std::printf("PLSUN %.4f %.4f %.4f", x, y, r);
+        for (int i = 0; i < 9; i++) std::printf(" %.7g", double(sg.K[i]));
+        std::printf(" %d", sg.spotN);
+        for (int i = 0; i < 4 * sg.spotN; i++) std::printf(" %.9g", double(spots[i]));
+        std::printf("\n");
+    }
 }
 
 void Renderer2D::sunDisc(double x, double y, double r, Color c) {

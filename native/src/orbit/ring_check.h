@@ -34,7 +34,7 @@ std::vector<RingCheckView> ringCheckViews(int w, int h);
 render::RingsDraw ringsDraw(const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H);
 
 // once per frame where Saturn's rings are drawn (both halves call it; it moves on once a frame): true when this half was given to the card
-bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H);
+bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H, double lightK = 1.0);   // 0.85.0: lightK the sunlight factor
 // 1 the card (its check passed), 0 not decided yet, -1 the processor; one line for the benchmark and Settings
 int ringCardState();
 std::string ringCardPathText(bool vulkan);

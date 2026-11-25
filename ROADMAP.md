@@ -44,8 +44,9 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Thermochemistry from partition functions (**source needed**: NIST-JANAF), equilibrium constants, isotope substitution, Franck-Condon factors.
 
 ## Orbit Lab
-- 0.85.0, the outside review (native/PLAN_REVIEW.md R1-R4): planets lit by the true sunlight at their distance with a camera-like exposure and its readout; the Sun's edge by Neckel & Labs 1994, also in the eclipse code; sunspots from the Greenwich and USAF/NOAA records (1874-2016) and NOAA's daily reports; the Oort cloud as a labelled region, the made-up dots gone.
-- **source needed**: the sunspots' darkness (a measured umbra and penumbra contrast against wavelength). Until then 0.85.0 draws the spots' outlines only (PLAN_REVIEW.md R3).
+- **source needed**: the sunspots' darkness: a measured contrast that fits group records (a whole group's mean intensity against wavelength, or umbra and penumbra contrasts with the umbral share). Mathew et al. 2007 (one wavelength, per spot and umbral radius) does not fit (REPORT 0.85.0). Until then the groups are outlines. On the owner's files list (native/PLAN_REVIEW.md).
+- **source needed**: the Oort cloud model's inner part as numbers (its lean towards the ecliptic: Vokrouhlicky et al. 2019 give it only as Fig. 7). Duncan, Quinn & Tremaine 1987 (ADS refused: 500, 504). Until then the dots' directions are spread evenly (the card says so).
+- The sunspot groups turn as one body within the half day to the shown time; differential rotation and the spots' evolution are not drawn. NOAA's SRS after the last saved date needs a new fetch (the table ends 24 Nov 2026).
 - **fix**: the Orbit Lab at rest drew its picture anew every frame on the owner's PC (0.75.0: rest.orbit 766 drawings in 3 s). The build machine does not reproduce it. Read the changed key part (main.cpp orbitFrameKey) in his next benchmark, then fix it.
 - **fix**: outside 1800-2100 the moons start at made-up angles and planes. Use JPL's mean elements (saved: data/jpl/sats_mean_elements_2026-11-23.html) and their reference planes.
 - **source needed**: a measured phase law for each main ring (A, B, C, Cassini Division; brightness against phase angle up to the forward-scattering side), to replace the rings' even scattering (0.78.0 item 2, skipped after 2 tries: Déau et al. 2009, arXiv:0902.0289, has the opposition surge only; the UVIS power law is far-UV only).
@@ -118,8 +119,6 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - After the owner's 0.63.1 benchmark: the three worst frames of blackhole.film_tilt (969 ms), orbit.heaviest (20.7 ms) and atom.nucleus_zoom (19.1 ms).
 - Paused (14 Nov 2026): element jumps with every electron for the other atoms (native/PLAN_JUMPS.md).
 - "Far labels" in the Orbit Lab: the owner describes what is wrong. Photon jumps from a complex state: the owner picks an option.
-- **owner decides** (PLAN_REVIEW.md R3): the sunspot table in the public repo (about 1.3 MB packed, RGO terms not stated) or a download step at first use.
-- **owner decides** (PLAN_REVIEW.md R4): show Sedna, 2012 VP113 and 2015 TG387 with "called inner Oort cloud objects by their discoverers; JPL lists them as trans-Neptunian objects", or not at all.
 - **owner decides**: methanol's torsion is 118 cm^-1 (aug-cc-pVTZ) but 177i (aug-cc-pVDZ) at the measured shape. Calculate at the TZ minimum, or show no value.
 - **owner decides**: a tone curve for the Glow core so a whole atom's outer shells show beside its core.
 - Molecule realism: one fixed charge-colour scale, a deformation-density view. Maybe a fog-style cloud.

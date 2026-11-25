@@ -29,6 +29,7 @@ struct RingsDraw {
     int sunlit = 1;                                      // ... and whether the face you see is the lit one
     int albIdx[4] = {0, 0, 0, 0};                        // the measurement indices where the albedo's ring region changes, and the albedos of the five regions (saturn_profile.h)
     float albVal[4] = {0, 0, 0, 0}, albF = 0;
+    float lightK = 1;                                    // 0.85.0 (R1): the sunlight factor (Renderer2D::PlanetLight::k)
     const float* tau = nullptr;                          // the profile's optical depths (4 x kRingCardTauVec4 floats, owned by orbit/ring_check.cpp)
 };
 
@@ -38,7 +39,7 @@ void ringsUniforms(const RingsDraw& d, F&& f, I&& i) {
     const float cen[2] = {d.cx, d.cy};
     f("uCen", cen, 2, 1); f("uR", &d.r, 1, 1); f("uE1", d.e1, 3, 1); f("uE2", d.e2, 3, 1);
     f("uK0", d.K, 3, 1); f("uK1", d.K + 3, 3, 1); f("uK2", d.K + 6, 3, 1); f("uSz", &d.sz, 1, 1); f("uLb", d.Lb, 3, 1);
-    i("uBack", &d.back, 1); f("uTint", d.tint, 3, 1);
+    i("uBack", &d.back, 1); f("uTint", d.tint, 3, 1); f("uLightK", &d.lightK, 1, 1);
     f("uPP", d.pp, 2, 1); f("uZr", &d.zr, 1, 1); f("uWn", &d.wn, 1, 1);
     f("uPole", d.pole, 3, 1); f("uMu0", &d.mu0, 1, 1); i("uSunlit", &d.sunlit, 1);
     i("uAlbIdx", d.albIdx, 4); f("uAlbVal", d.albVal, 4, 1); f("uAlbF", &d.albF, 1, 1);

@@ -278,7 +278,7 @@ void advance(render::Renderer2D& R) {
 }
 }  // namespace
 
-bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H) {
+bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H, double lightK) {
     if (!R.vulkan()) return false;                                   // (no Vulkan renderer, as in the unit tests: the CPU's triangles)
     app::GpuGuard& G = app::gpuVkRingsGuard();
     if (back) {                                                      // (once a frame: the back half comes first)
@@ -304,7 +304,8 @@ bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vecto
     render::RingCard* C = R.ringCard();
     if (g_p.state != 1 || !C || !C->ready || bands.empty()) return false;
     if (back && !g_p.firstUse) { G.begin(kFirst); g_p.firstUse = true; g_p.stepAt = nowS(); g_p.usedFrames = 0; }
-    const render::RingsDraw d = ringsDraw(f, bands, back, W, H);
+    render::RingsDraw d = ringsDraw(f, bands, back, W, H);
+    d.lightK = static_cast<float>(lightK);
     if (!(d.x1 > d.x0) || !(d.y1 > d.y0)) return true;               // (wholly beyond the picture: nothing to draw either way)
     return R.ringsCard(d);
 }

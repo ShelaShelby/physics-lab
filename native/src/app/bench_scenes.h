@@ -27,7 +27,8 @@ enum class BenchKind {
     OrbitCometTails,                                                             // 0.78.0: Hale-Bopp at perihelion, its calculated tails
     BlackHoleDolly, BlackHoleOverPoles, BlackHoleEverything, BlackHoleEdgeOn,      // 0.83.0
     OrbitSaturnRealFast, MoleculeLiveHot, UiSettingsOverBlackHole, UiResizeBlackHole,  // 0.83.0
-    BlackHoleCloseSpin                                                           // 0.84.0: the camera's own shift, ray by ray, at its strongest
+    BlackHoleCloseSpin,                                                          // 0.84.0: the camera's own shift, ray by ray, at its strongest
+    OrbitTrueLight, OrbitSunEdge, OrbitOortRegion                                // 0.85.0: the outside review's R1-R4 (PLAN_REVIEW.md)
 };
 
 struct BenchSceneText {
@@ -40,19 +41,19 @@ struct BenchSceneText {
     bool hard = false;      // in the default run
 };
 
-constexpr int kBenchHardScenes = 27;      // 0.56.1: the default run (0.84.0: 27, blackhole.close_spin; 0.83.0: 26, the 17 kept and 9 new, 23 moved to All scenes; 0.82.0: 40, blackhole.circle_spin; 0.81.0: 39, blackhole.film_soft; 0.79.0: 38, blackhole.disc_streaks; 0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag; 0.64.0: 32, six heavy views; 0.72.0: 33, blackhole.moving_gas; 0.73.0: 34, orbit.alphacen; 0.75.0: 35, orbit.flyby; 0.77.0: 36, orbit.earth_clouds; 0.78.0: 37, orbit.comet_tails)
-constexpr int kBenchAllScenes = 66;       // ... and with "All scenes"
+constexpr int kBenchHardScenes = 30;      // 0.56.1: the default run (0.85.0: 30, orbit.true_light, orbit.sun_edge, orbit.oort_region; 0.84.0: 27, blackhole.close_spin; 0.83.0: 26, the 17 kept and 9 new, 23 moved to All scenes; 0.82.0: 40, blackhole.circle_spin; 0.81.0: 39, blackhole.film_soft; 0.79.0: 38, blackhole.disc_streaks; 0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag; 0.64.0: 32, six heavy views; 0.72.0: 33, blackhole.moving_gas; 0.73.0: 34, orbit.alphacen; 0.75.0: 35, orbit.flyby; 0.77.0: 36, orbit.earth_clouds; 0.78.0: 37, orbit.comet_tails)
+constexpr int kBenchAllScenes = 69;       // ... and with "All scenes"
 
 const std::vector<BenchSceneText>& benchSceneTexts();   // the Hard scenes first, in the order they run, then the others of All
 int benchSceneIndex(const std::string& id);             // -1: no such scene
 
 // 0.56.1: the whole default run's planned length (s): the Hard scenes, the waits (Part 2) and the labs left alone (Part 3). A wait or a rest that takes
 // longer than planned makes the run longer (each is capped: kBenchResponseCapS, kBenchIdleSettleCapS).
-constexpr int kBenchResponseActions = 42;      // 4 lab switches x 3, and 3 each of: element, density, molecule, spin and distance, Real to Film, Film to Real, the streaks (0.79.0), a tilt at spin (0.82.0), a wheel step at spin (0.83.0), date
+constexpr int kBenchResponseActions = 45;      // 0.85.0: + the sunspot table x 3; 4 lab switches x 3, and 3 each of: element, density, molecule, spin and distance, Real to Film, Film to Real, the streaks (0.79.0), a tilt at spin (0.82.0), a wheel step at spin (0.83.0), date
 constexpr double kBenchResponsePlanS = 1.6;    // a wait's planned time with the pause after it
 constexpr int kBenchIdleEntries = 6;           // the four labs, and the Black Hole Lab spinning and with the glare
 constexpr double kBenchIdlePlanS = 4.0;        // the 3 s left alone and the picture finished before
 double benchPlannedS();
-constexpr double kBenchLimitS = 4.5 * 60;     // 0.83.0: the run's limit, fixed by the owner (24 Nov 2026): a new scene replaces one or the 1.5 x refresh rule makes room
+constexpr double kBenchLimitS = 4.9 * 60;     // 0.83.0: the run's limit, fixed by the owner (24 Nov 2026): a new scene replaces one or the 1.5 x refresh rule makes room. 0.85.0: raised once to 4.9 minutes by the owner (25 Nov 2026) for the three scenes of the outside review
 
 }  // namespace app

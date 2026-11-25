@@ -26,6 +26,8 @@ const std::vector<Row>& table() {
         // 0.29: on is the realistic choice (with the accurate integrator it brings every inner planet closer to JPL: orbit/real_errors.h, tests/test_jpl.cpp)
         {"orbit", {"gr", "on", "Einstein's correction to the Sun's gravity is real: with it, Mercury stays within " + commas(orbit::kRealErrKmRelOn[0]) + " km of NASA/JPL Horizons over "
                                 "1800 to 2100 (" + commas(orbit::kRealErrKmRelOff[0]) + " km without it)."}},
+        // 0.85.0 (outside review, R1): the true dimming with distance (the owner's decision of 25 Nov 2026)
+        {"orbit", {"light", "True sunlight", "the sunlight on each body falls with the square of its distance from the Sun; Even lights every body as if it were at Earth's distance."}},
         {"orbit", {"wobble", "off", "the Sun's path round the centre of mass at its real size (less than 2.3 Sun radii)."}},
         {"orbit", {"moons", "on", "they are there in the real Solar System."}},
         {"orbit", {"dwarfs", "on", "they are there in the real Solar System."}},
@@ -92,7 +94,7 @@ void markCheck(const char* lab, const std::string& key) { mark(lab, key, "on", 1
 
 void applyOrbit(AppState& app) {
     orbit::ViewSettings& s = app.set;
-    s.view3D = true; s.trueScale = true; s.realPlanets = true; s.relativity = true; s.exaggerateWobble = false;
+    s.view3D = true; s.trueScale = true; s.realPlanets = true; s.relativity = true; s.exaggerateWobble = false; s.trueLight = true;
     s.moons = s.dwarfs = s.comets = s.belts = s.far = true;
     s.sky = orbit::SkyMode::Full; s.cons = orbit::ConsMode::Off;
 }

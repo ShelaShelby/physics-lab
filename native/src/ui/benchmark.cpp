@@ -1,4 +1,5 @@
 #include "ui/benchmark.h"
+#include "orbit/sunspots.h"
 #include "orbit/alphacen.h"
 #include "ui/reading.h"
 #include "ui/shell.h"
@@ -128,6 +129,19 @@ void orbitClose(AppState& app, const char* body, double zoom) {
     app.view.ox = app.view.oy = 0;
     setZoom(app, zoomOr(zoom));
 }
+// 0.85.0 (the outside review, R1-R4): True sunlight with Neptune and Earth followed in turn; the Sun close up on a spotted day, then Earth in the Moon's shadow;
+// the Oort cloud's model dots zoomed out to 100,000 AU
+constexpr int64_t kSpotDayMs = 1715299200000LL;   // 10 May 2024 00:00 UTC: NOAA's Solar Region Summary of that date lists 7 sunspot groups
+constexpr double kNeptuneZoom = 3.9, kSunZoom = 2.6, kOortZoom = -4.4;
+void orbitTrueLight(AppState& app) { orbitClose(app, "Neptune", kNeptuneZoom); app.set.trueLight = true; }
+void orbitSunClose(AppState& app) {
+    orbitClose(app, "Saturn", kSaturnZoom);
+    jumpToDate(app, kSpotDayMs);
+    app.view.select({orbit::Selection::Star}, true);
+    app.view.ox = app.view.oy = 0;
+    setZoom(app, zoomOr(kSunZoom));
+}
+void orbitOortRegion(AppState& app) { orbitHeaviest(app); setZoom(app, zoomOr(kOortZoom)); }
 // 0.75.0: Saturn from the closest zoom the camera may come (1.5 radii: orbit_view.cpp zoomCapFor), every extra on, time stopped (orbit.flyby)
 void orbitFlyby(AppState& app) {
     orbitClose(app, "Saturn", kSaturnZoom);
@@ -607,6 +621,7 @@ struct BenchState {
     bool cancelled = false;
     // ---- 0.56.1, Parts 2 and 3: after the scenes, the waits, then the labs left alone ----
     int phase = 0;                            // 0 scenes, 1 waits, 2 rest
+    int scenePhase = 0;                       // 0.85.0: which part of a scene in parts is on (orbit.true_light, orbit.sun_edge)
     std::vector<int> waits, rests;            // the waits and the rests of this run (indexes into waitDefs() / restDefs())
     int wAt = 0, wTry = 0, wStage = 0;        // the wait (index into waits), its try, and its stage: 0 prepare, 1 settling, 2 acted (waiting for the finished picture), 3 pause
     double wStageS = 0, wWorst = 0;           // seconds in the stage (the frames' times summed); the worst frame since the action
@@ -718,6 +733,9 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitAlphaCen: orbitAlphaCen(app); break;
         case K::OrbitFlyby: orbitFlyby(app); break;
         case K::OrbitCometTails: orbitCometTails(app); break;   // 0.78.0
+        case K::OrbitTrueLight: orbitTrueLight(app); b.scenePhase = 0; break;   // 0.85.0
+        case K::OrbitSunEdge: orbitSunClose(app); b.scenePhase = 0; break;
+        case K::OrbitOortRegion: orbitOortRegion(app); break;
         case K::Atom:
             commonSetup(app);
             app.lab = 1;
@@ -781,6 +799,25 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
     using K = app::BenchKind;
     const double warm = b.run->warmupS(), meas = b.measure;
     switch (t.kind) {
+        case K::OrbitTrueLight: {                                                // 0.85.0: Neptune and Earth followed in turn every 1.6 s (a new exposure each time)
+            const int ph = static_cast<int>(u / 1.6) % 2;
+            if (ph != b.scenePhase) {
+                b.scenePhase = ph;
+                const int id = bodyId(app, ph ? "Earth" : "Neptune");
+                if (id >= 0) app.view.select({orbit::Selection::Body, id}, true);
+                app.view.ox = app.view.oy = 0;
+                setZoom(app, zoomOr(ph ? kEarthZoom : kNeptuneZoom));
+            }
+            app.view.yaw = 0.6 + 0.5 * u;
+            app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            break;
+        }
+        case K::OrbitSunEdge:                                                    // 0.85.0: the Sun close up, then (after half the time) Earth in the Moon's shadow
+            if (b.scenePhase == 0 && u >= 0.5 * (warm + meas)) { b.scenePhase = 1; orbitClose(app, "Earth", kEarthZoom); }
+            app.view.yaw = 0.6 + 0.5 * u;
+            app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            break;
+        case K::OrbitOortRegion:
         case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds: case K::OrbitCometTails:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
@@ -1039,6 +1076,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
     switch (t.kind) {
         case K::Atom: return atom::benchShortText(app.atom);
         case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitEarthClouds: case K::OrbitSky: case K::OrbitFlyby: case K::OrbitCometTails:
+        case K::OrbitTrueLight: case K::OrbitSunEdge: case K::OrbitOortRegion:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
             return z;
         case K::OrbitAlphaCen:
@@ -1126,6 +1164,8 @@ const std::vector<WaitDef>& waitDefs() {
                                                                   "the camera turned and tilted 0.1 rad, as a drag leaves it (0.82.0); until the fine picture of the new tilt"},
         {"response.blackhole_dolly", "The sharp picture after a wheel step", "a feeding hole spinning at 0.9 (the disc on), at 20 GM/c\xC2\xB2: one wheel notch closer, "
                                                                         "with the eased step (0.83.0); until the sharp picture of the new distance"},
+        {"response.sunspot_table", "The Sun's first close view (the sunspot table read)", "the Orbit Lab at its defaults, the built-in sunspot table not read yet "
+                                                                    "(orbit/sunspots.h, 255,250 rows): the Sun picked, close up on 10 May 2024; until the picture with its spot outlines"},
         {"response.orbit_date", "A jump to a far date in Real physics", "Planet physics Real: from today to 1850-06-01, 2095-01-01 and 1805-03-01; until the picture of that date is drawn"},
     };
     return v;
@@ -1177,6 +1217,14 @@ void waitPrepare(AppState& app, int w, int t) {
         if (id == "response.blackhole_streaks") app.blackhole.gasPattern = false;
         if (id == "response.blackhole_dolly") { blackhole::setSpin(app.blackhole, 0.9); blackhole::setDistance(app.blackhole, 20); }
         if (id == "response.blackhole_tilt") { blackhole::setSpin(app.blackhole, 0.9); blackhole::setDistance(app.blackhole, 20); app.blackhole.pitch = 80 * kPi / 180; }
+    } else if (id == "response.sunspot_table") {                // 0.85.0: the table is dropped; the Sun's close view reads it again
+        app.lab = 0;
+        resetToToday(app);
+        jumpToDate(app, kSpotDayMs);
+        app.set = orbit::ViewSettings(); app.set.view3D = true;
+        app.view = orbit::OrbitView();
+        app.paused = true;
+        orbit::sunspotTableReset();
     } else if (id == "response.orbit_date") {
         app.lab = 0;
         resetToToday(app);
@@ -1199,6 +1247,7 @@ void waitAct(AppState& app, int w, int t) {
     else if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Real);
     else if (id == "response.blackhole_streaks") { blackhole::streakFieldRemake(); app.blackhole.gasPattern = true; }
     else if (id == "response.blackhole_tilt") blackhole::turn(app.blackhole, 0.1, 0.1);   // (from 80 to 85.7 degrees from the axis; each try starts from waitPrepare)
+    else if (id == "response.sunspot_table") { app.view.select({orbit::Selection::Star}, true); app.view.ox = app.view.oy = 0; setZoom(app, kSunZoom); }
     else if (id == "response.orbit_date") {
         static const int64_t dates[3] = {-3773779200000LL, 3944678400000LL, -5201798400000LL};   // 1850-06-01, 2095-01-01, 1805-03-01 (00:00 UTC)
         jumpToDate(app, dates[t], true);   // (as the Go button: 0.67.0 walks a far date on a worker)

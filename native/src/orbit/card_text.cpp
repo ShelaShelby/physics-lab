@@ -1,4 +1,5 @@
 #include "card_text.h"
+#include "sunspots.h"
 #include "alphacen.h"
 #include "nbody.h"
 #include "sun_facts.h"
@@ -198,8 +199,10 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
                    "Frost line (rough): " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)"};
         for (auto& l : sunSpinLines(sys, opt.tspeed, opt.paused)) c.lines.push_back(l);
         c.lines.push_back("The 25.38 days is JPL's standard rate; the 25 and 34 days are rough");   // Horizons' Sun header: "Adopted sid. rot. per.= 25.38 d"; the equator and pole figures have no named source
-        c.lines.push_back("The patches drawn on it are only markers that show the spin, all at that one rate: not real sunspots");   // 0.48 (review): they were not labelled
-        c.lines.push_back("Drawn in its measured colour (nearly white); its darker edge is the app's own rule, not yet a measured law");   // 0.49.4: kSunSrgb (sun_facts.h); limb darkening: ROADMAP
+        // 0.85.0 (R2, R3): the measured edge and the measured sunspot groups (until 0.84.1: invented patches and the app's own edge rule)
+        c.lines.push_back("Drawn in its measured colour (nearly white); its darker, redder edge is the measured law of Neckel & Labs 1994 (Solar Physics 153, 91), "
+                          "the middle at the screen's white");
+        for (auto& l : spotCardLines(sunspotsAt(sys.julianDay()))) c.lines.push_back(l);
         c.lines.push_back("Wobbles a little, mostly pulled by Jupiter");
         c.lines.push_back("Lifetime (rough): about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years");
         c.lines.push_back("Rough main-sequence estimates");

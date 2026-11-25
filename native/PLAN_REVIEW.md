@@ -9,13 +9,13 @@ Every number below comes from a saved source. Each source has a line in native/d
 - **0.86.0 Atom Lab and Film**: R5 the made-up learning pictures labelled, R6 Film cleaned, R7 the Dirac citation, R8 the old Lamb-shift comment.
 - **0.87.0 Black Hole disc**: R9 colour-correction factor, R10 limb darkening, R11 returning radiation, R12 spinning thickness.
 - **Later (sources found, not in the three jobs)**: R13 Earth's air (ozone, aerosol), R14 the giants' limb darkening and the moons' opposition surge.
-- **Waiting for the owner** (marked "owner decides" below): R3's table in the public repo or a download step; R4 whether Sedna-like objects are shown.
+- The owner's answers of 25 Nov 2026 (DECISIONS.md): R3's table is in the public repo; R4's dots sample a published model and Sedna-like objects are shown with the sentence.
 
 Rules for every job below: the tests are written first and fail on the old build. Each source used goes into About, "Where the facts come from", and into a code comment. The CPU stays the exact reference and the fallback. The GPU path is required before the job is done. A job that adds drawing adds a Hard benchmark scene.
 
 ---
 
-## R1. Orbit Lab, realistic choice: planets lit by the true sunlight at their distance, a camera-like exposure (0.85.0)
+## R1. Orbit Lab, realistic choice: planets lit by the true sunlight at their distance, a camera-like exposure (0.85.0) -- DONE in 0.85.0
 - **Source**: no new number. The sunlight on a body falls as 1/d² with its distance d from the Sun (inverse square: the Sun's power spread over a sphere). The distances come from the lab's own ephemeris (JPL, already sourced).
   The Sun's spectrum is already saved (data/sun/astm_g173_*.csv). Only the ratio (1 au / d)² is new.
 - **Formula**: irradiance factor s(d) = (1 au / d)². A surface's linear light = albedo x shading x s(d) x exposure. Exposure = 1 / s(d_followed) for the followed body (a camera set for it). With no followed body, the exposure is set for 1 au (Earth).
@@ -26,7 +26,7 @@ Rules for every job below: the tests are written first and fail on the old build
   (d) realest.cpp: Most realistic sets the true dimming.
 - **GPU path**: one more per-body uniform (s(d) x exposure) in the planet shader. The CPU reference multiplies the same factor. A Hard scene orbit.true_light: follow Neptune, then Earth, the readout on.
 
-## R2. The Sun's edge (limb darkening) from a measured law, the same law in the eclipse code (0.85.0)
+## R2. The Sun's edge (limb darkening) from a measured law, the same law in the eclipse code (0.85.0) -- DONE in 0.85.0 (the coefficients are made in C++, render/sun_limb.h; tools/make_sun_limb_data.py writes only the inputs)
 - **Source**: H. Neckel, D. Labs, Solar Physics 153, 91 (1994), Table I (scan from ADS, typed). Extract: native/data/sun/neckel_labs_1994_SoPh153_91.extract.txt.
   It gives P5(mu) = A0 + A1 mu + ... + A5 mu^5 with Sum A_n = 1 (Equation 5), for 30 wavelengths from 303.327 to 1098.950 nm, and F/I by Equation (6). mu = cos theta on the disc.
 - **Checked here**: for 29 of the 30 rows the A_n sum to 1 and give the printed F/I within the last printed digit. The 365.875 nm row as printed sums to 0.99800, and Equation (6) gives 0.74354 against the printed 0.7445 (REPORT 0.84.1).
@@ -44,7 +44,7 @@ Rules for every job below: the tests are written first and fail on the old build
   (e) GPU (mode 3 in shaders.h) against the CPU: at most 1 % of pixels over 8 levels.
 - **GPU path**: 18 coefficients as a uniform block in the Sun's shader (mode 3) and in the eclipse shading. A Hard scene orbit.sun_edge: the Sun filling the view, then a solar eclipse from Earth.
 
-## R3. Sunspots: real spots on dates where they were measured, a plain Sun with a sentence where not (0.85.0)
+## R3. Sunspots: real spots on dates where they were measured, a plain Sun with a sentence where not (0.85.0) -- DONE in 0.85.0 as outlines; LEFT: the spots' darkness (no fitting measured contrast found in 3 tries, REPORT 0.85.0)
 - **Sources**: (1) the Royal Greenwich Observatory - USAF/NOAA sunspot group records, from NASA Marshall (D. Hathaway): one row per group per day, May 1874 to 2 Oct 2016 (g2016.txt is the last file; g2017.txt does not exist).
   Columns (format.txt, extract native/data/sun/spots/format.extract.txt): date and time, group number, observed and corrected whole-spot area (millionths of the hemisphere), distance from disc centre,
   position angle, Carrington longitude, latitude, central meridian distance. The umbral area exists only for 1874-1976. MissingDays.txt lists the days with no record.
@@ -63,7 +63,7 @@ Rules for every job below: the tests are written first and fail on the old build
   (c) A missing day shows the sentence. (d) The GPU spot pass against the CPU.
 - **GPU path**: the day's groups (a few dozen) go into a small storage buffer. The Sun's shader darkens inside each disc on the sphere. A response line (ui/benchmark.cpp waitDefs) for loading the table at the first Sun view.
 
-## R4. The Oort cloud: no invented dots; a labelled region (0.85.0)
+## R4. The Oort cloud: no invented dots; a labelled region (0.85.0) -- DONE in 0.85.0 by the owner's answer: the dots sample a published model (Vokrouhlicky et al. 2019); the three objects on their JPL orbits. LEFT: the inner part's lean (a figure only)
 - **Sources**: Brown, Trujillo & Rabinowitz 2004 (ApJ 617, 589): 2003 VB12 (Sedna) "is best considered a member of the inner Oort cloud" "in the two most likely cases". The title says "candidate".
   Sheppard et al. 2019 (AJ): 2015 TG387 is "the third known IOC after Sedna and 2012 VP113". "Any object with an aphelion beyond a few thousand au is considered an outer Oort cloud object."
   Chen et al. 2013 (ApJL): 2010 GB174 "a new member of the inner Oort cloud". Kaib et al. 2009 (ApJ 695, 268): 2006 SQ372 "a likely long-period comet from the inner Oort cloud".
@@ -175,5 +175,7 @@ Rules for every job below: the tests are written first and fail on the old build
 
 ## Files the owner saves (the cloud could not fetch them)
 - Chandrasekhar 1950, Radiative Transfer, Table XXIV (the exact electron-scattering limb darkening; the 1946 third approximation is saved).
-- The Debrecen Photoheliographic Data (individual spots and umbrae 1974-2018; the site refused: 403 and no answer, 2 tries). The SWPC warehouse of SRS files (no answer, 503; the NCEI copy works).
+- The Debrecen Photoheliographic Data (individual spots and umbrae 1974-2018; the site refused: 403 and no answer, 2 tries).
+- A measured sunspot contrast that fits group records: Albregtsen & Maltby 1981 (umbral intensity against wavelength), Maltby et al. 1986 (ApJ 306, 284), Solanki 2003 (A&ARv 11, 153). 0.85.0 found only Mathew et al. 2007 (one wavelength, per spot).
+- Duncan, Quinn & Tremaine 1987 (AJ 94, 1330): ADS's scan service answered 500 and 504 (0.85.0). The SWPC warehouse of SRS files (no answer, 503; the NCEI copy works).
 - Shettle & Fenn 1979, AFGL-TR-79-0214 (DTIC refused twice). Hess, Koepke & Schult 1998, OPAC, BAMS 79, 831 (AMS refused once). Not needed if the Handbook chapter is enough.

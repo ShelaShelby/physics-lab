@@ -29,6 +29,8 @@
 #include "sky.h"
 #include "spin.h"
 #include "sun_facts.h"
+#include "sunspots.h"
+#include "true_light.h"
 #include "units.h"
 #include "ui/look.h"
 #include "render/shading.h"
@@ -430,7 +432,7 @@ std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& 
     part[0] = k.h; k = KeyHash();
     k.add(set.view3D); k.add(set.zoom); k.add(set.tspeed); k.add(set.trueScale); k.add(set.fullTrails); k.add(set.moons); k.add(set.dwarfs); k.add(set.comets);
     k.add(set.belts); k.add(set.gpuRocks); k.add(set.sky); k.add(set.cons); k.add(set.realPlanets); k.add(set.exaggerateWobble); k.add(set.relativity); k.add(set.far);
-    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused);
+    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused); k.add(set.trueLight);
     part[1] = k.h; k = KeyHash();
     k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
     k.add(set.textScale); k.add(set.shell); k.add(set.minTextU); k.add(set.minTextPx); k.add(set.reserveBottom); k.add(set.reserveRight); k.add(set.insetTop);
@@ -617,8 +619,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             FarItem f;
             if (!farItem(sys, i, f)) continue;
             const Selection s{Selection::Far, 0, i};
-            const bool on = sel == s, probe = f.kind == "probe";
-            if (probe && !(set.zoom <= -1.5 || on)) continue;   // the Voyagers are far beyond the planets: shown once you zoom out (or pick one)
+            const bool on = sel == s, probe = f.kind == "probe", tno = f.kind == "tno";
+            if ((probe || tno) && !(set.zoom <= -1.5 || on)) continue;   // (0.85.0: Sedna and the others too, at 75 to 90 AU now)   // the Voyagers are far beyond the planets: shown once you zoom out (or pick one)
             if (probe) {                                  // its path since about Neptune (a straight line), and where it left the Sun's wind
                 const Vec3 a = f.dir * (40 * kAU), h = f.dir * (f.probe->cross * kAU);
                 const Q qa = proj(a.x, a.y, a.z), qb = proj(f.pos.x, f.pos.y, f.pos.z), hq = proj(h.x, h.y, h.z);
@@ -641,6 +643,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             const auto dim = [seen](Color c) { return c.withAlpha(c.a * seen); };
             if (probe) { R.disc(q.first, q.second, 2.6, dim(Color{1, 1, 1, 1})); R.ring(q.first, q.second, 6, 1, dim(gold)); }
             else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, dim(Color{1, 1, 1, 1})); R.disc(q.first, q.second, 4.5, dim(Color{0, 0, 0, 1})); }
+            else if (tno) { R.disc(q.first, q.second, 2.2, dim(hexColor(marks::kObject))); R.ring(q.first, q.second, 5, 1, dim(Color{1, 1, 1, 0.45f})); }   // 0.85.0
             else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, dim(hexColor(marks::kObject))); R.disc(q.first, q.second, 1.6, dim(hexColor(marks::kObject))); }
             else { const double bv = farBV(f.far->key); const std::array<int, 3> c = std::isnan(bv) ? std::array<int, 3>{255, 255, 255} : bvRGB(bv); R.disc(q.first, q.second, 2.8, dim(rgba(c[0], c[1], c[2]))); R.ring(q.first, q.second, 6, 1, dim(Color{1, 1, 1, 0.45f})); }
             if (on) hiRing(q.first, q.second, 11);
@@ -650,8 +653,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 const std::string mt = farMassText(f.key);                  // published mass (far_masses.h), under the name
                 if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 32, on, true, false}); massShown = true; }
             } else {
-                labels.push_back({f.name + " · " + (probe ? fmt::commas(f.au) + " AU" : fmtLyS(f.ly) + " light years"), q.first, q.second - 11, on, true, false});
-                const std::string mt = probe ? std::string() : farMassText(f.key);
+                labels.push_back({f.name + " · " + (probe || tno ? fmt::commas(f.au) + " AU" : fmtLyS(f.ly) + " light years"), q.first, q.second - 11, on, true, false});
+                const std::string mt = probe || tno ? std::string() : farMassText(f.key);
                 if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 19, on, true, false}); massShown = true; }
             }
             hits_.push_back({s, q.first, q.second, 10});
@@ -802,6 +805,25 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const Vec3 u = p * (-1.0 / n);
         return Light3{dot(u, VX), -dot(u, VY), dot(u, VZ)};
     };
+    // 0.85.0 (R1): the true sunlight. The camera's exposure is set for the followed body or moon (its distance from the Sun); nothing followed: 1 au.
+    // Each ball and ring system is drawn with lightAt(its place): (d_exposure / d)^2 (orbit/true_light.h); even lighting: 1.
+    double expAU = kTrueLightRefAU;
+    std::string expName;
+    if (set.trueLight && follow && (sel.kind == Selection::Body || sel.kind == Selection::Moon)) {
+        if (const Body* fb = findBody(sys, sel.bodyId)) {
+            expAU = std::max(length(fb->pos), 1.0) / kAU;
+            expName = sel.kind == Selection::Moon && sel.moon >= 0 && sel.moon < static_cast<int>(fb->moons.size()) ? std::string(fb->moons[std::size_t(sel.moon)].data->name) : fb->name;
+        }
+    }
+    const auto lightAt = [&](const Vec3& p) { return lightFactor(std::max(length(p), 1.0) / kAU, expAU, set.trueLight); };
+    exposureText.clear();
+    if (set.trueLight) {
+        const std::string other = expName == "Earth" ? "Neptune" : "Earth";
+        double dOther = 0;
+        for (const Body& ob : sys.bodies) if (ob.name == other) dOther = length(ob.pos) / kAU;
+        exposureText = exposureReadout(expName, expAU, other, dOther);
+    }
+    double bodyLightK = 1;                                // the ball and rings being drawn (set in the bodies' loop)
     struct SpinCtx { float K[9]; double px, py, pz; };   // K: screen -> planet frame; (px, py, pz): the pole on screen
     const double jdNow = sys.julianDay(), jd0 = sys.epochMs / 86400000.0 + 2440587.5;
     const auto spinCtx = [&](const std::string& name, SpinCtx& c) {
@@ -889,13 +911,14 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const std::vector<RingBand>& drawn = *drawnP;
         if (back) farOcc.rings.push_back({fr, drawn});   // 0.77.0: what dims a far marker behind the rings
         // 0.64.0: Saturn's rings on the graphics card (Vulkan; render/shaders.h kRingsFS: the same chords, bands and shadow per pixel) once its start-up check passed
-        if (rs.profile && drawRingsOnCard(R, fr, drawn, back, W, H)) return;
+        if (rs.profile && drawRingsOnCard(R, fr, drawn, back, W, H, bodyLightK)) return;
         for (const RingBand& b : drawn) {
             // 0.50 (review item 7): ONE drawn tint (0.91, 0.83, 0.66) for every ring system (Saturn's, Jupiter's, Uranus's, Neptune's): not measured. The Cassini VIMS
             // papers found (Filacchione et al. 2012, arXiv:1203.6230; Hedman et al. 2013, arXiv:1210.4727) only plot the spectra; no table to compute a colour from.
             // Learn says so; ROADMAP: source needed.
             // 0.50 (review item 3): the ring's light k multiplies the tint in LINEAR light (the tint decoded with IEC 61966-2-1), then the result is encoded (render/shading.h)
-            const Color litC{static_cast<float>(render::shadeEncoded(kRingTint[0], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[1], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[2], b.k)), b.alpha};
+            const double kk = b.k * bodyLightK;                // 0.85.0: times the sunlight factor
+            const Color litC{static_cast<float>(render::shadeEncoded(kRingTint[0], kk)), static_cast<float>(render::shadeEncoded(kRingTint[1], kk)), static_cast<float>(render::shadeEncoded(kRingTint[2], kk)), b.alpha};
             const Color darkC{0, 0, 0, b.alpha};
             if (b.i0 >= 0 || b.tauBand) {   // 0.75.1: a profile band (0.75.2: and a band of the other giants' rings) on the processor's path: its opacity and light worked out at each corner's own slant, blended across the triangle
                 ringTriangles(fr, b, back, W, H, [&](double x0, double y0, double x1, double y1, double x2, double y2, bool lit, const double* q0, const double* q1, const double* q2) {
@@ -905,7 +928,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     for (int c = 0; c < 3; c++) {
                         const RingValue v = ringBandValue(fr, b, ringMu(fr, qs[c]));
                         faint = faint && v.faint;
-                        cc[c] = lit ? Color{static_cast<float>(render::shadeEncoded(kRingTint[0], v.k)), static_cast<float>(render::shadeEncoded(kRingTint[1], v.k)), static_cast<float>(render::shadeEncoded(kRingTint[2], v.k)), v.alpha}
+                        const double vk = v.k * bodyLightK;
+                        cc[c] = lit ? Color{static_cast<float>(render::shadeEncoded(kRingTint[0], vk)), static_cast<float>(render::shadeEncoded(kRingTint[1], vk)), static_cast<float>(render::shadeEncoded(kRingTint[2], vk)), v.alpha}
                                     : Color{0, 0, 0, v.alpha};
                     }
                     if (!faint) R.triangle(x0, y0, cc[0], x1, y1, cc[1], x2, y2, cc[2]);
@@ -930,39 +954,21 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, true);
     // 0.49.4: no glow round the Sun. The real white-light corona is a millionth to a billionth of the disc's brightness (NASA, data/sun/README.txt): it cannot show
     // next to the disc. Until 0.49.3 a yellow glow out to 3 solar radii was drawn here (no source, no label).
-    R.sunDisc(star.first, star.second, sr, sunCol);
-    if (sr > 9) {   // soft bright and orange patches, markers only, so the spin can be seen: invented places, turning as one solid body at the 25.38-day rate (the card says so; the real Sun turns faster at its equator)
-        const auto hsh = [](double n) { const double v = std::sin(n * 127.1 + 311.7) * 43758.5453; return v - std::floor(v); };
-        const double x = star.first, y = star.second;
-        for (int i = 0; i < 16; i++) {
-            const double lon = hsh(i * 3 + 60) * 6.283, lat = (hsh(i * 3 + 61) - .5) * 1.7, cl = std::cos(lat), b0 = cl * std::cos(lon), b1 = cl * std::sin(lon), b2 = std::sin(lat);
-            double X, Y, mu;
-            if (hasSunSpin) { const float* K = sunSpin.K; X = K[0] * b0 + K[3] * b1 + K[6] * b2; Y = K[1] * b0 + K[4] * b1 + K[7] * b2; mu = K[2] * b0 + K[5] * b1 + K[8] * b2; }
-            else { X = b1; Y = b2; mu = b0; }               // no real spin known: a still ball
-            if (mu <= 0.05) continue;
-            const double sx = x + X * sr, sy = y - Y * sr, sz = sr * (.14 + .12 * hsh(i + 70)), rr = sz * 1.4;
-            if (sx + rr < 0 || sx - rr > W || sy + rr < 0 || sy - rr > H) continue;
-            const bool bright = i % 2 == 0;
-            const float a = float((bright ? .22 : .16) * std::min(1.0, mu * 2));
-            const Color c0 = bright ? rgba(255, 248, 190, a) : rgba(215, 110, 20, a), c1 = c0.withAlpha(0);
-            // squashed along the direction to the edge of the disc; points outside the disc are pulled onto its edge
-            const double ang = std::atan2(-Y, X), ca2 = std::cos(ang), sa2 = std::sin(ang), sq = std::max(mu, .25);
-            const auto edge = [&](double t, double& ex, double& ey) {
-                const double u = rr * std::cos(t) * sq, v = rr * std::sin(t);
-                ex = sx + u * ca2 - v * sa2; ey = sy + u * sa2 + v * ca2;
-                const double d = std::hypot(ex - x, ey - y);
-                if (d > sr) { ex = x + (ex - x) * sr / d; ey = y + (ey - y) * sr / d; }
-            };
-            const int n = 28;
-            double px0, py0;
-            edge(0, px0, py0);
-            for (int k = 1; k <= n; k++) {
-                double px1, py1;
-                edge(2 * kPi * k / n, px1, py1);
-                R.triangle(sx, sy, c0, px0, py0, c1, px1, py1, c1);
-                px0 = px1; py0 = py1;
+    // 0.85.0 (outside review, PLAN_REVIEW.md R2, R3): the Sun as a ball, its edge by Neckel & Labs 1994 (render/sun_limb.h), and the measured sunspot groups of the
+    // shown date as outlines (orbit/sunspots.h), fixed at their Carrington longitudes on the Sun's IAU frame. Until 0.84.1 the edge was the lab's own blend and
+    // 16 invented patches marked the spin.
+    {
+        std::vector<float> spotData;
+        if (hasSunSpin && sr > 9) {
+            const SpotDay sd = sunspotsAt(sys.julianDay());
+            for (const SpotGroup& g : sd.groups) {
+                if (static_cast<int>(spotData.size()) >= 4 * render::Renderer2D::kMaxSunSpots) break;
+                double v[3], rho;
+                spotGeometry(g, v, rho);
+                spotData.insert(spotData.end(), {static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]), static_cast<float>(rho)});
             }
         }
+        R.sunBall(star.first, star.second, sr, hasSunSpin ? sunSpin.K : nullptr, spotData.data(), static_cast<int>(spotData.size() / 4));
     }
     if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, false);
     if (sunTiny) R.ring(star.first, star.second, 7, 1.6, sunCol.withAlpha(0.9f));   // smaller than a pixel: a ring shows where it is
@@ -1008,7 +1014,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     // 0.51.2: eclipse shadows. What can hide the Sun from a point of a ball, at the REAL places (the moons are drawn much farther out than they are, so a moon's shadow
     // on its planet is where it really falls, not under the drawn moon): Earth's Moon (ELP2000-82B) on Earth, Earth on the Moon, the 13 big moons (orbit/moon_sats.h)
     // on their planet (the 4 nearest the line to the Sun) and their planet on them. Every shadow-caster is a ball of its equatorial radius (Jupiter's and Saturn's
-    // flattening is left out of their shadows); the Sun an evenly bright disc of 695,700 km. Earth also gets its air (render/shading.h earthAirLight).
+    // flattening is left out of their shadows); the Sun a disc of 695,700 km with its measured edge darkening per channel (0.85.0: render/sun_limb.h, Neckel & Labs 1994). Earth also gets its air (render/shading.h earthAirLight).
     // Not drawn in a shadow: the moons without a map (grey balls) and the moons' shadows on each other. Light that Earth's air bends into its shadow (the red
     // eclipsed Moon) is left out (Learn says so).
     const double jdShadow = sys.julianDayTDB();
@@ -1099,6 +1105,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             if (g.f > 0) R.disc(g.first, g.second, 2, hexColor(b.color));
         }
         const Light3 sun = sunLight(b.pos);                 // 0.46.7: the real Sun
+        bodyLightK = lightAt(b.pos);                        // 0.85.0 (R1)
         static const bool logPx = std::getenv("PL_LOG_BODYPX") != nullptr;   // 0.50, for automatic checks only: where each body is drawn (x, y, radius in pixels) and the light's direction
         if (logPx) std::printf("PLBODYPX %s %.2f %.2f %.3f %.4f %.4f %.4f %.6g %.6g %.6g\n", b.name.c_str(), q.first, q.second, rad, sun.x, sun.y, sun.z, q.X, q.Y, q.Z);   // (0.75.0: + its camera-space place, m)
         // (0.75.0: with the rings' reach, 2.4 radii; a camera close by, within 3 radii in 3D: always, its rings may pass beside it)
@@ -1135,13 +1142,14 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     else
                         for (const auto& bd : ringsHere.bands)
                             if (nb < 8 && bd.tau >= 0.01 && (bd.outerKm - bd.innerKm) / ringsHere.eqKm >= 0.005) { rb[3 * nb] = float(bd.innerKm / ringsHere.eqKm); rb[3 * nb + 1] = float(bd.outerKm / ringsHere.eqKm); rb[3 * nb + 2] = float(bd.tau); nb++; }
-                    const render::Renderer2D::PlanetLight pl = planetLight(b);
+                    render::Renderer2D::PlanetLight pl = planetLight(b);
+                    pl.k = static_cast<float>(bodyLightK);
                     R.planet(q.first, q.second, rad, ball, sun.x, sun.y, sun.z, sc.K, render::mapForBody(b.name), nb ? rb : nullptr, nb, 1.0, polarRatio(b.name.c_str()), false, &pl);   // 0.27: its real shape (orbit/shapes.h)
                     { FarBall fb; fb.x = q.first; fb.y = q.second; fb.r = rad; fb.hasK = true; std::copy(sc.K, sc.K + 9, fb.K); fb.sz = polarRatio(b.name.c_str()); farOcc.balls.push_back(fb); }   // 0.77.0
                 }
                 spinAxis(b.name, sc, q.first, q.second, rad, false);
             } else {
-                R.sphere(q.first, q.second, rad, ball, sun.x, sun.y, sun.z);   // lit from the Sun
+                R.sphere(q.first, q.second, rad, ball, sun.x, sun.y, sun.z, bodyLightK);   // lit from the Sun
                 if (rad > 1) { FarBall fb; fb.x = q.first; fb.y = q.second; fb.r = rad; farOcc.balls.push_back(fb); }   // 0.77.0: a ball drawn without its spin (a circle)
             }
             drawRings(ringsHere, spins ? &sc : nullptr, q, ringR, sun, sunElev, false);
@@ -1225,6 +1233,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     for (int r2 = 0; r2 < 3; r2++) for (int c2 = 0; c2 < 3; c2++) K[3 * r2 + c2] = static_cast<float>(dot(V[c2], axes[r2]));
                     render::Renderer2D::PlanetLight pl;   // 0.51.2: Earth's shadow (lunar eclipses), at the real places
                     pl.sunAng = sunAngAt(b.pos);
+                    pl.k = static_cast<float>(lightAt(b.pos));       // 0.85.0: the planet's distance (the moon's own differs by under 0.3 %)
                     if (realM) addOcc(pl, scr(sys.moonGeocentric() * -1.0, m.radiusKm * kKm), b.radius / (m.radiusKm * kKm));
                     R.planet(mp.first, mp.second, mr, hexColor(marks::kMoon), sun.x, sun.y, sun.z, K, render::Map::Moon, nullptr, 0, 1.0, polarRatio("Moon"), true, &pl);   // 0.50: McEwen's lunar law
                 } else if (realS && mr > 3 && R.hasMap(render::mapForBody(m.name))) {
@@ -1237,10 +1246,11 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     for (int r2 = 0; r2 < 3; r2++) for (int c2 = 0; c2 < 3; c2++) K[3 * r2 + c2] = static_cast<float>(dot(V[c2], axes[r2]));
                     render::Renderer2D::PlanetLight pl;   // 0.51.2: the planet's shadow (the moon eclipsed), at the real place (sp, km from the planet)
                     pl.sunAng = sunAngAt(b.pos);
+                    pl.k = static_cast<float>(lightAt(b.pos));
                     addOcc(pl, scr(sp * (-kKm), m.radiusKm * kKm), b.radius / (m.radiusKm * kKm));
                     R.planet(mp.first, mp.second, mr, hexColor(marks::kMoon), sun.x, sun.y, sun.z, K, render::mapForBody(m.name), nullptr, 0, 1.0, 1.0, false, &pl);
                 } else   // no map (Titan: its haze hides the surface in visible light; Enceladus: only an airbrushed map; Titania, Oberon, Deimos: none): a grey ball, the card says "colour not measured here"
-                    R.sphere(mp.first, mp.second, mr, hexColor(marks::kMoon), sun.x, sun.y, sun.z);
+                    R.sphere(mp.first, mp.second, mr, hexColor(marks::kMoon), sun.x, sun.y, sun.z, lightAt(b.pos));
                 if (mtiny) { R.fadeDisc(mp.first, mp.second, 5.5, hexColor(marks::kMoon, 0.3f)); R.disc(mp.first, mp.second, 2.0, hexColor(marks::kMoon)); }   // 0.23 stage 2: a dot with a soft glow, as the tiny planets (was a faint grey ring)
                 if (on) hiRing(mp.first, mp.second, md + 5);
             }

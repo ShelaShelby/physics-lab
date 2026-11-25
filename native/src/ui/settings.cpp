@@ -94,7 +94,7 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     const orbit::ViewSettings& v = app.set;
     p.orbit = {{"view3D", v.view3D ? "1" : "0"}, {"zoom", num(v.zoom)}, {"tspeed", num(v.tspeed)}, {"trueScale", v.trueScale ? "1" : "0"},
                {"fullTrails", v.fullTrails ? "1" : "0"}, {"moons", v.moons ? "1" : "0"}, {"dwarfs", v.dwarfs ? "1" : "0"}, {"comets", v.comets ? "1" : "0"},
-               {"belts", v.belts ? "1" : "0"}, {"physics", orbit::planetPhysicsText(v.realPlanets)}, {"gr", v.relativity ? "1" : "0"}, {"gr29", "1"}, {"wobble", v.exaggerateWobble ? "1" : "0"}, {"sky", kSky[int(v.sky)]}, {"cons", kCons[int(v.cons)]}, {"far", v.far ? "1" : "0"}};
+               {"belts", v.belts ? "1" : "0"}, {"physics", orbit::planetPhysicsText(v.realPlanets)}, {"gr", v.relativity ? "1" : "0"}, {"gr29", "1"}, {"wobble", v.exaggerateWobble ? "1" : "0"}, {"truelight", v.trueLight ? "1" : "0"}, {"sky", kSky[int(v.sky)]}, {"cons", kCons[int(v.cons)]}, {"far", v.far ? "1" : "0"}};
     if (!v.orbits) p.orbit["orbits"] = "0";                 // 0.23 stage 2: saved only when off (on is the default): older settings files stay byte for byte
     const atom::AtomParams& a = app.atom.p;
     p.atom = {{"scale", a.scale}, {"zoom", num(a.zoom)}, {"qstyle", a.qstyle}, {"detail", a.detail}, {"style", a.style}, {"Z", std::to_string(a.Z)},
@@ -140,6 +140,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
     readBool(p.orbit, "dwarfs", v.dwarfs); readBool(p.orbit, "comets", v.comets); readBool(p.orbit, "belts", v.belts); readBool(p.orbit, "far", v.far); readBool(p.orbit, "orbits", v.orbits);
     if (p.orbit.count("gr29")) readBool(p.orbit, "gr", v.relativity);   // 0.29: relativity is on by default; a "gr" saved before 0.29 (nearly always the old default, off) is not read
     readBool(p.orbit, "wobble", v.exaggerateWobble);
+    readBool(p.orbit, "truelight", v.trueLight);   // 0.85.0
     if (p.orbit.count("physics")) { bool real = v.realPlanets; if (orbit::planetPhysicsFromText(p.orbit.at("physics"), real)) v.realPlanets = real; }   // a bad value keeps the default
     for (int i = 0; i < 3; i++) {
         if (p.orbit.count("sky") && p.orbit.at("sky") == kSky[i]) v.sky = orbit::SkyMode(i);

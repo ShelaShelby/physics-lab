@@ -34,5 +34,13 @@ nasa_eclipse_photography.html
     So no corona or glow is drawn round the Sun: on any screen it would be far below one grey step next to the disc. Until 0.49.3 a yellow glow
     out to 3 solar radii, in the Sun's colour, was drawn (no source, no label).
 
-Not done (ROADMAP): the Sun's limb darkening is still the lab's own blend (src/render/shaders.h, mode 3). Until 0.84.1 the measured law could not be
-opened from the session; since 0.84.1 Neckel & Labs 1994 is saved (above) and the fix is planned in native/PLAN_REVIEW.md.
+[0.85.0] The Sun's limb darkening is Neckel & Labs 1994 (Table I, from neckel_labs_1994_SoPh153_91.extract.txt) weighted by the ASTM G173 spectrum
+and the CIE observer per screen channel: tools/make_sun_limb_data.py writes src/render/sun_limb_data.inc, src/render/sun_limb.h makes the coefficients.
+Used by the Sun's ball (kPlanetFS uMode 4) and the eclipses. Alpha Centauri's stars keep the lab's own blend (shaders.h mode 3): their edges are not measured here.
+
+spots/ (0.85.0, the owner's answer of 25 Nov 2026: the packed table is kept in this public repo)
+    sunspot_groups.bin: the measured sunspot groups, one row per group per day (date, latitude, Carrington longitude, area), 1874-05-09 to 2026-11-24, 255,250
+    rows; made by tools/make_sunspot_table.py from the Greenwich and USAF/NOAA group records (NASA Marshall) and NOAA's daily Solar Region Summaries
+    (NCEI), all saved in the private repo at data/sun/spots/ (native/data/SOURCES.md). US government data (NASA, NOAA); the RGO part's terms are not stated
+    on NASA's page. Read by src/orbit/sunspots.cpp (built into the program).
+    Extracts: g1874, g1950, g1976, g2016 (rows the tests read back), noaa_srs_20240510 (part I), format, msfc_greenwch_page.

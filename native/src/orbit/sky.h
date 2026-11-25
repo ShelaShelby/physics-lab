@@ -79,7 +79,7 @@ StarDraw starDraw(double mag);
 StarDraw starDrawLight(double light);
 double farBV(const char* key);                      // 0.50: a far-away star's measured B−V (HYG v4.1), NaN if it has none
 
-// The far-away things. Index 0..kFarCount-1: stars and objects; then the two Voyagers.
+// The far-away things. Index 0..kFarCount-1: stars and objects; then the two Voyagers; then (0.85.0) Sedna, 2012 VP113 and 2015 TG387.
 struct FarItem {
     int index = -1;
     std::string key, name, kind;                    // kind: "star", "object", "bh", "probe"
@@ -88,9 +88,12 @@ struct FarItem {
     Vec3 pos;                                        // m
     const FarData* far = nullptr;
     const ProbeData* probe = nullptr;
+    int tno = -1;                                    // 0.85.0: kind "tno": its row (Sedna, 2012 VP113, 2015 TG387)
     int year = 0;                                    // 0.49: the year of the date it was worked out for (a probe card says "will leave" before its heliopause year)
 };
-int farCount();                                     // stars and objects + probes
+int farCount();                                     // stars and objects + probes + (0.85.0) the three trans-Neptunian objects
+Vec3 tnoPositionAU(int k, double jdTDB);            // 0.85.0: trans-Neptunian object k (0 Sedna, 1 2012 VP113, 2 2015 TG387): heliocentric, ecliptic J2000, AU
+int tnoIndex(const std::string& key);               // "sedna", "vp113", "tg387"; -1 if unknown
 // The far thing number `index` at the simulation's current date. False if it does not
 // exist then (the Voyagers are only shown from 1990 on).
 bool farItem(const SolarSystem& sys, int index, FarItem& out);

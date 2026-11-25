@@ -8,6 +8,7 @@
 #include "card_text.h"
 #include "date_text.h"
 #include "format.h"
+#include "kepler.h"
 #include "solar_system.h"
 #include "units.h"
 
@@ -21,6 +22,22 @@ struct VoyagerRow { double jd, x, y, z; };   // 0.49: JPL Horizons, data/jpl/voy
 
 static constexpr int kFarStatic = sizeof(kFar) / sizeof(kFar[0]);
 static constexpr int kProbeCount = sizeof(kProbes) / sizeof(kProbes[0]);
+// 0.85.0 (PLAN_REVIEW.md R4, the owner's answer of 25 Nov 2026): Sedna, 2012 VP113 and 2015 TG387, "called inner Oort cloud objects by their discoverers; JPL lists them
+// as trans-Neptunian objects" (Brown, Trujillo & Rabinowitz 2004; Sheppard et al. 2019: native/data/oort/arxiv; JPL SBDB orbit class "TNO":
+// native/data/oort/sbdb_orbit_class.extract.txt). Their heliocentric osculating elements, ecliptic J2000, from the JPL Small-Body Database API with full precision
+// (data/oort/sbdb_full_*.json, read 2026-11-25): a (au), e, i, node, peri (deg), mean anomaly (deg) at the epoch (JD, TDB), mean motion n (deg/day), JPL's solution.
+// Moved on that fixed ellipse (two bodies: the Sun and it). Measured here against JPL Horizons (data/oort/horizons_*.txt): 0.0001 au off on 2026-11-25, about
+// 0.1 au (0.13 % of its distance) in 1990 and 2060 (tests/test_review085.inc).
+struct TnoData { const char* key; const char* name; double a, e, i, om, w, ma, n, epochJD; const char* soln; const char* discovery; };
+static const TnoData kTnos[] = {
+    {"sedna", "Sedna", 543.7195289104732, .8598824585187618, 11.92527582847476, 144.5061662673739, 311.0987725939751, 358.5956944005428, 7.773948799642578E-5, 2461200.5, "JPL#51",
+     "Brown, Trujillo & Rabinowitz 2004 (arXiv:astro-ph/0404456), its discoverers: \"a candidate inner Oort cloud planetoid\""},
+    {"vp113", "2012 VP113", 267.5209861941053, .6985589359876868, 24.00179208811373, 90.8926204194851, 294.2852296107872, 3.834281215098069, .0002252512910019064, 2461200.5, "JPL#11",
+     "Sheppard et al. 2019 (AJ, doi:10.3847/1538-3881/ab0895): \"the third known IOC after Sedna and 2012 VP113\""},
+    {"tg387", "2015 TG387 (Leleakuhonua)", 1344.905387006164, .951905319172072, 11.67887107280718, 301.1344316943008, 118.2293603285907, 359.6185683300886, 1.998326622088789E-5, 2461200.5, "JPL#9",
+     "Sheppard et al. 2019 (AJ, doi:10.3847/1538-3881/ab0895), its discoverers: \"the third known IOC\""},
+};
+static constexpr int kTnoCount = sizeof(kTnos) / sizeof(kTnos[0]);
 
 static int base36(const char* s, int n) {
     char buf[8] = {};
@@ -165,7 +182,16 @@ const Sky& skyData() {
     return S;
 }
 
-int farCount() { return kFarStatic + kProbeCount; }
+int farCount() { return kFarStatic + kProbeCount + kTnoCount; }
+
+Vec3 tnoPositionAU(int k, double jdTDB) {
+    const TnoData& t = kTnos[k];
+    const double d2r = kPi / 180, E = keplerE(t.e, std::fmod(t.ma + t.n * (jdTDB - t.epochJD), 360.0));
+    const double xv = t.a * (std::cos(E) - t.e), yv = t.a * std::sqrt(1 - t.e * t.e) * std::sin(E);
+    const double v = std::atan2(yv, xv), r = std::hypot(xv, yv), u = v + t.w * d2r, O = t.om * d2r, I = t.i * d2r;
+    return {r * (std::cos(O) * std::cos(u) - std::sin(O) * std::sin(u) * std::cos(I)), r * (std::sin(O) * std::cos(u) + std::cos(O) * std::sin(u) * std::cos(I)), r * std::sin(u) * std::sin(I)};
+}
+int tnoIndex(const std::string& key) { for (int k = 0; k < kTnoCount; k++) if (key == kTnos[k].key) return k; return -1; }
 
 double voyagerKms() { return kProbes[0].kms; }
 double voyagerYearsFromSun(double au) { return au / (kProbes[0].kms * kAuPerYearPerKms); }
@@ -181,6 +207,7 @@ double farDistanceLy(const char* key) {
 int farIndexOf(const std::string& key) {
     for (int i = 0; i < kFarStatic; i++) if (key == kFar[i].key) return i;
     for (int i = 0; i < kProbeCount; i++) if (key == kProbes[i].key) return kFarStatic + i;
+    for (int i = 0; i < kTnoCount; i++) if (key == kTnos[i].key) return kFarStatic + kProbeCount + i;
     return -1;
 }
 
@@ -194,6 +221,15 @@ bool farItem(const SolarSystem& sys, int index, FarItem& f) {
         f.dir = lonLat(d.lon, d.lat);
         f.ly = d.ly; f.au = d.ly * kLightYearAU;
         f.pos = f.dir * (f.au * kAU);
+        return true;
+    }
+    if (index >= kFarStatic + kProbeCount) {                   // 0.85.0: Sedna, 2012 VP113, 2015 TG387 on their JPL orbits
+        const int k = index - kFarStatic - kProbeCount;
+        const TnoData& t = kTnos[k];
+        f.key = t.key; f.name = t.name; f.kind = "tno";
+        const Vec3 q = tnoPositionAU(k, sys.julianDayTDB());
+        f.au = length(q); f.dir = q * (1 / f.au); f.pos = q * kAU;
+        f.tno = k;
         return true;
     }
     const ProbeData& p = kProbes[index - kFarStatic];
@@ -256,6 +292,17 @@ void farCard(const FarItem& f, Card& c) {
         return out;
     };
     c = Card{};
+    if (f.kind == "tno" && f.tno >= 0) {
+        const TnoData& t = kTnos[f.tno];
+        const double q = t.a * (1 - t.e), Q = t.a * (1 + t.e), years = 360 / t.n / 365.25;
+        c.title = f.name + " · trans-Neptunian object";
+        c.lines = {"Distance from the Sun: " + fmt::fixed(f.au, 1) + " AU",
+                   "Orbit: " + fmt::fixed(q, 0) + " to " + fmt::commas(std::stod(fmt::precision(Q, 3))) + " AU from the Sun, once in about " + fmt::commas(std::stod(fmt::precision(years, 2))) + " years"};
+        for (auto& l : wrap("Called inner Oort cloud objects by their discoverers; JPL lists them as trans-Neptunian objects.", 46)) c.lines.push_back(l);
+        for (auto& l : wrap(std::string("Source: ") + t.discovery + ".", 46)) c.lines.push_back(l);
+        for (auto& l : wrap(std::string("Orbit: JPL Small-Body Database (") + t.soln + "), a fixed ellipse round the Sun: about 0.1 AU off JPL Horizons in 1990 and 2060.", 46)) c.lines.push_back(l);
+        return;
+    }
     if (f.probe) {
         const double hrs = f.au * 499.005 / 3600;          // light needs 499.005 s per AU
         c.title = f.name + " · spacecraft";

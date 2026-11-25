@@ -152,7 +152,7 @@ std::vector<LegendEntry> legendEntries(const AppState& app) {
     if (app.set.belts) {
         std::vector<std::string> cols;
         for (const orbit::BeltGroup& b : app.sys.belts) cols.push_back(b.color);
-        v.push_back({LegendEntry::Dots, cols, "A belt: each dot is a real asteroid, the largest known (the Oort cloud's dots are made up)"});
+        v.push_back({LegendEntry::Dots, cols, "A belt: each dot is a real asteroid, the largest known (the Oort cloud's dots are a sample of a published model, not objects)"});
     }
     v.push_back({LegendEntry::Cross, {"#ffffff"}, "The barycentre: the balance point of the Solar System"});
     v.push_back({LegendEntry::Band, {hex(orbit::marks::kHabitable)}, "Habitable zone (Kopparapu et al. 2014)"});
@@ -369,6 +369,15 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         real::markLabels("orbit", "sky", {"Soft", "Full", "Off"});
         if (pSegmented(p, "show.sky", {"Soft", "Full", "Off"}, &sky)) set.sky = static_cast<orbit::SkyMode>(sky);
         pCaption(p, sky == 0 ? "dim close up, brighter as you zoom out" : sky == 1 ? "always bright" : "plain background");
+        if (!set.alphaCen) {   // 0.85.0 (outside review, R1): the sunlight at each body's distance, a camera's exposure (orbit/true_light.h)
+            pHeading(p, "Lighting");
+            int light = set.trueLight ? 0 : 1;
+            real::markLabels("orbit", "light", {"True sunlight", "Even (not realistic)"});
+            if (pSegmented(p, "show.light", {"True sunlight", "Even (not realistic)"}, &light)) set.trueLight = light == 0;
+            pCaption(p, set.trueLight ? (app.view.exposureText.empty() ? std::string("Each body lit by the sunlight at its distance, as a camera set for the followed body would show it.") : app.view.exposureText) +
+                                            " A camera, not an eye: a screen's limited range clips brighter bodies to white and lets dimmer ones go black."
+                                      : std::string("Every body lit as if it were at Earth's distance from the Sun, so all are easy to see. Not realistic."));
+        }
         if (set.sky != orbit::SkyMode::Off) {
             pHeading(p, "Constellations");
             int c = static_cast<int>(set.cons);
@@ -502,6 +511,8 @@ void orbitSearch(AppState& app, const SearchAdd& add) {
     add("Show", "Constellations: Off", "set:cons.off", [&s] { s.cons = orbit::ConsMode::Off; });
     add("Show", "Constellations: Lines", "set:cons.lines", [&s] { s.sky = s.sky == orbit::SkyMode::Off ? orbit::SkyMode::Soft : s.sky; s.cons = orbit::ConsMode::Lines; });
     add("Show", "Constellations: Lines and names", "set:cons.names", [&s] { s.sky = s.sky == orbit::SkyMode::Off ? orbit::SkyMode::Soft : s.sky; s.cons = orbit::ConsMode::LinesAndNames; });
+    add("Show", "Lighting: True sunlight", "set:light.true", [&s] { s.trueLight = true; });   // 0.85.0 (R1)
+    add("Show", "Lighting: Even (not realistic)", "set:light.even", [&s] { s.trueLight = false; });
     add("Physics", "Planet physics: Simple", "set:simple", [&s] { s.realPlanets = false; });
     add("Physics", "Planet physics: Real", "set:real", [&s] { s.realPlanets = true; });
     // 0.22 stage 7: both only work with Real planet physics (the Controls panel shows them only then): turning one on from search also turns Real on, so the click is seen

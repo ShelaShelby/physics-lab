@@ -1,0 +1,29 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/oort/horizons_2012VP113_1990_2026_2060.txt
+# Reference: JPL Horizons: 2012 VP113, heliocentric (500@10) ecliptic J2000 position and velocity vectors in au and au/day at 1990-01-01, 2026-11-25 and 2060-01-01 00:00 TDB, as received
+# URL: https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND='2012 VP113;'&EPHEM_TYPE='VECTORS'&CENTER='500@10'&REF_PLANE='ECLIPTIC'&OUT_UNITS='AU-D'&VEC_TABLE='2'&TLIST='2447892.5','2461369.5','2473459.5'&CSV_FORMAT='YES'
+# Date read: 2026-11-25
+# sha256 of the original: c4746f2c8cd3d617b74147252383d2ad9f0d8a9d24ef351ce8e0b8a329788b14
+# Place in the original: the header and the three rows
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: tests/test_review085.inc (the three objects against Horizons)
+#--- begin the target
+Target body name: (2012 VP113)                    {source: JPL#11}
+#--- end
+#--- begin the frame: Center body name
+Center body name: Sun (10)                        {source: DE441}
+#--- end
+#--- begin the frame: Output units
+Output units    : AU-D
+#--- end
+#--- begin the frame: Reference frame
+Reference frame : Ecliptic of J2000.0
+#--- end
+#--- begin the rows
+$$SOE
+2447892.500000000, A.D. 1990-Jan-01 00:00:00.0000,  6.266224720256773E+01,  4.242704708101708E+01, -2.822953604223525E+01, -1.106774140559765E-03,  2.183333920371744E-03,  4.778821801701293E-04,
+2461369.500000000, A.D. 2026-Nov-25 00:00:00.0000,  4.499922854551237E+01,  6.931621758815054E+01, -2.051499198619596E+01, -1.494832770851722E-03,  1.782098468770758E-03,  6.534753073533003E-04,
+2473459.500000000, A.D. 2060-Jan-01 00:00:00.0000,  2.573400446683596E+01,  8.844132670363528E+01, -1.203583479165641E+01, -1.681772409382176E-03,  1.384395995701020E-03,  7.385853731870600E-04,
+$$EOE
+#--- end

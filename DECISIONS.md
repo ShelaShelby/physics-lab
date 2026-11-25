@@ -13,6 +13,9 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
 - The Sun: real spots for dates where they were measured, a plain Sun with a sentence where they were not. The edge darkening from a measured law, the same law in the eclipse code.
 - Oort cloud: no invented dots. Real objects only if a published list says they belong to it. Otherwise a labelled region.
 - The order of the fixes: 0.85.0 Orbit Lab, 0.86.0 Atom Lab and Film, 0.87.0 the Black Hole disc.
+- R3: the packed sunspot table goes in the public repo (it holds only measured positions and areas). No download step.
+- R4: the Oort cloud stays visible. Its dots are placed by a published model of the cloud (how many objects at each distance, its shape), labelled "Estimated from models: no object in it has been seen". Sedna, 2012 VP113 and 2015 TG387 are shown on their JPL SBDB orbits with the sentence "called inner Oort cloud objects by their discoverers; JPL lists them as trans-Neptunian objects".
+- The benchmark limit is raised once to 4.9 minutes for the three scenes of 0.85.0 (orbit.true_light, orbit.sun_edge, orbit.oort_region).
 
 ## 23 Nov 2026
 - One short CLAUDE.md holds the rules. DECISIONS.md is a record only.

@@ -19,6 +19,7 @@ Rules for new checks are in CLAUDE.md (Build and test). Git keeps every deleted 
 | check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision); 0.79.0: the streaks' factor at spin 0.99, and toneCompare's case "streaks" (the disc's surface, streaks and clump, at most 1 % of pixels over 8 levels); 0.81.0: Film's see-through disc with the streaks (PLBHFILMSOFT, two views; the part took 67 s on the build machine); 0.84.0: toneCompare's cases close, closespin, pole and closetable (the held camera's own shift at 2.2 GM/c², no spin, spin 0.99, over the pole, the table's pass) |
 | check_blackhole.py:precisioncard | 74 | KEEP | ui_blackhole_sky | GPU vs CPU: the card's light paths against the double-precision reference (split from precision) |
 | check_orbit_ui.py:planets | 22 (new in 0.77.0) | KEEP | ui_orbit_card | GPU vs CPU: six balls with maps (measured brightness, Earth's clouds and air) against tests/planet_picture.cpp |
+| check_orbit_ui.py:review085 | 26 (new in 0.85.0, alone on the build machine) | KEEP | ui_orbit_card | GPU vs CPU: True sunlight (Earth, Jupiter, Neptune followed), an eclipse with the Sun's measured edge, the Sun with its sunspot outlines, against tests/planet_picture.cpp |
 
 ## The groups in 0.76.0 (seconds, build machine, 4 at a time)
 

@@ -93,6 +93,16 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "blackhole.close_spin", BenchKind::BlackHoleCloseSpin, -1, "Black Hole Lab, circling at the closest distance and the top spin",
             "A feeding hole at spin 0.99 (the top), the disc on, Real, the camera at 2.2 GM/c\xC2\xB2 (the closest) with a 360\xC2\xB0 view (the widest): dragged round 2 rad "
             "a second and up or down for 0.6 s, then let go to glide 0.6 s, over and over. Each ray's colour and light carry the camera's own shift.");
+        // 0.85.0 (the outside review, PLAN_REVIEW.md R1-R4; the limit raised once to 4.9 minutes by the owner, 25 Nov 2026)
+        add(true, "orbit.true_light", BenchKind::OrbitTrueLight, -1, "Orbit Lab, True sunlight: Neptune followed, then Earth, in turn",
+            "Lighting True sunlight (each body by its distance from the Sun, the exposure set for the followed one, its readout), 3D, true scale, moons on: Neptune followed "
+            "close up (zoom 3.9) and Earth (zoom 4.5) in turn every 1.6 s, the camera turning 0.5 rad a second. Each switch sets a new exposure for every ball and ring.");
+        add(true, "orbit.sun_edge", BenchKind::OrbitSunEdge, -1, "Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse",
+            "The Sun followed, filling the view (zoom 2.6), on 10 May 2024 00:00 UT (7 recorded sunspot groups, drawn as outlines), its edge by Neckel & Labs 1994, "
+            "turning; after half the time Earth at the app's eclipse date (12 Aug 2026 17:46 UT), the Moon's shadow on it with the measured edge, turning.");
+        add(true, "orbit.oort_region", BenchKind::OrbitOortRegion, -1, "Orbit Lab, zoomed out to the Oort cloud's model dots",
+            "The heaviest view's settings (belts and the Oort cloud's 3,000 model dots, every extra, the full sky) zoomed out to show 100,000 AU (zoom -4.4), "
+            "Sedna, 2012 VP113 and 2015 TG387 marked, the camera turning 0.5 rad a second.");
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
         add(false, "orbit.saturn", BenchKind::OrbitSaturn, -1, "Orbit Lab, Saturn close up, the camera turning",
             "Saturn followed, true scale, 3D, zoom 4.1 (log10, the control goes to 5.5; the rings and part of the planet fill the picture), the camera turning 0.5 rad a "
@@ -218,6 +228,8 @@ double benchPlannedS() {
 // line): 346.4 s planned; the limit is 5.8 minutes now (nothing shortened, REPORT 0.82.0)
 // 0.83.0: the Hard list cleaned by the owner's rule of 24 Nov 2026 (1 % low at least 1.5 x the refresh rate moves a scene to All scenes): 26 scenes (17 kept,
 // 9 new) and 42 waits (response.blackhole_dolly): 260.2 s planned. The limit is fixed at 4.5 minutes (kBenchLimitS) and is not raised again.
+// 0.85.0: 30 scenes (orbit.true_light, orbit.sun_edge, orbit.oort_region) and 45 waits (response.sunspot_table): 291.0 s planned. The owner raised the limit
+// once to 4.9 minutes for them (25 Nov 2026, DECISIONS.md).
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= kBenchLimitS,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,

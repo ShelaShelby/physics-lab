@@ -64,6 +64,7 @@ std::vector<PickGroup> pickGroups(const AppState& app) {
         for (std::size_t gi = 0; gi < app.sys.belts.size(); gi++)
             if (app.sys.belts[gi].key == b.key) belts.items.push_back({b.name, b.color, {Selection::Belt, 0, static_cast<int>(gi)}, "", b.zoom});
     static const struct { const char* key; const char* name; const char* color; } F[] = {
+        {"sedna", "Sedna", "#b9a58c"}, {"vp113", "2012 VP113", "#b9a58c"}, {"tg387", "2015 TG387 (Leleakuhonua)", "#b9a58c"},   // 0.85.0 (R4)
         {"v1", "Voyager 1", "#ffd27a"}, {"v2", "Voyager 2", "#ffd27a"}, {"acen", "Alpha Centauri", "#ffe9b0"}, {"sirius", "Sirius", "#cfe0ff"},
         {"vega", "Vega", "#cfe0ff"}, {"pleia", "Pleiades", "#8fd0ff"}, {"m42", "Orion Nebula", "#8fd0ff"}, {"sgra", "Galactic centre", "#cfd6e6"}};
     for (const auto& f : F) far.items.push_back({f.name, f.color, {Selection::Far, 0, farIndexOf(f.key)}, "", 0});
@@ -233,10 +234,10 @@ std::string orbitStateLine(const AppState& app) {
     const unsigned long long key = app.view.pictureKey(app.sys, app.set, 0, 0, 1, app.canvasW, app.canvasH);
     char b[900];
     std::snprintf(b, sizeof b,
-                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d moonoff=%.2f,%.2f planetoff=%.2f,%.2f cam=%.6f,%.6f selxy=%.2f,%.2f key=%llu",
+                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d light=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d moonoff=%.2f,%.2f planetoff=%.2f,%.2f cam=%.6f,%.6f selxy=%.2f,%.2f key=%llu",
                   static_cast<long long>(app.sys.epochMs), app.sys.t, app.sys.jumped ? 1 : 0, app.paused ? 1 : 0, s.tspeed,
                   s.view3D ? 1 : 0, s.trueScale ? 1 : 0, s.fullTrails ? 1 : 0, s.moons ? 1 : 0, s.dwarfs ? 1 : 0, s.comets ? 1 : 0, s.belts ? 1 : 0, s.far ? 1 : 0,
-                  static_cast<int>(s.sky), static_cast<int>(s.cons), s.realPlanets ? 1 : 0, s.relativity ? 1 : 0, s.exaggerateWobble ? 1 : 0, s.zoom,
+                  static_cast<int>(s.sky), static_cast<int>(s.cons), s.realPlanets ? 1 : 0, s.relativity ? 1 : 0, s.exaggerateWobble ? 1 : 0, s.trueLight ? 1 : 0, s.zoom,
                   static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0, s.alphaCen ? 1 : 0,
                   app.view.drawnSel().ok ? app.view.drawnSel().moonX : 9999.0, app.view.drawnSel().ok ? app.view.drawnSel().moonY : 9999.0, app.view.drawnSel().planetX, app.view.drawnSel().planetY,
                   app.view.yaw, app.view.pitch, sx, sy, key);

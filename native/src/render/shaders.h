@@ -41,13 +41,15 @@ void main() {
     if (mode == 1) { fragColor = vec4(vColor.rgb, vColor.a * edge); return; }
     if (mode == 2) {                                         // lit ball: Lambert shading, light from the real direction of the Sun (right, down, towards you; 0.46.7)
         vec3 n = vec3(vUV.x, -vUV.y, sqrt(max(0.0, 1.0 - d * d)));
-        vec3 L = normalize(vec3(vParam.y, -vParam.z, vParam.w));
-        float lit = max(dot(n, L), 0.0);
+        vec3 Lr = vec3(vParam.y, -vParam.z, vParam.w);       // 0.85.0: its length is the sunlight factor (R1: true dimming times the exposure; 1 = even lighting)
+        float kL = length(Lr);
+        vec3 L = Lr / max(kL, 1e-30);
+        float lit = max(dot(n, L), 0.0) * kL;
         vec3 c = srgbEncode(srgbDecode(uSpace) + srgbDecode(vColor.rgb) * lit);   // 0.50: in linear light, no ambient floor, no highlight (render/shading.h)
         fragColor = vec4(c, vColor.a * edge);
         return;
     }
-    if (mode == 3) {                                         // the Sun: hot middle, darker edge (limb darkening: the lab's own blend, NOT a measured law; the Sun's card says so; ROADMAP)
+    if (mode == 3) {                                         // a star's disc: hot middle, darker edge (the lab's own blend, NOT a measured law). 0.85.0: Alpha Centauri's stars only; the Sun is kPlanetFS uMode 4 (Neckel & Labs 1994)
         vec3 hot = mix(vColor.rgb, vec3(1.0, 1.0, 0.94), 0.6);
         vec3 rim = mix(vColor.rgb, vec3(0.47, 0.16, 0.0), 0.45);
         vec3 c = d < 0.55 ? mix(hot, vColor.rgb, d / 0.55) : d < 0.9 ? mix(vColor.rgb, mix(vColor.rgb, vec3(0.47, 0.16, 0.0), 0.2), (d - 0.55) / 0.35)
@@ -385,26 +387,49 @@ uniform vec3 uSpace;         // 0.50: the colour of empty space (sRGB); a lit ba
 uniform int uClouds;         // 0.77.0: 1 = the map's alpha is Earth's cloud cover (render/shading.h cloudsOver)
 uniform float uAlbedoK;      // 0.77.0: the map's brightness factor (render/planet_maps.h mapAlbedo; 1 for a plain colour)
 uniform int uLunar;          // 0.50: 1 = the Moon: McEwen's lunar photometric function instead of Lambert (render/shading.h mcewenLunar)
+uniform float uLightK;       // 0.85.0 (R1): the sunlight factor (1 au / d)^2 times the exposure (orbit/true_light.h); 1 = even lighting
+uniform vec3 uLimb[6];       // 0.85.0 (R2): the Sun's edge, Neckel & Labs 1994: coefficient n of mu^n for r, g, b, each channel summing to 1 (render/sun_limb.h)
+uniform vec3 uSunC;          // 0.85.0 (uMode 4): the Sun's disc centre, linear sRGB, brightest channel 1
+uniform int uSpotN;          // 0.85.0 (R3, uMode 4): the sunspot groups' outlines: centre on the Sun's ball (its own frame, unit vector) and angular radius (radians)
+uniform vec4 uSpot[64];
 out vec4 fragColor;
 const float PI = 3.14159265358979;
 // 0.50: IEC 61966-2-1 (sRGB) transfer functions; C++ twin render/shading.h (srgbDecode, srgbEncode)
 vec3 srgbDecode(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }
 vec3 srgbEncode(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }
-// 0.51.2: C++ twins render/shading.h sunCovered and sunlightPast (eclipse shadows; the Sun evenly bright)
-float sunCovered(float a, float b, float th) {
-    if (th >= a + b) return 0.0;
-    if (th <= abs(a - b)) return b >= a ? 1.0 : (b * b) / (a * a);
-    float p = acos(clamp((th * th + a * a - b * b) / (2.0 * th * a), -1.0, 1.0)), q = acos(clamp((th * th + b * b - a * a) / (2.0 * th * b), -1.0, 1.0));
-    float lens = a * a * p + b * b * q - 0.5 * sqrt(max(0.0, (-th + a + b) * (th + a - b) * (th - a + b) * (th + a + b)));
-    return clamp(lens / (PI * a * a), 0.0, 1.0);
+// 0.85.0 (R2): the eclipses with the Sun's measured edge, per channel. C++ twins render/sun_limb.h sunCoveredLimb and sunlightPastLimb (16-point
+// Gauss-Legendre over the cut circles, t from 0 to pi with r = r0 + (r1 - r0)(1 - cos t) / 2; the whole circles exactly).
+const float GLX[8] = float[8](0.0950125098, 0.2816035508, 0.4580167777, 0.6178762444, 0.7554044084, 0.8656312024, 0.9445750231, 0.9894009350);
+const float GLW[8] = float[8](0.1894506105, 0.1826034150, 0.1691565194, 0.1495959888, 0.1246289713, 0.0951585117, 0.0622535239, 0.0271524594);
+vec3 limbP(float mu) { vec3 p = vec3(0.0); float m = 1.0; for (int n = 0; n < 6; n++) { p += uLimb[n] * m; m *= mu; } return p; }
+vec3 limbFlux() { vec3 f = vec3(0.0); for (int n = 0; n < 6; n++) f += 2.0 * uLimb[n] / float(n + 2); return f; }
+vec3 sunCoveredLimb(float a, float b, float th) {
+    if (th >= a + b) return vec3(0.0);
+    float B = b / a, T = th / a;
+    vec3 full = vec3(0.0);
+    float rin = min(1.0, max(0.0, B - T));
+    if (rin > 0.0) { float q = 1.0 - rin * rin; for (int n = 0; n < 6; n++) full += uLimb[n] * (2.0 / float(n + 2)) * (1.0 - pow(q, float(n + 2) / 2.0)); }
+    float r0 = max(rin, abs(T - B)), r1 = min(1.0, T + B);
+    vec3 cut = vec3(0.0);
+    if (r1 > r0 && T > 0.0) {
+        for (int k = 0; k < 16; k++) {
+            float x = k < 8 ? -GLX[7 - k] : GLX[k - 8], w = k < 8 ? GLW[7 - k] : GLW[k - 8];
+            float t = PI / 2.0 * (x + 1.0);
+            float r = r0 + (r1 - r0) * (1.0 - cos(t)) / 2.0, dr = (r1 - r0) * sin(t) / 2.0 * PI / 2.0 * w;
+            float ca = clamp((r * r + T * T - B * B) / (2.0 * r * T), -1.0, 1.0);
+            cut += limbP(sqrt(max(0.0, 1.0 - r * r))) * (2.0 * acos(ca) * r * dr);
+        }
+        cut /= PI;
+    }
+    return clamp((full + cut) / limbFlux(), vec3(0.0), vec3(1.0));
 }
-float sunlightPast(vec3 s, vec4 o, vec3 L) {
+vec3 sunlightPast(vec3 s, vec4 o, vec3 L) {
     vec3 d = o.xyz - s;
     float dist = length(d);
-    if (dist <= o.w) return 0.0;
+    if (dist <= o.w) return vec3(0.0);
     float along = dot(d, L);
-    if (along <= 0.0) return 1.0;
-    return 1.0 - sunCovered(uSunAng, asin(o.w / dist), atan(length(cross(d, L)), along));
+    if (along <= 0.0) return vec3(1.0);
+    return vec3(1.0) - sunCoveredLimb(uSunAng, asin(o.w / dist), atan(length(cross(d, L)), along));
 }
 // C++ twins render/shading.h airMass and airTableLookup
 float airMass(float mu) { mu = clamp(mu, 0.0, 1.0); float k = uAirK.x; return sqrt(k * k * mu * mu + 2.0 * k + 1.0) - k * mu; }
@@ -450,6 +475,7 @@ void main() {
     // too sharp towards the poles, where a map row is 1/cos(lat) longer than its circle, and towards the limb). The derivatives are taken here, before any discard
     // (they need the 2x2 block), and the longitude's jump of a whole turn at the map's seam is taken out. uLod stays the floor (no sharper than before).
     vec2 uv = vec2((lon - uLon0) / (2.0 * PI) + 0.5, 0.5 - lat / PI);
+    float pw = max(length(dFdx(b)), length(dFdy(b)));             // 0.85.0: the pixel's size on the unit ball (radians), for the spots' outlines
     vec2 ux = dFdx(uv), uy = dFdy(uv);
     ux.x -= floor(ux.x + 0.5); uy.x -= floor(uy.x + 0.5);
     vec2 tsz = vec2(textureSize(uTex, 0));
@@ -457,6 +483,18 @@ void main() {
     float edge = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, d);
     if (edge <= 0.0) discard;
     vec3 n = normalize(transpose(uK) * (b * S));                  // its surface normal on the screen: right, up, towards you
+    if (uMode == 4) {   // 0.85.0 (R2, R3): the Sun. Its edge by Neckel & Labs 1994 per channel (render/sun_limb.h), mu = cos of the angle from the line of sight
+        vec3 c = uSunC * max(limbP(clamp(n.z, 0.0, 1.0)), vec3(0.0));
+        float line = 0.0;   // the sunspot groups' outlines (orbit/sunspots.h): a line about a pixel wide where the angle from a group's centre is its radius
+        for (int i = 0; i < 64; i++) {
+            if (i >= uSpotN) break;
+            float ang = acos(clamp(dot(b, uSpot[i].xyz), -1.0, 1.0));
+            line = max(line, 1.0 - smoothstep(0.5 * pw, 1.5 * pw, abs(ang - uSpot[i].w)));
+        }
+        c *= 1.0 - 0.75 * line;
+        fragColor = vec4(srgbEncode(c), vColor.a * edge);
+        return;
+    }
     vec3 c;
     if (uMode == 1) {   // 0.50: the planet maps are GL_SRGB8_ALPHA8 textures: the GPU returns linear light
         vec4 m = textureLod(uTex, uv, lodHere);
@@ -484,7 +522,7 @@ void main() {
             }
         }
     }
-    float sunF = 1.0;   // 0.51.2: the share of the Sun's disc seen from this point (eclipses); the air above the point is taken to be in the same shadow
+    vec3 sunF = vec3(1.0);   // 0.51.2: the share of the Sun's light seen from this point (eclipses; 0.85.0: per channel, the measured edge); the air above the point is taken to be in the same shadow
     if (uOccN > 0 && dot(n, L) > 0.0) {
         vec3 sp = vec3(vUV.x, -vUV.y, t);                       // the point in the screen frame (uK * sp = b), units of the body's radius
         for (int i = 0; i < 4; i++) if (i < uOccN) sunF *= sunlightPast(sp, uOcc[i], L);
@@ -498,10 +536,10 @@ void main() {
             airL = c * mu0 * T + 0.75 * (1.0 + cs * cs) / 4.0 * X / (X0 + X) * (vec3(1.0) - T);
         }
         float ringF = mu0 > 0.0 ? lit / mu0 : 0.0;
-        fragColor = vec4(srgbEncode(srgbDecode(uSpace) + airL * ringF * sunF), vColor.a * edge);
+        fragColor = vec4(srgbEncode(srgbDecode(uSpace) + airL * ringF * sunF * uLightK), vColor.a * edge);
         return;
     }
-    fragColor = vec4(srgbEncode(srgbDecode(uSpace) + c * lit * sunF), vColor.a * edge);   // 0.50: Lambert in linear light, then encoded; no ambient floor, no highlight (render/shading.h)
+    fragColor = vec4(srgbEncode(srgbDecode(uSpace) + c * lit * sunF * uLightK), vColor.a * edge);   // 0.85.0: times the sunlight factor; 0.50: Lambert in linear light, then encoded; no ambient floor, no highlight (render/shading.h)
 }
 )";
 
@@ -2834,6 +2872,7 @@ uniform vec3 uLb;           // the Sun in that frame
 uniform int uBack;          // 1: the half away from you
 uniform int uNb;
 uniform vec3 uTint;         // the drawn tint (sRGB)
+uniform float uLightK;      // 0.85.0 (R1): the sunlight factor, true dimming times the exposure (1: even lighting)
 uniform vec4 uBands[768];   // 0.75.1: a0, a1 (planet radii), i0 * 1024 + n (the band's measurements in the profile), cover
 uniform vec3 uPole;         // 0.75.1: the pole (screen frame); each pixel works out its own viewing slant mu (orbit/ring_draw.h ringMu)
 uniform float uMu0;         // the Sun's slant
@@ -2917,7 +2956,7 @@ vec4 ringAt(vec2 p) {
     }
     float alpha = sb / float(n) * b.w, shine = ss / float(n) * b.w;
     float k = alpha > 1e-6 ? min(1.0, shine / alpha) : 0.0;
-    vec3 col = F >= 0.0 ? ringEncode(ringDecode(uTint) * k) : vec3(0.0);
+    vec3 col = F >= 0.0 ? ringEncode(ringDecode(uTint) * k * uLightK) : vec3(0.0);   // 0.85.0: times the sunlight factor (R1)
     return vec4(col, alpha);
 }
 )";

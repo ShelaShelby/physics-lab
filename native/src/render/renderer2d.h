@@ -124,7 +124,12 @@ public:
     void triangle(double x0, double y0, Color c0, double x1, double y1, Color c1, double x2, double y2, Color c2);
     void disc(double x, double y, double r, Color c);                       // flat round dot, smooth edge
     void ring(double x, double y, double r, double width, Color c);         // circle outline
-    void sphere(double x, double y, double r, Color c, double lightX, double lightY, double lightZ);  // a ball lit from the unit direction (right, down, towards you) on screen
+    void sphere(double x, double y, double r, Color c, double lightX, double lightY, double lightZ, double lightK = 1.0);  // a ball lit from the unit direction (right, down, towards you) on screen; 0.85.0: lightK the sunlight factor (PlanetLight::k)
+    // 0.85.0 (R2, R3): the Sun as a ball (kPlanetFS uMode 4): its edge by Neckel & Labs 1994 (render/sun_limb.h), its disc centre the screen's white. K turns screen
+    // directions into the Sun's own frame (IAU: rows its 0 meridian, 90 E, north pole), or nullptr (the screen frame). spots: n groups, 4 floats each (unit vector
+    // in the Sun's frame, angular radius in radians), drawn as outlines; at most kMaxSunSpots.
+    void sunBall(double x, double y, double r, const float* K, const float* spots, int nSpots);
+    static constexpr int kMaxSunSpots = 64;
     void sunDisc(double x, double y, double r, Color c);                    // the Sun: brighter middle, darker edge
     void fadeDisc(double x, double y, double r, Color c);                   // a soft dot: full colour in the middle, fading to nothing at radius r
 
@@ -230,7 +235,8 @@ public:
     // 0.51.2: what dims the sunlight on a ball beyond its own night side: up to 4 round bodies that can eclipse the Sun there (centre in the screen frame,
     // right, up, towards you, and radius, all in units of this body's equatorial radius; the real places, not the drawn ones) with the Sun's angular
     // radius at the body (radians); air: Earth's air (render/shading.h earthAirLight).
-    struct PlanetLight { float occ[16] = {}; int nOcc = 0; float sunAng = 0; bool air = false; };
+    // 0.85.0 (R1): k, the sunlight factor: the sunlight at the body over that at the exposure's body, (d_exposure / d)^2 (orbit/true_light.h); 1 = even lighting.
+    struct PlanetLight { float occ[16] = {}; int nOcc = 0; float sunAng = 0; bool air = false; float k = 1; };
     void planet(double x, double y, double r, Color base, double lightX, double lightY, double lightZ, const float K[9], Map map, const float* rings = nullptr, int nRings = 0,
                 double shapeY = 1.0, double shapeZ = 1.0, bool lunar = false, const PlanetLight* light = nullptr);   // lunar: McEwen's lunar function (render/shading.h), not Lambert
     static constexpr int kMaxRingBands = 32;   // 0.51.2: ring bands that shadow a ball (was 8): Saturn's from Cassini's profile
@@ -379,9 +385,10 @@ public:
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens, Lines, Surface };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; float albedoK = 1.0f; RockFrame rf; MeshProjection mp; bool grains = false; };   // draw calls, in the order they were added
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; float albedoK = 1.0f; float lightK = 1.0f; int spotFirst = 0, spotN = 0; RockFrame rf; MeshProjection mp; bool grains = false; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
+    std::vector<float> sunSpots_;             // 0.85.0: this frame's sunspot outlines (Segment::spotFirst, spotN)
     std::vector<float> inst_;                 // square centres for all square draws of this frame
     std::size_t triStart_ = 0;
     int texW_[static_cast<int>(Map::Count)] = {};    // the maps' widths (the sky's: the Black Hole Lab's lens)
