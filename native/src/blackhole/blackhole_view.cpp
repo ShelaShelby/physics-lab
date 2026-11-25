@@ -1544,8 +1544,12 @@ void toneCompare(render::Renderer2D& R) {
                             255 * enc(ref[at][0]), 255 * enc(ref[at][1]), 255 * enc(ref[at][2]));
             }
         }
-        std::printf("PLBHTONE case=%s spin=%g ok=%d k=%.6g lw=%.6g pixels=%ld over8=%ld share=%.5f maxdiff=%d\n", c.name, s.spin, ok ? 1 : 0, cl.k, cl.lw, n, over,
-                    n ? double(over) / n : 1.0, maxd);
+        // 0.85.2: ok is the whole check, the test's own limit (at most 1 % of the disc pixels over 8 levels) with the exposure read. It was the exposure alone, so a
+        // case over the limit printed ok=1 (the owner's Radeon, case close: 1.99 %). expok is the exposure alone
+        const double share = n ? double(over) / n : 1.0;
+        const bool pass = ok && n > 0 && share <= 0.01;
+        std::printf("PLBHTONE case=%s spin=%g ok=%d expok=%d k=%.6g lw=%.6g pixels=%ld over8=%ld share=%.5f maxdiff=%d\n", c.name, s.spin, pass ? 1 : 0, ok ? 1 : 0, cl.k, cl.lw,
+                    n, over, share, maxd);
         dropFbo(f);
     }
 }

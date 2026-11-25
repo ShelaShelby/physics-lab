@@ -56,6 +56,7 @@ static int g_checks = 0, g_failed = 0;
 static void check(const std::string& what, bool ok) {
     g_checks++;
     if (!ok) { g_failed++; std::printf("FAIL: %s\n", what.c_str()); }
+    std::fflush(stdout);                                               // 0.85.2: every check's line is out before the next one runs (a crash shows where)
 }
 
 // ---- a PNG writer (stored deflate blocks: big, but no zlib needed) ----
@@ -871,7 +872,11 @@ static void fallback33(const std::string& dir) {
     R33.useVulkan(nullptr);
 }
 
+// 0.85.2: each part's name printed (and flushed) before it runs, so a crash on a driver names the part it died in (stdout is unbuffered too)
+static void part(const char* name) { std::printf("PART %s\n", name); std::fflush(stdout); }
+
 int main(int argc, char** argv) {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);                          // 0.85.2: unbuffered (the owner's Radeon crashed it with the last lines still in the buffer)
     const std::string dir = argc > 1 ? argv[1] : "";
     app::gpuGuardFrameThread();                                        // (the card programs' steps run on this thread, in turn)
     std::string why;
@@ -891,23 +896,23 @@ int main(int argc, char** argv) {
     R.useVulkanCards(&cards, &cardsWhy);
     for (const std::string& w : cardsWhy) std::printf("card program not made: %s\n", w.c_str());
     std::printf("Vulkan renderer: %s, double precision in shaders: %s\n", d2.samplesText().c_str(), g_vk.f64 ? "yes" : "no");
-    swatches(R, dir);
-    scenes(R, dir);
-    glowDots(R, dir);
-    cloudBuffers(R, dir);
-    gpuSuperScenes(R, dir);
-    gpuJumpScenes(R, dir);
-    gpuEdgeCases(R);
-    gpuOutlineGrids(R);
-    gpuOutlinePipeline(R);
-    gpuOutlineSlice(R);
-    gpuOutlinePictures(R, dir);
-    gpuRocks(R, dir);
-    gpuRocksPictures(R, dir);
-    gpuGrains(R);   // 0.78.0
-    chartPictures(R, dir);
-    chartShaderRules(R);
-    fallback33(dir);
+    part("swatches"); swatches(R, dir);
+    part("scenes"); scenes(R, dir);
+    part("glowDots"); glowDots(R, dir);
+    part("cloudBuffers"); cloudBuffers(R, dir);
+    part("gpuSuperScenes"); gpuSuperScenes(R, dir);
+    part("gpuJumpScenes"); gpuJumpScenes(R, dir);
+    part("gpuEdgeCases"); gpuEdgeCases(R);
+    part("gpuOutlineGrids"); gpuOutlineGrids(R);
+    part("gpuOutlinePipeline"); gpuOutlinePipeline(R);
+    part("gpuOutlineSlice"); gpuOutlineSlice(R);
+    part("gpuOutlinePictures"); gpuOutlinePictures(R, dir);
+    part("gpuRocks"); gpuRocks(R, dir);
+    part("gpuRocksPictures"); gpuRocksPictures(R, dir);
+    part("gpuGrains"); gpuGrains(R);   // 0.78.0
+    part("chartPictures"); chartPictures(R, dir);
+    part("chartShaderRules"); chartShaderRules(R);
+    part("fallback33"); fallback33(dir);
     vkDeviceWaitIdle(g_vk.dev);
     R.useVulkan(nullptr);                                              // (the card programs' objects deleted before the device)
     cards.collect();
@@ -915,7 +920,7 @@ int main(int argc, char** argv) {
     d2.destroy();
     g_d2 = nullptr;
     vkt::stop(g_vk);
-    vulkanTwins();                                                     // the card programs made one by one on a device of their own, against the processor
+    part("vulkanTwins"); vulkanTwins();                                                     // the card programs made one by one on a device of their own, against the processor
     std::printf("Vulkan validation: %d errors in all\n", vkt::g_errors);
     check("Vulkan: zero validation errors in the whole run", vkt::g_errors == 0);
     std::printf("%d Vulkan checks, %d failed\n", g_checks, g_failed);

@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.85.2", "Better checks after the tests on real hardware",
+     "The benchmark's line for the Orbit Lab at rest now says why each picture was drawn again, and a scene's own moving camera no longer counts as the lab at "
+     "rest. The Black Hole Lab's own check of its camera curve now uses the same 1 % limit as the developer's test. The GPU test program says which part it is "
+     "in before each part runs, so a crash on a driver shows where it happened. What you see in the labs did not change."},
     {"0.85.1", "Tests on real hardware, no change to what the app does",
      "The developer's checks now also run on the owner's own PC (an AMD Radeon RX 9060 XT): each lab's drawing against the exact processor pictures on the "
      "real driver, the benchmark and the screen. A test package for Windows sits beside the app on the download page. Nothing in the app changed."},

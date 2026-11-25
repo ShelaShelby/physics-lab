@@ -795,6 +795,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
 
 // the scene's frame: what moves (by the scene's clock u, s since its set-up; dt the step since the last frame)
 void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
+    app.benchSceneFrames++;                                             // 0.85.2: a scene moved this frame (main.cpp: not a frame at rest)
     const app::BenchSceneText& t = sceneText(idx);
     using K = app::BenchKind;
     const double warm = b.run->warmupS(), meas = b.measure;
@@ -1594,7 +1595,7 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
                 // (0.67.0: the Orbit Lab keeps its picture too: its pictures drawn anew count as redraws)
                 b.rNow.id = d.id; b.rNow.name = d.name; b.rNow.threads = b.env.threads; b.rNow.keepsPicture = bh || app.lab == 0; b.rNow.settled = fin;
                 b.rCpu0 = processCpuSeconds(); b.rT0 = SDL_GetPerformanceCounter(); b.rRedraw0 = app.lab == 0 ? app.orbitPictures : b.R ? b.R->lensRedraws() : 0; b.rGpuSum = 0; b.rGpuN = 0;
-                app.orbitKeyWhy.clear();
+                app.orbitKeyWhy.clear(); app.orbitDrawnWhy.clear();
                 b.rStage = 2; b.rStageS = 0;
             }
         } else if (b.rStage == 2) {
@@ -1605,7 +1606,13 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
                 b.rNow.cpuShare = b.rCpu0 >= 0 && cpu >= 0 && wall > 0 && b.env.threads > 0 ? (cpu - b.rCpu0) / wall / b.env.threads : -1;
                 b.rNow.redraws = app.lab == 0 ? app.orbitPictures - b.rRedraw0 : b.R ? b.R->lensRedraws() - b.rRedraw0 : 0;
                 b.rNow.gpuMs = b.rGpuN > 0 && b.gpuChecked && b.gpuCheck.reliable ? b.rGpuSum / b.rGpuN : -1;
-                if (app.lab == 0 && b.rNow.redraws > 3) b.rNow.why = app.orbitKeyWhy.empty() ? "no run of 30 frames in a row was seen" : app.orbitKeyWhy;
+                if (app.lab == 0 && b.rNow.redraws > 3) {
+                    b.rNow.why = app.orbitKeyWhy.empty() ? "no run of 30 frames in a row was seen" : app.orbitKeyWhy;
+                    // 0.85.2: every picture drawn anew in the 3 s, by why (main.cpp): on the owner's PC no run of 30 still frames was seen, so the line above named nothing
+                    std::string by;
+                    for (const auto& w : app.orbitDrawnWhy) by += (by.empty() ? "" : "; ") + w.first + " " + std::to_string(w.second);
+                    if (!by.empty()) b.rNow.why += ". Drawn anew because (pictures): " + by;
+                }
                 b.idle.push_back(b.rNow);
                 std::printf("PLBENCH-REST %s %s cpu=%.3f redraws=%ld worker=%d frames=%d%s%s\n", b.rNow.id.c_str(), app::benchIdleBusy(b.rNow) ? "busy" : "quiet", b.rNow.cpuShare, b.rNow.redraws, b.rNow.workerBusy ? 1 : 0, b.rNow.frames, b.rNow.why.empty() ? "" : " why: ", b.rNow.why.c_str());
                 b.rAt++; b.rStage = 0;

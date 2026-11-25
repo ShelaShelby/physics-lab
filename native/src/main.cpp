@@ -216,6 +216,7 @@ OrbitKeep g_orbitKeep;
 // 0.75.1: the key's parts, each named: when the picture is drawn anew for kKeyRunFrames frames in a row with time stopped and no mouse button down (the Orbit Lab at
 // rest should keep its picture), the first frame of the run says which parts changed, once to gpu-paths-log.txt, and app.orbitKeyWhy keeps the latest note (the
 // benchmark's rest line reads it).
+std::string g_orbitKeyChange;                           // 0.85.2: this frame's changed key parts, by name (empty: none)
 std::uint64_t orbitFrameKey(ui::AppState& app, const render::Renderer2D& R, double headerH, double scale, bool gray) {
     constexpr int kV = orbit::OrbitView::kKeyParts, kExtra = 6, kMore = 3, kN = kV + kExtra + kMore;
     std::uint64_t part[kN] = {};
@@ -257,7 +258,10 @@ std::uint64_t orbitFrameKey(ui::AppState& app, const render::Renderer2D& R, doub
     static long changedCount[kN] = {};
     static bool have = false;
     const ImGuiIO& io = ImGui::GetIO();
-    const bool still = app.paused && !io.MouseDown[0] && !io.MouseDown[1] && !io.MouseDown[2] && io.MouseWheel == 0 && io.MouseDelta.x == 0 && io.MouseDelta.y == 0;
+    static long sceneFrames = -1;                       // 0.85.2: a benchmark scene that moved the view this frame is not "at rest" (the owner's log named the camera in
+    const bool sceneMoved = app.benchSceneFrames != sceneFrames;   // 30 of 30 frames: that run was a scene's, not the rest's)
+    sceneFrames = app.benchSceneFrames;
+    const bool still = !sceneMoved && app.paused && !io.MouseDown[0] && !io.MouseDown[1] && !io.MouseDown[2] && io.MouseWheel == 0 && io.MouseDelta.x == 0 && io.MouseDelta.y == 0;
     if (have && prevKey != k && still) {
         run++;
         for (int i = 0; i < kN; i++) if (prev[i] != part[i]) changedCount[i]++;
@@ -272,6 +276,8 @@ std::uint64_t orbitFrameKey(ui::AppState& app, const render::Renderer2D& R, doub
             app.orbitKeyWhy = t;
         }
     } else { run = 0; for (long& c : changedCount) c = 0; }
+    g_orbitKeyChange.clear();                           // 0.85.2: the parts that changed since the last frame, still or not (the rest line counts them)
+    if (have) for (int i = 0; i < kN; i++) if (prev[i] != part[i]) { if (!g_orbitKeyChange.empty()) g_orbitKeyChange += "; "; g_orbitKeyChange += name[i]; }
     for (int i = 0; i < kN; i++) prev[i] = part[i];
     prevKey = k; have = true;
     return k;
@@ -935,6 +941,15 @@ int main(int argc, char** argv) {
                 const int v0 = text->VtxBuffer.Size, i0 = text->IdxBuffer.Size, c0 = std::max(0, text->CmdBuffer.Size - 1);
                 const unsigned base = text->_VtxCurrentIdx;
                 const ImDrawCmdHeader hdr = text->_CmdHeader;
+                // 0.85.2: why this picture was drawn anew, counted (the benchmark's rest line names the reasons of its 3 s)
+                {   std::string why = !g_orbitKeyChange.empty() ? g_orbitKeyChange
+                                    : !K.have ? std::string("the key unchanged: no kept picture yet")
+                                    : SDL_getenv("PL_ORBIT_NOKEEP") || (ui::shellLogOn() && !SDL_getenv("PL_ORBIT_KEEP")) ? std::string("the key unchanged: the keep is off (a test switch)")
+                                    : !K.textOk ? std::string("the key unchanged: the labels could not be kept (over 60,000 vertices, or a second clip or texture)")
+                                    : std::string("the key unchanged: the kept picture not used");
+                    bool found = false;
+                    for (auto& w : app.orbitDrawnWhy) if (w.first == why) { w.second++; found = true; break; }
+                    if (!found && app.orbitDrawnWhy.size() < 32) app.orbitDrawnWhy.push_back({why, 1}); }
                 app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH);
                 K.drawn++; app.orbitPictures++;
                 K.have = true; K.key = orbitKey;

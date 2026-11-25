@@ -79,6 +79,9 @@ def main():
         n.pop("moonoff", None); n.pop("planetoff", None)   # (0.73.1, on purpose: the state line says where the selected moon and its planet were drawn; the old panel's saved run never had them)
         for k in ("cam", "selxy", "key"):   # (0.74.0, on purpose: the camera checks read the turn and tilt, where the selected thing was drawn and the view's picture key; the old panel's saved run never had them)
             n.pop(k, None)
+        # (0.85.2, on purpose: "light" is the True sunlight setting of 0.85.0, s.trueLight. The old panel's saved run never had it. gr is not dropped: old gr=1 against new gr=0 is the 0.29
+        # default change, and old_gr_029 below compares it)
+        n.pop("light", None)
         check(set(o) == set(n), "the same fields")
         for k in sorted(o):
             if k == "zoom":

@@ -1,23 +1,22 @@
-# 0.85.1: Real-hardware tests on the owner's PC; a Windows test package; the rule that real-hardware checks run there
+# 0.85.2: Fixes and diagnostics after the owner's PC run of 0.85.1 (build machine only)
 
 ## What changed
-- Read: CLAUDE.md, REPORT 0.85.0, ROADMAP, PLANNER ("The owner's PC"), TESTS.md; by grep and line ranges native-windows.yml, CMakeLists.txt (vk_compare_tests, ui_* groups, PL_VK_TESTS), benchmark.h/.cpp (PL_BENCH, PLBENCH-RESULT, the saved file, PL_BENCH_ONLY, rest lines), bench.cpp (benchFileName), gpu_guard.h/.cpp (the log), main.cpp (PL_* settings, createWindow), settings.cpp (PL_SETTINGS), shot.cpp (PL_SHOT_DIR), prefs.cpp (window line), shell_test.cpp (PL_SCRIPT keys), run_group.py, shell_lib.py, check_shell.py smoke, check_blackhole.py (sky, precision, edgeon), check_orbit_ui.py (review085, compare_cpu), vk_ctx.inc, planet_picture.cpp.
-- The Windows workflow's new job test-package builds vk_compare_tests, planet_picture and blackhole_picture and adds PhysicsLab-tests-windows-x64.zip (with the UI scripts and the runner) to "latest". The app's zip is unchanged.
-- native/tools/pc_tests.ps1: the runner (PowerShell 5.1, installs nothing, its own settings file). Parts device, smoke, vkcards, bh, planets, bench, items, logs, validation. vk_compare_tests takes a discrete GPU first (the owner's PC has a second, integrated Radeon).
-- Rule in CLAUDE.md "Build and test", PLANNER.md step 3, DECISIONS.md (and the owner's one-off: two pushes for this job), TESTS.md. Results: native/docs/hardware/ (pc_0.85.1.md, its results file, bench_0.85.1.txt).
-- Run on this session's machine, which is the owner's PC (no Remote Control needed). Its MSVC 14.44 cannot build the app (C2026: kAboutHtml and shaders.h strings over 16 KB; GitHub's newer compiler can), so the package comes from GitHub.
+- Item 1: ui_orbit's "the same fields" failed on the new "light" field. It is True sunlight (0.85.0, s.trueLight). check_shell_state.py now drops it, as it does acen and moonoff. gr=1 against gr=0 is the 0.29 default change: old_gr_029 compares it, and that check passed.
+- Item 4a: vk_compare_tests' stdout is unbuffered, and each check flushes. It prints "PART <name>" before each part. pc_tests.ps1 reports the last part begun.
+- Item 3a: the PLBHTONE line's ok now includes the test's limit (at most 1 % over 8 levels). expok is the exposure alone. Before, the case close printed ok=1 at 1.99 %.
+- Item 6a: the rest line now lists each Orbit redraw by its reason (a changed key part, or the key unchanged and why). Frames a benchmark scene moves are no longer "at rest". The owner's "camera 30 of 30" note came from a scene: reproduced here at 31.9 s, during the Orbit scenes.
+- Item 2, diagnosis: the sky's first full picture counts as finished only when its timestamp pair is read back (VkBlackHole::times()). The first Hard scene, blackhole.real_move, starts at the same 1.3 s. Cause not found without the PC's log.
 
 ## Tests run
-- 0.85.0 (62a4a24): Windows run green, "latest" targeted it. Full tests failed ui_orbit (check_shell_state "the same fields"): ROADMAP **fix**. 0.85.1 first commit f6043ed: Windows run green with test-package; the release has both zips.
-- On the owner's PC (RX 9060 XT, driver 26.11.2, Vulkan 1.4.359, 255 Hz): 4 of 4 labs start and draw. Black Hole: 19 checks pass, tone close 1.99 % (limit 1 %) and the sky at 27 GM/c² 2.8e-5 rad (limit 1e-5) fail. Edge-on near 90 degrees: 16 of 16 pass (the static is gone there). Orbit review085: 5 of 5 pass.
-- vk_compare_tests crashed 3 of 3 runs (0xC0000005, twice in amdvlk64.dll). Before the crash: Glow additive 2 levels (limit 1), the rocks' guard 0.00578 (0.005777), one outline picture fail.
-- Benchmark at 2560 x 1369: 14 of 30 Hard scenes reach 255 Hz. The spinning hole's GPU sky switched itself off in that run (its first full picture over its time limit), so the spinning-hole scenes ran on the CPU table. rest.orbit 765 redraws (reproduced). rest.blackhole_glare 46 % CPU, 13 % with the gas off. Resize from the maximised window: 0 new pictures.
-- Logs: light paths' helper died (0xC0000005) on kKerrTableCS, known. No path fell back in the smoke and comparison runs.
+- check.sh job: quick 18 of 18 passed (vk_cards included), ui_smoke 1 of 1 passed.
+- rest.orbit on the build machine (lavapipe), keep on: 0 redraws at 1280 x 700, 1 at 2560 x 1369, 0 after the seven Orbit Hard scenes. The PC's 765 does not reproduce here.
+- check_shell_state.py by hand: 121 checks, 0 failed (it failed 1 of 121 in 0.85.0 and 0.85.1).
 
 ## Not done
-- Validation layers and the UI check scripts: neither the layers nor Python are installed on the owner's PC (ROADMAP: owner decides). Nothing was installed.
-- Full screen: passed in the trial on the same app, skipped in the final run (-NoKeys) because the owner was using the PC. The light paths' card comparison (precisioncard) was not run: their pipeline crashes this driver.
-- No earlier saved benchmark in the repo to compare with. bench_0.85.1.txt is the first. Two pushes for this job (the owner's one-off, DECISIONS).
+- The owner's PC could not be reached: Remote Control lists the computer, but it offers no folder to cloud sessions (reason not given). So items 2 (cause), 3a (the shader), 3b, 4a (the crashing check), 4b-d, 5, 6a (the PC's cause) and 9 were not done. They stay on ROADMAP.
+- Item 5: not split blind. A split could not be checked against the driver that crashes.
+- Items 6b, 7, 8a, 8b: the build machine's GPU is a software renderer. atom.emit_all runs at 4.5 fps here, so the press frames cannot be told apart. 8a and 8b are new ROADMAP lines.
+- No hardware run of 0.85.2: no pc_0.85.2.md or bench_0.85.2.txt.
 
 ## References changed on purpose
-- None.
+- check_shell_state.py: "light" left out of the field comparison (the old panel's saved run never had True sunlight).

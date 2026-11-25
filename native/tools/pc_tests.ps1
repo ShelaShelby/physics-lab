@@ -192,6 +192,9 @@ if ($Parts -contains 'vkcards') {
         $sum = ($r.Out -split "`r?`n" | Where-Object { $_ -match '^\d+ Vulkan checks, \d+ failed' } | Select-Object -Last 1)
         Add-Info '3c.vkcards' "$dev"
         foreach ($ln in ($r.Out -split "`r?`n" | Where-Object { $_ -match '^\s*FAIL' })) { Add-Info '3c.vkcards' $ln.Trim() }
+        # 0.85.2: the tests print "PART <name>" before each part, unbuffered: the last one is the part it ended in (the one it crashed in, if it crashed)
+        $lastPart = ($r.Out -split "`r?`n" | Where-Object { $_.StartsWith('PART ') } | Select-Object -Last 1)
+        if ($lastPart) { Add-Info '3c.vkcards' "last part begun: $($lastPart.Substring(5))" }
         Add-Check '3c.vkcards' ($r.Code -eq 0 -and $sum -match ', 0 failed') "vk_compare_tests: $sum (exit $($r.Code), $([math]::Round($r.Seconds,1)) s)"
     } else { Add-Check '3c.vkcards' $false 'vk_compare_tests.exe is not in the folder' }
 }

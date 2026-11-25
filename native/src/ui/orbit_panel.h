@@ -15,6 +15,8 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace ui {
 
@@ -42,6 +44,7 @@ struct AppState {
     ShotUi shot;
     std::shared_ptr<BenchState> bench;     // the benchmark: its window, its run and the settings it will give back
     bool benchRunning = false;             // a benchmark is running: nothing is written to the settings file
+    long benchSceneFrames = 0;             // 0.85.2: frames a benchmark scene has moved (main.cpp orbitFrameKey: those frames are not at rest)
     double startupMs = -1;                 // 0.56.1: from the start of the app to its first finished picture (ms; the benchmark report's head), -1 not yet
     int fitStart = 2;                      // 0.24: the Orbit Lab opens fitted to Neptune's orbit, once per start, this many Orbit Lab frames after the start (the panels' sizes are known by then); 0 done, -1 never (PL_ZOOM)
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
@@ -63,6 +66,9 @@ struct AppState {
     std::string jumpWaitNote;              // (its clamp note)
     long orbitPictures = 0;                // 0.67.0: how many times the Orbit Lab's picture was drawn (not kept; the benchmark's rest line)
     std::string orbitKeyWhy;               // 0.75.1: why the picture was drawn anew frame after frame at rest (which parts of its key changed; main.cpp orbitFrameKey)
+    // 0.85.2: every frame's picture drawn anew, counted by why (main.cpp): a key part that changed (its name), or the key unchanged ("the key unchanged: ...").
+    // The benchmark's rest line reads the counts of its 3 s (the 30-frame run above needs 30 still frames in a row, so it named nothing on the owner's PC)
+    std::vector<std::pair<std::string, long>> orbitDrawnWhy;
     int learn = 0;                         // the open Learn guide: 0 none, 1 What am I looking at?, 2 seasons, 3 timeline
     std::string learnJump;                 // a section to scroll to in the open guide ("bar" = back to the list of headings)
     // ---- Atom Lab ----
