@@ -173,6 +173,7 @@ void Renderer2D::skyMath(const std::vector<float>& in, std::vector<float>& out) 
     if (vkbh_) vkbh_->math(in, out);
     else out.assign(in.size() / 12 * 8, 0.0f);
 }
+int Renderer2D::skyLensState() const { return vkbh_ ? vkbh_->lensState() : 2; }
 double Renderer2D::skyWhiteWait() { if (!vkbh_) return 0; const double w = vkbh_->whiteWait(); skyStats_ = vkbh_->skyStats(); return w; }   // (0.70.0: the stats too, at once)
 
 bool Renderer2D::loadMapsVulkan(std::string& why) {

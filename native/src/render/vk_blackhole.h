@@ -78,6 +78,8 @@ public:
     const Renderer2D::SkyStats& skyStats() const { return skyStats_; }
     const Renderer2D::GlareStats& glareStats() const { return glareStats_; }
     long redraws() const { return redraws_; }
+    // 0.85.3: the lens pass's pipeline: 0 not asked, 1 being made, 2 made, -1 failed. The sky's first full picture needs it made.
+    int lensState() const { return prog_[pLens].state.load(); }
     // (0.72.0: a veil being made again only because the moving gas moved on, while a veil is shown, is not "under way": the picture is finished)
     bool glareBusy() const { return (glareStage_ != 0 && !(want_.gasOnly && glareValid_)) || (want_.gen != 0 && !glareValid_); }
     VkPipelineCache cache() const { return cache_; }

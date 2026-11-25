@@ -2205,6 +2205,21 @@ static void testGpuGuard() {
         checkTrue("guard (0.63.1): the light paths (keepOld): an off without an app version stays off", !dec.allowed && dec.crashed && !dec.untrusted);
         GpuGuardRecord slow = old; slow.state = "slow";
         checkTrue("guard (0.63.1): only a crash (a marker) is retried: a kept slow stays off", !app::gpuGuardDecide(slow, none, ov, od, false).allowed);
+        // 0.85.3: the sky's 'the first full picture' ran out of time because of a circular wait (fixed in 0.85.3; native/docs/hardware/pc_0.85.2.md C1).
+        // Such a slow kept by 0.85.2 or older is tried once more, guarded. Kept by 0.85.3 or later, or for another step, it stays off.
+        {   const std::string sv = "vulkan sky 07296ecaae8dfdd6";
+            GpuGuardRecord s852{"slow", sv, od, "the first full picture", "0.85.2"};
+            dec = app::gpuGuardDecide(s852, none, sv, od, false);
+            checkTrue("guard (0.85.3): a slow 'the first full picture' kept by 0.85.2: tried once more, guarded", dec.allowed && dec.guarded);
+            dec = app::gpuGuardDecide(s852, none, sv, od, true);
+            checkTrue("guard (0.85.3): the same with keepOld: tried once more, guarded", dec.allowed && dec.guarded);
+            GpuGuardRecord s853 = s852; s853.app = "0.85.3";
+            checkTrue("guard (0.85.3): a slow 'the first full picture' kept by 0.85.3: stays off", !app::gpuGuardDecide(s853, none, sv, od, false).allowed);
+            GpuGuardRecord other = s852; other.step = "the check";
+            checkTrue("guard (0.85.3): a slow at another step kept by 0.85.2: stays off", !app::gpuGuardDecide(other, none, sv, od, false).allowed);
+            GpuGuardRecord noApp = s852; noApp.app.clear();
+            dec = app::gpuGuardDecide(noApp, none, sv, od, false);
+            checkTrue("guard (0.85.3): a slow 'the first full picture' kept with no app version: tried once more", dec.allowed && dec.guarded); }
         checkStr("guard (0.63.1): the settings line names the app version as a fifth field and reads back", app::gpuGuardText(app::gpuGuardParse(app::gpuGuardText(o631))),
                  "off | vulkan outline cdf40fa24b97d9f0 | any | the outline's first small run | app 0.63.1");
         checkTrue("guard (0.63.1): a fifth field that is not 'app ...' is a broken line", app::gpuGuardParse("off | a | b | c | d").state.empty() && app::gpuGuardParse("off | a | b | c").state == "off"); }

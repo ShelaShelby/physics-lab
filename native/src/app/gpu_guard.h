@@ -40,12 +40,14 @@ struct GpuGuardDecision {
     bool crashed = false;         // not allowed because a run died inside a step (false: a step timed out or failed)
     bool failed = false;          // 0.59.0: not allowed because a step returned an error (kept as "fail")
     bool untrusted = false;       // 0.63.1: a crash kept from a marker of 0.63.0 or older, not trusted (tried once more, guarded)
+    bool retried = false;         // 0.85.3: a slow 'the first full picture' kept by 0.85.2 or older (the sky's circular wait): tried once more, guarded
 };
 // 0.63.1: keepOld = false: a crash ("off") kept from a marker that names no app version or one before 0.63.0 is not trusted: 0.62.0's guard could leave a
 // marker after its step had passed (end() kept it; the Vulkan card guards had no closing()); 0.63.0's markers name no app version either, so they are
 // retried too (once, guarded: a real crash then writes a marker that names 0.63.1 and is trusted). keepOld = true (the light paths, both APIs: their
 // crash inside AMD's shader compiler is real): kept as before.
 GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecord& marker, const std::string& version, const std::string& driver, bool keepOld = true);
+bool gpuGuardAppAtLeast(const std::string& app, int major, int minor, int patch);   // 0.85.3: app ("0.85.2") is that version or later ("" or broken: no)
 bool gpuGuardAppTrusted(const std::string& app);               // 0.63.1: a marker written by this app version is trusted (0.63.1 or later; "" no)
 void gpuGuardSetApp(const std::string& app);                   // 0.63.1: the running app's version, written into each marker (main.cpp, tests)
 

@@ -229,7 +229,9 @@ unsigned AtomCardPaths::jumpGroupsBuffer(render::Renderer2D& R, AtomLab& L) {
     if (!P.firstUse && !app::gpuJumpGuard().hold()) return 0;               // 0.63.0: the first full use waits for its turn (this frame: the processor's groups)
     if (!P.firstUse) { app::gpuJumpGuard().begin(stepName(1, "first full use")); P.firstUse = true; P.stepAt = nowS(); }
     if (!C.jumpGroups(fixedG.data(), L.jumpDots(), L.s.jumpEpoch, t0, t1)) return 0;
-    if (!P.firstDone) C.fence();
+    // 0.85.3: one fence for the first full use, kept until it signals (as the Molecule Lab does). It was made again every frame, so each frame
+    // flushed a batch of its own and the first full use was timed on the newest frame's work.
+    if (!P.firstDone && !P.fenced) { C.fence(); P.fenced = true; }
     return C.jumpGroupsBuffer();
 }
 

@@ -33,6 +33,7 @@ private:
         int step = 0, frames = 0, gen = -1;
         double stepAt = 0;
         bool firstUse = false, firstDone = false;
+        bool fenced = false;                             // 0.85.3: the first full use's fence is made once and kept until it signals
         int jobs[8] = {0, 0, 0, 0, 0, 0, 0, 0};
         int nJobs = 0, doneJobs = 0;
         bool allOk = true;

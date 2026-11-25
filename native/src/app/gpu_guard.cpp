@@ -171,6 +171,14 @@ void gpuGuardSetApp(const std::string& app) {
     g_app = field(app);
 }
 
+bool gpuGuardAppAtLeast(const std::string& app, int major, int minor, int patch) {
+    int a = -1, b = -1, c = 0;
+    if (std::sscanf(app.c_str(), "%d.%d.%d", &a, &b, &c) < 2 || a < 0 || b < 0) return false;
+    if (a != major) return a > major;
+    if (b != minor) return b > minor;
+    return c >= patch;
+}
+
 bool gpuGuardAppTrusted(const std::string& app) {
     int major = -1, minor = -1, patch = 0;
     if (std::sscanf(app.c_str(), "%d.%d.%d", &major, &minor, &patch) < 2 || major < 0 || minor < 0) return false;
@@ -208,7 +216,12 @@ GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecor
         d.keep.version.rfind("molcloud ", 0) != 0 && d.keep.version.rfind("vulkan ", 0) != 0 && d.keep.driver == field(driver))   // (0.57.1: molcloud; 0.59.0: vulkan)
         d.keep = GpuGuardRecord{"off", field(version), d.keep.driver, d.keep.step.empty() ? std::string("(kept by an older version of the app)") : d.keep.step};
     const bool same = d.keep.version == field(version) && d.keep.driver == field(driver);
-    if (d.keep.state == "off" && same && !keepOld && !gpuGuardAppTrusted(d.keep.app)) {
+    // 0.85.3: 'the first full picture' timed out through a circular wait between the sky and the lens pipeline, fixed in 0.85.3
+    // (native/docs/hardware/pc_0.85.2.md C1). A slow at that step kept by 0.85.2 or older is tried once more, guarded.
+    const bool oldFirstPicture = d.keep.state == "slow" && d.keep.step == "the first full picture" && !gpuGuardAppAtLeast(d.keep.app, 0, 85, 3);
+    if (oldFirstPicture && same) {
+        d.allowed = true; d.guarded = true; d.retried = true;
+    } else if (d.keep.state == "off" && same && !keepOld && !gpuGuardAppTrusted(d.keep.app)) {
         d.allowed = true; d.guarded = true; d.untrusted = true;     // 0.63.1: a marker of 0.63.0 or older: tried once more, guarded (gpu_guard.h)
     } else if ((d.keep.state == "off" || d.keep.state == "slow" || d.keep.state == "fail") && same) {
         d.allowed = false; d.guarded = false; d.crashed = d.keep.state == "off"; d.failed = d.keep.state == "fail";
@@ -250,6 +263,9 @@ void GpuGuard::start(const std::string& folder, const std::string& version, cons
     if (d_.untrusted)                                                // 0.63.1
         line("Not trusted: the crash in the step '" + d_.keep.step + "' was kept from a marker of " + (d_.keep.app.empty() ? std::string("0.63.0 or older (it names no app version)") : d_.keep.app) +
              "; 0.62.0 could leave one after a step that passed (its end kept the marker, and the Vulkan card programs' guards were not closed at the app's end): tried once more, guarded", true);
+    if (d_.retried)                                                  // 0.85.3
+        line("Tried once more: the step '" + d_.keep.step + "' ran out of time with " + (d_.keep.app.empty() ? std::string("an older version") : d_.keep.app) +
+             ", whose circular wait between the sky and the lens pipeline is fixed in 0.85.3: tried once more, guarded", true);
     const std::string w = what_.empty() ? std::string("The graphics card's light paths") : what_;
     if (!d_.allowed) line(w + (what_.empty() ? " are switched off for this light-path shader and driver: " : " is switched off for this version: ") +
                           (d_.crashed ? "the app died inside the step '" : d_.failed ? "this step failed: '" : "this step did not finish in time: '") + d_.keep.step + "' (Settings, Performance: Try again)", true);

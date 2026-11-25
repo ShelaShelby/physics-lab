@@ -862,10 +862,14 @@ static void fallback33(const std::string& dir) {
         clearOutlineCache();
         const Outline* o = outlineReady(fo, true);
         check("no card programs: outlineReady returns the CPU outline at once (never blank)", o != nullptr);
+        // 0.85.3: a copy. o points into the outline cache, which clearOutlineCache empties: o was read after it was freed. That failed the check on
+        // the owner's Radeon and then crashed the program (native/docs/hardware/pc_0.85.2.md C2, PART fallback33).
+        const bool have = o != nullptr;
+        const Outline got = have ? *o : Outline{};
         clearOutlineCache();
         const Outline ref = outlineOf(fo);
-        check("no card programs: it is the CPU's outline", o != nullptr && o->c == ref.c && o->mass == ref.mass && o->rmax == ref.rmax && o->wire.size() == ref.wire.size());
-        if (o && !g_cpuOutline2p.px.empty()) report(dir, "no card programs: outline 2p z Cloud 3D against the card renderer's CPU-outline picture", g_cpuOutline2p, outlinePicture(R33, Lo, *o, nullptr, false), 0);
+        check("no card programs: it is the CPU's outline", have && got.c == ref.c && got.mass == ref.mass && got.rmax == ref.rmax && got.wire.size() == ref.wire.size());
+        if (have && !g_cpuOutline2p.px.empty()) report(dir, "no card programs: outline 2p z Cloud 3D against the card renderer's CPU-outline picture", g_cpuOutline2p, outlinePicture(R33, Lo, got, nullptr, false), 0);
         clearOutlineCache();
     }
     setOutlineCompute(nullptr);

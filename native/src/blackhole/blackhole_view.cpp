@@ -1209,6 +1209,13 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
     if (skyState_ == 0) {
         if (G.started() && !G.allowed()) { skyOff(G.offText().empty() ? std::string("the spinning hole on the graphics card is switched off") : G.offText()); return false; }
         if (++skyFrames_ < 3) return false;                                // (the first frames on screen first)
+        // 0.85.3: the sky's first full picture is drawn by the lens pass. Its pipeline is made on a worker under the lens guard, which waits for the
+        // guards' turn. Holding the turn before that pipeline is made was a circular wait: the sky held the turn until its first picture, the lens
+        // pipeline waited for the turn, and nothing was drawn until the sky's 10 s limit (native/docs/hardware/pc_0.85.2.md C1).
+        // So the sky takes the turn only once the lens pipeline is made.
+        const int lens = R.skyLensState();
+        if (lens == -1) { skyOff("the lens pass's pipeline could not be made, so the card's sky cannot be shown"); return false; }
+        if (lens != 2) return false;                                       // (asked again next frame; the turn is not held)
         if (!G.hold()) return false;                                       // 0.63.0: its steps wait for the guards' turn (a later frame)
         skyState_ = 2; skyStep_ = 0;
         // 0.57.2: the check's reference (traceClosed at the probes' 3,840 pixels, about 13 ms here) on a thread of its own while the card builds and draws: the

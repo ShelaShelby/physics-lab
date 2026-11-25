@@ -1728,7 +1728,9 @@ double dpStep(double b, double q, double y[5], double k1[5], double h, out doubl
         double sc = ATOL + RTOL * max(abs(y[i]), abs(yn[i]));
         err = dmax(err, abs(e) / sc);
     }
-    return (isnan(err) || isinf(err)) ? 1e30LF : err;
+    // 0.85.3: the same test as isnan(err) || isinf(err), written without them. AMD's Windows shader compiler (RX 9060 XT, driver 8389024) crashed
+    // making this shader with isnan and isinf on a double here; this form compiles. !(|x| <= largest double) is true exactly for NaN and +-inf.
+    return !(abs(err) <= 1.7976931348623157e308LF) ? 1e30LF : err;
 }
 double planeOf(double th) { double s = 0.0LF, c = 0.0LF; dsincos(th, s, c); return c; }
 // the ray at (psi, chi) followed into its past (geodesic.cpp trace with the equator's crossings) and stored as spinRay stores it: Ou[o] = dir (3), b,

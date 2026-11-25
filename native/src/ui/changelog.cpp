@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.85.3", "Black Hole Lab: the fast drawing works on AMD cards again",
+     "On AMD Radeon cards the spinning hole's light paths are worked out on the graphics card again. One line of that program made AMD's driver crash, so "
+     "the app had switched it off and the processor did the work, slowly. The spinning hole's sky no longer switches itself off at the start: it waited for "
+     "a part that was itself waiting for the sky. The Orbit Lab no longer draws its picture again in every frame when nothing has changed, which saves "
+     "power. An app that had switched the sky off for this reason tries it once more by itself. The physics and the pictures did not change."},
     {"0.85.2", "Better checks after the tests on real hardware",
      "The benchmark's line for the Orbit Lab at rest now says why each picture was drawn again, and a scene's own moving camera no longer counts as the lab at "
      "rest. The Black Hole Lab's own check of its camera curve now uses the same 1 % limit as the developer's test. The GPU test program says which part it is "

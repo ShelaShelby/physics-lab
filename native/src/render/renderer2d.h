@@ -379,6 +379,8 @@ public:
     void lensFloat(const LensSky& L, int w, int h, std::vector<float>& out);
     void skyMath(const std::vector<float>& in, std::vector<float>& out);
     double skyWhiteWait();
+    // 0.85.3: the lens pass's pipeline (render/vk_blackhole.h lensState): 2 made, -1 failed, 0 or 1 not yet. 2 without Vulkan's Black Hole programs.
+    int skyLensState() const;
     void skyProbeRead(std::vector<float>& out);
     long lensRedraws() const { return lensRedraws_; }
     bool glareBusy() const { return vk_ && vkGlareBusy_; }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
