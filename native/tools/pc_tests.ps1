@@ -333,8 +333,12 @@ if ($Parts -contains 'items') {
     # rest.orbit: the Orbit Lab at rest drawn anew every frame (0.75.0: 766 drawings in 3 s). The log names the key's parts that changed.
     $r = Invoke-BenchOnly 'item_rest_orbit' 'rest.orbit' @{}
     foreach ($ln in (Get-SceneLines $r.File 'rest.orbit')) { Add-Info '3e.rest.orbit' $ln }
+    # 0.85.3: the check is the rest line itself (quiet, no redraws in the counted 3 s). The log's "drawn anew" line can come from the lab's start, while
+    # its card lines are still being decided (before the rest is counted), so it is shown as information only.
+    $quiet = @(Get-SceneLines $r.File 'rest.orbit' | Where-Object { $_ -match '^rest\.orbit\s+quiet\s' -and $_ -match '\sms\s+no\s' })
     $anew = @(); if (Test-Path $r.Log) { $anew = @(Get-Content $r.Log | Where-Object { $_ -match 'drawn anew for' }) }
-    Add-Check '3e.rest.orbit' ($r.File -and -not $anew.Count) "the Orbit Lab at rest keeps its picture ($(if ($anew.Count) { ($anew[0] -replace '^\[vulkan\] \[\w+\] \[\s*[\d.]+ ms\]\s*', '') } else { 'no redraw line in the log' }))"
+    if ($anew.Count) { Add-Info '3e.rest.orbit' ("the log: " + ($anew[0] -replace '^\[vulkan\] \[\w+\] \[\s*[\d.]+ ms\]\s*', '')) }
+    Add-Check '3e.rest.orbit' ($r.File -and $quiet.Count -gt 0) "the Orbit Lab at rest keeps its picture (the rest line: $(if ($quiet.Count) { 'quiet, no redraws' } else { 'busy or redrawn' }))"
     # rest.blackhole_glare: busy at rest (45 % CPU in an older run); the same with the moving gas off (PL_BH_REST_NOGAS)
     foreach ($g in @(@('item_glare_gas', @{}), @('item_glare_nogas', @{ PL_BH_REST_NOGAS = '1' }))) {
         $r = Invoke-BenchOnly $g[0] 'rest.blackhole_glare' $g[1]

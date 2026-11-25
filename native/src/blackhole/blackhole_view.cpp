@@ -1141,6 +1141,15 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
         if (!cardFill_->lateStep().empty() && cardState_ == 1) {           // 0.55.7: a step of a fill ran out of time: the processor's path from now on
             app::gpuGuard().timedOut(cardFill_->lateStep());
             cardOff("a step of the card's fill did not finish in time (" + cardFill_->lateStep() + ")");
+        } else if (cardState_ == 1 && cardFill_->fills() > 0 && cardFill_->lastMs() > (cardFill_->fills() == 1 ? kCardFirstFillSlowMs : kCardFillSlowMs)) {
+            // 0.85.3: a card whose double precision is slow (the owner's RX 9060 XT: 147,456 rays in 1,856 ms) holds the GPU's queue for the whole fill,
+            // so frames wait (blackhole.close_spin: worst frame 1,780 ms, 3.6 fps) and each new view waits for a whole fill. The processor's table
+            // gives a first picture in tens of ms there. So a fill slower than kCardFillSlowMs keeps the light paths off for this shader and driver.
+            char b[200];
+            std::snprintf(b, sizeof b, "the whole fill took %.0f ms (more than %.0f ms): the processor's table is faster on this card", cardFill_->lastMs(),
+                          cardFill_->fills() == 1 ? kCardFirstFillSlowMs : kCardFillSlowMs);
+            app::gpuGuard().timedOut(b);
+            cardOff(b);
         }
     }
     const bool current = hasShown_ && shownKey_ == want;

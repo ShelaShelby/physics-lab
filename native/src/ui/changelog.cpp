@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.85.4", "Black Hole Lab: no long freezes on cards with slow double precision",
+     "Some graphics cards, such as AMD's Radeon RX 9000 series, work out the spinning hole's light paths far more slowly than the processor does. While "
+     "the card did that work the picture froze for up to two seconds. The app now times the first fill: when the card takes over a second, the processor "
+     "does this work from then on, and the app remembers it (Settings, Performance: Try again). The spinning hole's sky is still drawn by the card."},
     {"0.85.3", "Black Hole Lab: the fast drawing works on AMD cards again",
      "On AMD Radeon cards the spinning hole's light paths are worked out on the graphics card again. One line of that program made AMD's driver crash, so "
      "the app had switched it off and the processor did the work, slowly. The spinning hole's sky no longer switches itself off at the start: it waited for "

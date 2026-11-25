@@ -50,6 +50,11 @@ CardCheck cardSelfCheck(render::IKerrCompute& K);         // waits (tests, PL_BH
 // or a piece of the first fill; 60 s for a later fill's whole pass B (queued at once). PL_BH_CARDLIMIT=<seconds> (tests) sets the first.
 double cardStepLimitMs();
 constexpr int kCardWholeFactor = 6;
+// 0.85.3: a whole fill on the card slower than this keeps the light paths off (blackhole_view.cpp drawAsync). A choice, not a measured value: a quarter
+// of a second is longer than the processor's coarse table takes for a first picture (27 ms on the build machine, REPORT 0.81.0).
+constexpr double kCardFillSlowMs = 250.0;
+// The first fill is sent in pieces, one a frame, so it also counts a frame per piece (22 pieces: 370 ms at 60 Hz). Its limit is larger.
+constexpr double kCardFirstFillSlowMs = 1000.0;
 
 // 0.55.7: the start-up check in steps, at most a step per frame (the frame never waits): each step named to the guard (its marker and log) before it begins
 class CardStartup {
