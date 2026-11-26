@@ -10,7 +10,7 @@
 
 ## Tests run
 - orbit_tests: 2248 checks, 0 failed. Before the code: 31 failed (every new check: rows, plane, text, card, Pluto decode and mean).
-- check.sh job: see the last line of this section.
+- check.sh job: passed (quick 18 of 18, ui_smoke 7 s). By hand: check_orbit_ui.py planets: 25 checks, 0 failed (Pluto 0.24 % of pixels over 8 levels, GPU against CPU twin).
 - check_sources.py: both new extracts found. With the sources checkout it lists 110 files there that are not in the manifest (already so before this job).
 
 ## Not done
