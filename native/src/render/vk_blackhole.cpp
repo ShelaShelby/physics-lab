@@ -26,9 +26,6 @@
 #include "r2d_sky_frag.h"
 #include "r2d_maxdown_frag.h"
 #include "r2d_expsum_frag.h"
-#include "r2d_glowdown_frag.h"
-#include "r2d_glowblur_frag.h"
-#include "r2d_glowadd_frag.h"
 #include "r2d_glaredown_frag.h"
 #include "r2d_glareadd_frag.h"
 #include "r2d_glarelevel_frag.h"
@@ -49,9 +46,6 @@ Code codeOf(int p) {
     case VkBlackHole::pSky: return {k_r2d_sky_frag, sizeof k_r2d_sky_frag};
     case VkBlackHole::pMaxDown: return {k_r2d_maxdown_frag, sizeof k_r2d_maxdown_frag};
     case VkBlackHole::pExpSum: return {k_r2d_expsum_frag, sizeof k_r2d_expsum_frag};
-    case VkBlackHole::pGlowDown: return {k_r2d_glowdown_frag, sizeof k_r2d_glowdown_frag};
-    case VkBlackHole::pGlowBlur: return {k_r2d_glowblur_frag, sizeof k_r2d_glowblur_frag};
-    case VkBlackHole::pGlowAdd: return {k_r2d_glowadd_frag, sizeof k_r2d_glowadd_frag};
     case VkBlackHole::pGlareDown: return {k_r2d_glaredown_frag, sizeof k_r2d_glaredown_frag};
     case VkBlackHole::pGlareAdd: return {k_r2d_glareadd_frag, sizeof k_r2d_glareadd_frag};
     case VkBlackHole::pGlareLevel: return {k_r2d_glarelevel_frag, sizeof k_r2d_glarelevel_frag};
@@ -69,9 +63,9 @@ Variants variantsOf(int p) {
     case VkBlackHole::pLens: set(0, {kRgba8, kF32, kF32}); set(1, {kF32}); break;   // (1: the exposure's samples at spin 0)
     case VkBlackHole::pKerr: set(0, {kRgba8, kF32, kF32}); if (std::getenv("PL_BH_COMPARE")) set(1, {kF32}); break;   // (1: the tests' float outputs only)
     case VkBlackHole::pSky: set(0, {kRgba8, kF32, kF32, kR8}); set(1, {kF32}); break;   // (1: the exposure's samples, the probe)
-    case VkBlackHole::pSkyTiny: case VkBlackHole::pSkyMath: case VkBlackHole::pMaxDown: case VkBlackHole::pExpSum: case VkBlackHole::pGlowDown: case VkBlackHole::pGlowBlur:
+    case VkBlackHole::pSkyTiny: case VkBlackHole::pSkyMath: case VkBlackHole::pMaxDown: case VkBlackHole::pExpSum:
     case VkBlackHole::pGlareDown: case VkBlackHole::pGlareLevel: case VkBlackHole::pGlareSum: set(1, {kF32}); break;
-    case VkBlackHole::pGlowAdd: case VkBlackHole::pGlareAdd: set(0, {kRgba8}); break;
+    case VkBlackHole::pGlareAdd: set(0, {kRgba8}); break;
     default: set(0, {kRgba8}); set(1, {kF32}); set(2, {kR8}); break;               // pCopy: the low layers stretched over the picture's own
     }
     return o;
@@ -87,8 +81,8 @@ struct GuardSteps : KerrSteps {
 
 const char* VkBlackHole::progName(int p) {
     static const char* const n[pProgCount] = {"lens (kLensFS)", "spinning hole's table pass (kKerrFS)", "the tiny shader (kKerrSkyTinyFS)", "the elliptic functions alone",
-                                              "the whole sky shader (kKerrSkyFS)", "exposure (kMaxDownFS)", "glow down (kGlowDownFS)", "glow blur (kGlowBlurFS)",
-                                              "glow add (kGlowAddFS)", "glare down (kGlareDownFS)", "glare add (kGlareAddFS)", "copy (kCompositeFS)",
+                                              "the whole sky shader (kKerrSkyFS)", "exposure (kMaxDownFS)",
+                                              "glare down (kGlareDownFS)", "glare add (kGlareAddFS)", "copy (kCompositeFS)",
                                               "the log-average (kExpSumFS)", "glare levels (kGlareLevelFS)", "glare veil (kGlareSumFS)"};
     return p >= 0 && p < pProgCount ? n[p] : "?";
 }
@@ -168,7 +162,7 @@ bool VkBlackHole::init(VkCards& c, const std::string& cacheDir, std::string& why
     readCache(cacheDir);
     if (!cacheDir.empty()) mergeCache(app::gpuHelperCacheFile(cacheDir));   // 0.67.0: what helpers made in earlier starts
     // ---- the small programs now (each a few kilobytes); the lens and the table pass on the worker thread (their guard) ----
-    for (int p : {pMaxDown, pExpSum, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy}) {
+    for (int p : {pMaxDown, pExpSum, pGlareDown, pGlareAdd, pCopy}) {
         std::string w;
         if (!prepare(p, w) || !makePipelines(p, w)) { ok_ = false; why = std::string(progName(p)) + ": " + w; return false; }
         prog_[p].state = 2;
@@ -194,7 +188,7 @@ void VkBlackHole::destroy() {
     if (!dev_) return;
     vkDeviceWaitIdle(dev_);
     writeCache();
-    for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glow_[0], &glow_[1], &glareSrc_, &glareVeil_, &glareNear_, &glareCorr_, &probe_,
+    for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glareSrc_, &glareVeil_, &glareNear_, &glareCorr_, &probe_,
                    &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
@@ -700,7 +694,7 @@ void VkBlackHole::writeCache() {
 }
 
 // =====================================================================================================================================================
-// the passes (renderer2d.cpp's drawLens, skyPass, skyExposure, skyTimes, skyPicture, skyProbe, makeGlow, makeGlare, glarePump)
+// the passes (renderer2d.cpp's drawLens, skyPass, skyExposure, skyTimes, skyPicture, skyProbe, makeGlare, glarePump)
 // =====================================================================================================================================================
 void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, int ox, int oy, bool disc, bool bend, bool exp, bool raw, int variant) {
     const int p = pLens;
@@ -790,7 +784,6 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     const int dn[3] = {L.discFN, L.discC, 0};
     u.i("uDN", dn, 3);
     u.f("uDFix", L.discFix, 4);
-    u.f("uFilmSoft", L.filmSoft, 4);                                 // 0.81.0
     u.f("uFido", L.fido, 2);                                         // 0.84.0
     i1("uRaw", raw ? 1 : 0);
     VkDraw2D* d2 = c_->draw2d();
@@ -831,7 +824,6 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     const int dn[3] = {L.discFN, L.discC, 0};
     u.i("uDN", dn, 3);
     u.f("uDFix", L.filmRaw, 4);
-    u.f("uFilmSoft", L.filmSoft, 4);                                 // 0.81.0: Film's soft edges and see-through
     i1("uGasFoot", L.gasNoFoot ? 0 : 1);
     const bool cardWhite = L.whiteMode == 1 && disc && !sum_.empty() && mode == 0;
     i1("uWhiteMode", cardWhite ? 1 : 0);
@@ -1021,40 +1013,6 @@ void VkBlackHole::skyPicture(VkCommandBuffer cb, const LensSky& L, int fbW, int 
         qHead_++;
     }
     skyStats_.draws++;
-}
-
-// 0.55.3's makeGlow: the disc's light down to 4 x 4 blocks above the threshold, then the Gaussian along rows and columns (kept in glow_[0])
-void VkBlackHole::makeGlow(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH) {
-    const int gw = (fbW + 3) / 4, gh = (fbH + 3) / 4;
-    if (glow_[0].w != gw || glow_[0].h != gh || !glow_[0].img)
-        for (Tex& t : glow_) if (!makeTex(t, gw, gh, kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "the glow")) return;
-    const double sig = L.glow[2] * fbH / 4;
-    const int R = std::max(1, static_cast<int>(std::ceil(3 * sig)));
-    use(cb, layer_[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-    {   VkUniforms& u = prog_[pGlowDown].u;
-        const int sz[2] = {fbW, fbH};
-        u.i("uSize", sz, 2);
-        u.f("uThr", &L.glow[1], 1);
-        begin(cb, {&glow_[0]}, 0, 0, gw, gh, false);
-        draw(cb, pGlowDown, 1, {{"uTex", layer_[0].view, nearest_}}, 0, 0, gw, gh);
-        end(cb); }
-    VkUniforms& u = prog_[pGlowBlur].u;
-    const int n[2] = {gw, gh};
-    u.i("uN", n, 2);
-    u.i("uR", &R, 1);
-    const float s = static_cast<float>(sig);
-    u.f("uSig", &s, 1);
-    for (int pass = 0; pass < 2; pass++) {                             // rows: 0 -> 1, then columns: 1 -> 0
-        Tex& from = glow_[pass];
-        Tex& into = glow_[1 - pass];
-        const int dir[2] = {pass == 0 ? 1 : 0, pass == 0 ? 0 : 1};
-        u.i("uDir", dir, 2);
-        use(cb, from, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-        begin(cb, {&into}, 0, 0, gw, gh, false);
-        draw(cb, pGlowBlur, 1, {{"uTex", from.view, nearest_}}, 0, 0, gw, gh);
-        end(cb);
-    }
-    glowValid_ = true;
 }
 
 // the disc's light averaged over blocks of b pixels into glareSrc_ (nx x ny)
@@ -1271,41 +1229,29 @@ void VkBlackHole::stopGlareThread() {
     if (glareStage_ == 2) glareStage_ = 0;
 }
 
-// the finished picture: with the eye's glare (kGlareAddFS) or the Film glow (kGlowAddFS) into out_, else the kept picture itself (made once,
-// when one of them changed)
+// the finished picture: with the eye's glare (kGlareAddFS) into out_, else the kept picture itself (made once, when it changed). 0.86.0: the Film look's
+// own glow (kGlowAddFS, 0.55.3) is gone (PLAN_REVIEW.md R6: Film shows only J15's choices)
 void VkBlackHole::compose(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH) {
     const bool glareOn = L.glareKeep > 0 && L.glareBlock && L.glareVeil && prog_[pGlareAdd].state == 2;
-    const bool glow = L.glow[0] > 0 && prog_[pGlowAdd].state == 2;
     composed_ = true;
-    if ((glareOn && glareValid_) || (glow && glowValid_)) {
+    if (glareOn && glareValid_) {
         if (out_.w != fbW || out_.h != fbH || !out_.img)
             if (!makeTex(out_, fbW, fbH, kRgba8, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "the finished picture")) { pictureView_ = lensTex_.view; return; }
-        if (glareOn && glareValid_) {
-            VkUniforms& u = prog_[pGlareAdd].u;
-            const int n[2] = {glareNx_, glareNy_};
-            u.i("uN", n, 2);
-            u.i("uB", &glareB_, 1);
-            u.f("uKeep", &L.glareKeep, 1);
-            toneUniforms(u, L);                                            // 0.70.0: the curve over the disc's light and the veil (Real)
-            const bool cw = L.whiteMode == 1 && !sum_.empty() && L.disc;
-            const int wm = cw ? 1 : 0;
-            u.i("uWhiteMode", &wm, 1);
-            Tex& veil = veilCard_ && !gL_.empty() ? gL_[0].S : glareVeil_;   // 0.85.5: the card's veil or the processor's
-            for (Tex* t : {&layer_[0], &layer_[1], &veil}) use(cb, *t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-            begin(cb, {&out_}, 0, 0, fbW, fbH, false);
-            draw(cb, pGlareAdd, 0, {{"uDisc", layer_[0].view, nearest_}, {"uSky", layer_[1].view, nearest_}, {"uVeil", veil.view, nearest_},
-                                    {"uWhite", cw ? sum_.back().view : white_.view, nearest_}}, 0, 0, fbW, fbH);
-            end(cb);
-        } else {
-            VkUniforms& u = prog_[pGlowAdd].u;
-            const int n[2] = {glow_[0].w, glow_[0].h};
-            u.i("uN", n, 2);
-            u.f("uStr", &L.glow[0], 1);
-            for (Tex* t : {&lensTex_, &glow_[0]}) use(cb, *t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
-            begin(cb, {&out_}, 0, 0, fbW, fbH, false);
-            draw(cb, pGlowAdd, 0, {{"uTex", lensTex_.view, nearest_}, {"uGlow", glow_[0].view, nearest_}}, 0, 0, fbW, fbH);
-            end(cb);
-        }
+        VkUniforms& u = prog_[pGlareAdd].u;
+        const int n[2] = {glareNx_, glareNy_};
+        u.i("uN", n, 2);
+        u.i("uB", &glareB_, 1);
+        u.f("uKeep", &L.glareKeep, 1);
+        toneUniforms(u, L);                                                // 0.70.0: the curve over the disc's light and the veil (Real)
+        const bool cw = L.whiteMode == 1 && !sum_.empty() && L.disc;
+        const int wm = cw ? 1 : 0;
+        u.i("uWhiteMode", &wm, 1);
+        Tex& veil = veilCard_ && !gL_.empty() ? gL_[0].S : glareVeil_;   // 0.85.5: the card's veil or the processor's
+        for (Tex* t : {&layer_[0], &layer_[1], &veil}) use(cb, *t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+        begin(cb, {&out_}, 0, 0, fbW, fbH, false);
+        draw(cb, pGlareAdd, 0, {{"uDisc", layer_[0].view, nearest_}, {"uSky", layer_[1].view, nearest_}, {"uVeil", veil.view, nearest_},
+                                {"uWhite", cw ? sum_.back().view : white_.view, nearest_}}, 0, 0, fbW, fbH);
+        end(cb);
         pictureView_ = out_.view;
     } else pictureView_ = lensTex_.view;
 }
@@ -1367,8 +1313,6 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
             !makeTex(layer_[1], fbW, fbH, kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, "the sky behind it")) return;
     }
     const bool same = lensValid_ && Renderer2D::lensSameView(last_, L, ksky, skyDrawn_, ptW, lastPtW_);
-    const bool glow = L.glow[0] > 0 && prog_[pGlowDown].state == 2 && prog_[pGlowBlur].state == 2 && prog_[pGlowAdd].state == 2;
-    const bool layers = glow || glareOn;
     // 0.72.0: a new picture only because the moving gas moved on: the glare's veil of a picture a few frames old is kept over it (the view is the same; the
     // gas changes the veil little) while the newest one's is made, and a veil that comes back is shown though newer pictures came meanwhile
     bool gasOnly = false;
@@ -1391,21 +1335,18 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
         // 0.63.0: its step begins once it has the guards' turn (one guarded step at a time); the picture is drawn meanwhile all the same: the frame never
         // waits, and the step open then (the sky's first full picture, say) is this same drawing
         if (guardState_ == 0 && prog_[pKerr].state == 2 && G.hold()) { G.begin("the first full picture"); firstTicket_ = c_->pending(); guardState_ = 1; }
-        glowValid_ = false;
         if (!(gasOnly && L.glareAsync)) glareValid_ = false;
         composed_ = false;
-        if (glow) makeGlow(cb, L, fbW, fbH);
         if (glareOn && !L.glareAsync) makeGlare(L, fbW, fbH);
         if (glareOn && L.glareAsync) { glareWant(L, fbW, fbH); want_.gasOnly = gasOnly; }
         else want_.gen = 0;
-        (void)layers;
     }
     if (glareOn && L.glareAsync) glarePump();
     else if (glareStage_ != 0 || want_.gen != 0) { want_.gen = 0; glarePump(); }
     cb = c_->cmd();                                                    // (makeGlare submitted the batch it drew in: the rest goes into a new one)
     if (!cb) return;
     if (!composed_) compose(cb, L, fbW, fbH);
-    else pictureView_ = out_.img && ((glareOn && glareValid_) || (glow && glowValid_)) ? out_.view : lensTex_.view;
+    else pictureView_ = out_.img && glareOn && glareValid_ ? out_.view : lensTex_.view;
     // the frame reads the picture and the mask in its fragment shaders
     Tex& pic = pictureView_ == out_.view && out_.img ? out_ : lensTex_;
     use(cb, pic, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);

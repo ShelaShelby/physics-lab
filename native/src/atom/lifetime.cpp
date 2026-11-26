@@ -184,8 +184,9 @@ double asdM1Rate2s(int Z) {                                    // ASD's one-phot
 }  // namespace
 std::string metastableText(int Z) {
     const double g2 = 1 / twoPhoton2sLifetimeS(Z), gm = asdM1Rate2s(Z);
+    // 0.86.0 (PLAN_REVIEW.md R8): no longer says "the lab's levels have no Lamb shift" (since 0.49.3 they carry it for n = 1, 2: dirac.h lambShiftEV)
     std::string t = "Metastable: no electric-dipole jump takes 2s to a lower n (1s has the same l and parity), so the lab has no allowed way down to count and gives no lifetime above. "
-                    "(Strictly, 2s 1/2 → 2p 1/2 across the tiny Lamb-shift gap is an allowed jump, but it is negligibly slow, and the lab's levels have no Lamb shift.) "
+                    "(Strictly, 2s 1/2 → 2p 1/2 across the tiny Lamb-shift gap is an allowed jump, but it is negligibly slow and the lab does not count it.) "
                     "A real 2s state still decays, in two ways the lab does not draw: by two photons at once, about once per 0.1215 s ÷ Z⁶ in a one-electron ion (Jentschura 2004), here " + fmtLife(1 / g2) +
                     (Z >= kRelativityZ ? " (non-relativistic: relativity changes it for an ion this heavy)" : std::string()) + ", and by one magnetic-dipole (M1) photon straight to 1s. ";
     if (std::isfinite(gm)) {

@@ -104,18 +104,22 @@ double DiscPhys::hottest(double* where) const {
     return temperature(r);
 }
 // 0.79.0: the thickness (disc.h; Zhu App. B). SI inside: F (W/m^2), Q (s^-2), h (m), then h / r_g.
-double zhuQ(double r) { const double L = orbitAngMom(r, 0); return L * L / (r * r * r * r); }   // (1 / r^3) (u_phi^2 / r)
-bool heightOn(double a) { return a == 0; }
+double zhuQ(double r, double a) {                                               // 0.86.0: AF13 (92)'s spin term (disc.h)
+    const double L = orbitAngMom(r, a), E = orbitEnergy(r, a);
+    return (L * L - a * a * (E * E - 1)) / (r * r * r * r);
+}
+double zhuRF(double r, double a) { return (1 - 2 / r + a * a / (r * r)) / (1 - 3 / r + 2 * a / (r * std::sqrt(r))); }   // (B1d)
+bool heightOn(double a) { return a > -1 && a < 1; }
 double DiscPhys::heightRad(double r) const {
     if (!heightOn(aSigned) || !(r > discInner(aSigned))) return 0;
     const double rg = gravRadiusM(massSun);
-    return kZhuKappa * flux(r) * rg / (2 * kC * kC * kC * zhuQ(r));               // kappa F / (2 c Q), Q = (c / r_g)^2 zhuQ, over r_g
+    return kZhuKappa * flux(r) * rg / (2 * kC * kC * kC * zhuQ(r, aSigned));               // kappa F / (2 c Q), Q = (c / r_g)^2 zhuQ, over r_g
 }
 double DiscPhys::height(double r, double* gasShare) const {
     if (gasShare) *gasShare = 0;
     if (!heightOn(aSigned) || !(r > discInner(aSigned))) return 0;
-    const double rg = gravRadiusM(massSun), F = flux(r), Q = (kC / rg) * (kC / rg) * zhuQ(r), Om = kC / rg / (r * std::sqrt(r));
-    const double RF = (1 - 2 / r) / (1 - 3 / r);                                   // (B1d) at a = 0
+    const double rg = gravRadiusM(massSun), F = flux(r), Q = (kC / rg) * (kC / rg) * zhuQ(r, aSigned), Om = kC / rg / (r * std::sqrt(r));
+    const double RF = zhuRF(r, aSigned);                                           // (B1d)
     const double A = 2 * F / (3 * kDiscAlpha * Om * RF);                          // P_tot h, from (B1c), (B1d)
     const double aRad = 4 * stefanBoltzmann() / kC;                               // the radiation constant
     const double mH = 1.00782503223 * 1.66053906892e-27, kT = kK / (kZhuMu * mH);  // k / (mu m_H)

@@ -12,9 +12,9 @@ namespace atom {
 namespace {
 double deltaOf(double x2, double jh) { return x2 / (jh + std::sqrt(jh * jh - x2)); }   // (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2) = (Z alpha)^2 / ((j + 1/2) + sqrt(...)): the difference of two nearly equal numbers, as a quotient
 struct Core { double x2, delta, k, t, s; };         // (Z alpha)^2, delta, k = n - delta, t = (Z alpha)^2 / k^2, s = sqrt(1 + t) = 1 / f
-Core core(int Z, int n, int twoJ) {
+Core core(int Z, int n, int twoJ, double alpha = kAlpha) {
     Core c;
-    const double x = Z * kAlpha, jh = (twoJ + 1) * 0.5;
+    const double x = Z * alpha, jh = (twoJ + 1) * 0.5;
     c.x2 = x * x;
     c.delta = deltaOf(c.x2, jh);
     c.k = n - c.delta;
@@ -28,6 +28,10 @@ double diracInfiniteEV(int Z, int n, int twoJ) {
     const Core c = core(Z, n, twoJ);
     return -kMecEV * c.t / (c.s * (1 + c.s));               // m c^2 (1/s - 1) = -m c^2 t / (s (1 + s)): no subtraction of 1
 }
+double diracInfiniteRy(int Z, int n, int twoJ, double alpha) {       // 0.86.0: E_D / (h c R_inf), h c R_inf = alpha^2 m c^2 / 2 (YS15's table's unit)
+    const Core c = core(Z, n, twoJ, alpha);
+    return -2 * c.t / (alpha * alpha * c.s * (1 + c.s));
+}
 double diracCorrectionEV(int Z, int n, int twoJ) {
     // E_Dirac - E_NR = m c^2 [ (1/s - 1 + t/2) + ((Z alpha)^2 / 2 n^2 - t/2) ]. The first bracket is (s - 1)^2 (s + 2) / (2 s) (from t = s^2 - 1), with s - 1 = t / (s + 1); the second is
     // -((Z alpha)^2 / 2) delta (2n - delta) / (n^2 k^2) (from n^2 - k^2 = delta (2n - delta)). Both are products and quotients; each is of the order (Z alpha)^4, and they only partly cancel (a factor 4 at most).
@@ -39,10 +43,11 @@ double diracEV(int Z, int N, int n, int twoJ) { return levelEV(Z, N, n) + diracC
 
 // ---- 0.49.3: the Lamb shift (see the header) ----
 namespace {
-struct LambRow { int Z, A; const char* sym; double rFm, s1s, s2s, s2p1, s2p3; };   // shifts in h c R_inf
+struct LambRow { int Z, A; const char* sym; double rFm, s1s, s2s, s2p1, s2p3; DiracPrinted dirac[3]; };   // shifts in h c R_inf; 0.86.0: the DIRAC row
 #include "lamb_data.inc"
 const LambRow* lambRow(int Z) { return Z >= 1 && Z <= 110 && kLambRows[Z - 1].Z == Z ? &kLambRows[Z - 1] : nullptr; }
 }  // namespace
+const DiracPrinted* diracPrinted(int Z) { const LambRow* r = lambRow(Z); return r ? r->dirac : nullptr; }
 bool lambKnown(int Z, int n) { return (n == 1 || n == 2) && lambRow(Z) != nullptr; }
 double lambShiftEV(int Z, int n, int l, int twoJ) {
     const LambRow* r = lambRow(Z);

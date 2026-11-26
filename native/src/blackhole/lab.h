@@ -170,8 +170,17 @@ struct DiscPixel { DiscHit hit; double T = 0, Tobs = 0; std::array<double, 3> rg
 DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light = true, bool plane = false);   // light false: the hit only
 // 0.79.0: the same with the disc's geometry given (discGeom(s), made once for many pixels); plane above: the crossing of the plane even where the surface is drawn
 DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, const HoleView& v, double X, double Y, bool light = true);
-// 0.79.0: the disc's thickness table (disc.h heightTable) for these settings: Real at spin 0 (disc.h heightOn); null otherwise. Kept for the last 64 discs.
+// 0.79.0: the disc's thickness table (disc.h heightTable) for these settings: where discThickDrawn; null otherwise. Kept for the last 64 discs.
 const HeightTable* discHeight(const Settings& s);
+// 0.86.0: the disc is drawn at its calculated thickness: the Real look at spin 0. The thickness is computed for every spin (disc.h heightOn), but the light
+// paths round a spinning hole find only the plane's crossings (disc.h, SPIN), so there the disc is drawn in its plane. Film: in its plane (J15's thin disc).
+bool discThickDrawn(const Settings& s);
+// 0.86.0: the words that say which shape the disc is drawn with, so they follow the picture (tests/test_blackhole.cpp testDiscWords):
+//   discShapeWords: the disc's shape in "What is real in this picture" (Real look); discEdgeOnWords: the caption when the camera is exactly in the disc's plane;
+//   discThicknessWords: the Disc section's caption under the thickness numbers (Real look).
+std::string discShapeWords(const Settings& s);
+std::string discEdgeOnWords(const Settings& s);
+std::string discThicknessWords(const Settings& s);
 // 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
 // true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). Sets T, Tobs, rgb and Y (the hit is left as it is).
 void discLight(const Settings& s, double r, double g, DiscPixel& o);

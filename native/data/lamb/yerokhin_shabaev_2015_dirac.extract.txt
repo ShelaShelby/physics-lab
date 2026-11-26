@@ -4,10 +4,10 @@
 # URL: https://arxiv.org/e-print/1506.01885
 # Date read: 2026-11-25
 # sha256 of the original: 2dd448e774a1ac5fd8ea8945fc88c1e71a006845a8710e9fa1a8798e4a95995c
-# Place in the original: Hlike8.tex: Equations (2) to (4) (the Dirac point-nucleus energy); the energy table, Z = 1 (DIRAC row)
+# Place in the original: Hlike8.tex: Equations (2) to (4) (the Dirac point-nucleus energy); the energy table, Z = 1 (DIRAC row); 0.86.0: the constants used (section Tabulations) and the table's caption
 # Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
 # native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
-# Used by: native/PLAN_REVIEW.md (0.84.1 research: the source atom/dirac.h line 23 asks for); no test reads it yet
+# Used by: src/atom/dirac.h (the Dirac energy's source, 0.86.0); tests/test_atom.cpp testDiracRows086 (the alpha the table used, its unit; the rows: tools/make_lamb_data.py, lamb_data.inc)
 #--- begin Equation (2)
 The Dirac point-nucleus binding energy $E_{\rm D}$ is given by
 \begin{align} \label{eq2}
@@ -33,4 +33,22 @@ The leading recoil correction $E_{\rm M}$ is written as
 DIRAC & -1.000013x3131931 & 0.750009x1528147 & 0x & 0.000003x328320432\,(2) \\
 MASS & 0.000544x3205755\,(2) & -0.000408x2386190\,(2) & 0x & -0.000000x001812648 \\
 LAMB & 0.000002x4842735\,(43) & -0.000002x1666270\,(43) & -0.000000x32154868\,(54) & 0.000000x007707557\,(33) \\
+#--- end
+#--- begin the constants used (section Tabulations)
+The following values of fundamental constants were used in the present compilation
+\cite{mohr:12:codata}:
+\begin{align}
+\alpha^{-1} &\ = 137.035\,999\,074\,(44)\,,\\
+m &\ = 5.485\,799\,0946\,(22)\,\times 10^{-4}\ \mbox{\rm a.m.u.}
+\end{align}
+#--- end
+#--- begin the energy table's caption
+\caption{Ionization energy of the ground state and the energy level separation intervals in
+hydrogenlike atoms, in Rydbergs. $Z$ is the nuclear charge, $^1$H, $^4$He, $\ldots$ are the isotope
+symbols, $R$ is the root-mean-square nuclear charge radius in fermi, $M/m$ is the ratio of the
+nuclear mass and the electron mass, ``DIRAC'' denotes the binding energy or the transition energy
+according to the Dirac equation with the point nucleus $E_{\rm D}$, ``MASS'' denotes the leading
+recoil correction $E_{\rm M}$,  ``LAMB'' denotes the Lamb shift $E_{\rm L}$, and ``TOTAL'' denotes
+the total binding energy or transition energies. The numbers in parenthesis denote uncertainties in
+the last figure(s).
 #--- end

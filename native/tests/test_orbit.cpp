@@ -39,6 +39,7 @@
 #include "orbit/saturn_profile.h"
 #include "render/shaders.h"
 #include "orbit/sky.h"
+#include "orbit/star_light.h"
 #include "orbit/spin.h"
 #include "orbit/sun_facts.h"
 #include "orbit/time_scale.h"
@@ -636,6 +637,70 @@ static void testStarBrightness050() {
     check(starDraw(6.6).alpha > 0.3, "the faintest catalogue star (m 6.6) stays visible");
 }
 
+// 0.86.0: THE STARS ON THE CAMERA'S EXPOSURE (orbit/star_light.h skyStarDot, used by orbit_view.cpp drawSky). Written before the change (the stars' brightness
+// was from the zoom only):
+//  1. Even lighting: every catalogue star's drawn radius and opacity are 0.50's exactly (starDrawLight of kStarFaintLight (F / F(6.6))^0.5, opacity x lv),
+//     for the sky levels 0.16, 0.45, 0.76 and 1 (compared with ==).
+//  2. True sunlight: two stars 5 magnitudes apart, neither clipped (opacity below 1, above the screen's faintest step), differ by Pogson's 100 in drawn light
+//     (opacity x pi r^2).
+//  3. A star is drawn if and only if its true light reaches one screen step: written out from the sources here (Pogson, the Sun's V -26.76, Omega_Sun from
+//     R_Sun and the au, the screen white of a white Lambert surface at d_E: (R_Sun / d_E)^2, the 3D camera's square point cos^3 / F^2), against skyStarDot,
+//     for every catalogue star at the picture's middle and at its corner, exposures for Earth and Neptune.
+//  4. The exposure set for Neptune shows more stars than the one set for Earth (the distances: the lab's own, the JPL start positions).
+static void testStarsExposure086() {
+    const Sky& S = skyData();
+    bool same = true;
+    for (const auto& st : S.stars)
+        for (double lv : {0.16, 0.45, 0.76, 1.0}) {
+            const SkyDot d = skyStarDot(st.mag, lv, 0.0, 1e-6);
+            const StarDraw o = starDrawLight(kStarFaintLight * std::pow(10.0, -0.4 * kStarGamma * (st.mag - kStarFaintMag)));
+            same = same && d.drawn && d.radius == o.radius && d.alpha == o.alpha * lv;
+        }
+    check(same, "stars, Even lighting: every star's radius and opacity are 0.50's exactly (" + std::to_string(S.stars.size()) + " stars x 4 sky levels)");
+    SolarSystem sys; sys.loadAt(ref::kEpochMs);
+    double dE = 0, dN = 0;
+    for (const Body& b : sys.bodies) { if (b.name == "Earth") dE = length(b.pos) / units::kAU; if (b.name == "Neptune") dN = length(b.pos) / units::kAU; }
+    const double F = 900, W = 1600, H = 1000, ppx = W / 2, ppy = H / 2;
+    {
+        const double white = sunlitWhite(dN), pt = pinholePointSr(F, ppx, ppy, ppx, ppy);
+        double worst = 0;
+        int n = 0;
+        for (double m = -3; m < 4; m += 0.25) {
+            const SkyDot a = skyStarDot(m, 1, white, pt), b = skyStarDot(m + 5, 1, white, pt);
+            if (!(a.alpha < 1 && b.drawn)) continue;
+            n++;
+            worst = std::max(worst, std::fabs((a.alpha * a.radius * a.radius) / (b.alpha * b.radius * b.radius) / 100 - 1));
+        }
+        check(n >= 3 && worst < 1e-12, "stars, True sunlight: 5 magnitudes apart, neither clipped, drawn light ratio 100 (" + std::to_string(n) + " pairs at Neptune's exposure, worst " + std::to_string(worst) + ")");
+    }
+    const double pi = 3.14159265358979323846, rs = 695700e3 / 149597870700.0;
+    int bad = 0, shownE = 0, shownN = 0;
+    for (double dX : {dE, dN})
+        for (int corner = 0; corner < 2; corner++) {
+            const double X = corner ? 0 : ppx, Y = corner ? 0 : ppy;
+            const double c2 = F * F / (F * F + (X - ppx) * (X - ppx) + (Y - ppy) * (Y - ppy)), sr = c2 * std::sqrt(c2) / (F * F);
+            const double white = rs * rs / (dX * dX);                                       // a white Lambert surface lit face-on at d_E, Sun's surface units
+            for (const auto& st : S.stars) {
+                const double light = pi * rs * rs * std::pow(10.0, -0.4 * (st.mag + 26.76)) / (white * sr);   // screen white x square point
+                const bool want = light >= 0.5 / (255 * 12.92) * pi * kStarMinRadius * kStarMinRadius;     // its smallest dot's opacity reaches one step
+                const SkyDot d = skyStarDot(st.mag, 1, sunlitWhite(dX), pinholePointSr(F, ppx, ppy, X, Y));
+                if (d.drawn != want) bad++;
+                if (!corner && d.drawn) (dX == dE ? shownE : shownN)++;
+            }
+        }
+    check(bad == 0, "stars, True sunlight: drawn if and only if the true light reaches one screen step (every star, middle and corner, Earth's and Neptune's exposure; " + std::to_string(bad) + " differ)");
+    check(dE > 0.9 && dN > 25 && shownN > shownE, "stars, True sunlight: exposure for Neptune (" + std::to_string(dN) + " au) shows " + std::to_string(shownN) + " stars, for Earth (" + std::to_string(dE) + " au) " + std::to_string(shownE));
+    std::printf("  stars on the exposure (3D, F = 900 points, the middle): Earth %d, Neptune %d of %zu\n", shownE, shownN, S.stars.size());
+    // Part D: the Sky caption says the squeeze with the code's numbers: the catalogue's range by Pogson and its square root (kStarGamma), written out here
+    double mb = 1e9, mf = -1e9;
+    for (const auto& st : S.stars) if (st.mag < 30) { mb = std::min(mb, double(st.mag)); mf = std::max(mf, double(st.mag)); }
+    const double lr = std::pow(10.0, 0.4 * (mf - mb)), dr = std::sqrt(lr);
+    const std::string ev = skyCaption(1, false), tr = skyCaption(1, true);
+    check(kStarGamma == 0.5 && ev.find("differ " + timesText(lr) + " times in light") != std::string::npos && ev.find("drawn " + timesText(dr) + " times apart") != std::string::npos &&
+          ev.find("squeezed") != std::string::npos && tr.find("exposure") != std::string::npos && tr.find("squeezed") == std::string::npos && skyCaption(2, true) == "plain background",
+          "stars: the Sky caption gives the squeeze from the code (" + timesText(lr) + " in light, " + timesText(dr) + " drawn); True sunlight's names the exposure");
+}
+
 // 0.50 (review items 8 and 10): a map's colour against a measured disc colour. Both as LINEAR sRGB ratios r/g and b/g (the check the OPAL maps used).
 // The map: every pixel decoded (IEC 61966-2-1), averaged over the sphere (weight cos latitude). The reference: the measured geometric albedos (typed here
 // from the paper) -> linear between the band wavelengths, flat outside -> CIE 1931 XYZ under D65, 360-780 nm in 5 nm steps (the saved tables, parsed here)
@@ -1193,6 +1258,7 @@ int main() {
     testAlbedo077();
     testFarOcclusion077();
     testStarBrightness050();
+    testStarsExposure086();
     testStarColours050();
     testShading050();
     testVisuals0512();

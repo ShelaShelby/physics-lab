@@ -345,14 +345,6 @@ void BlackHoleView::toneFields(render::Renderer2D::LensSky& L, const Settings& s
 // 0.72.0: the moving gas's fields of a pass (renderer2d.h LensSky::gas; gas.h gasCard): the pattern (SKH06) and the clump (BL06) of the shown settings s at the
 // far time T; gasVer: a new number for a new T or a changed choice (the kept picture is drawn anew)
 namespace {
-// 0.81.0: Film's soft edges and see-through (looks.h; the lab's own): the look's fade and tau on the pass (Real: [3] = 0, the hard opaque disc)
-void filmSoftFields(render::Renderer2D::LensSky& L, const Settings& s) {
-    const LookRule r = lookRule(s.look);
-    if (!(r.tau > 0)) return;
-    const DiscGeom g = discGeom(s);
-    L.filmSoft[0] = static_cast<float>(std::log(g.rIn)); L.filmSoft[1] = static_cast<float>(std::log(g.rOut));
-    L.filmSoft[2] = static_cast<float>(r.fade); L.filmSoft[3] = static_cast<float>(r.tau);
-}
 bool g_gasHookOff = false;   // (the comparison hooks: their reference pictures are still; 2a turns the gas on for its own check)
 bool g_hgtHookOff = false;   // 0.79.0 (the hooks' checks of the plane's crossings: the surface off)
 void gasFields(render::Renderer2D::LensSky& L, const Settings& s, double T) {
@@ -392,7 +384,6 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.tableVersion = tableVer_;
     }
     L.sky = s.skyOurs && !trueSkyOn(s);                                    // 0.55.4: under the true exposure the map is not drawn (light.h)
-    if (lookRule(s.look).glow) { L.glow[0] = static_cast<float>(kGlowStrength); L.glow[1] = static_cast<float>(kGlowThreshold); L.glow[2] = static_cast<float>(kGlowSigma); }   // 0.55.3 (looks.h)
     const auto spinFrame = [&](float kM[9], float kO[4]) {                  // the chart's axes to galactic, the screen directions of e_theta and e_phi
         Vec3 rows[3];
         viewRows(v, rows);
@@ -444,7 +435,6 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
                 for (int k = 0; k < 3; k++) L.filmRaw[k] = static_cast<float>(q.rgb[static_cast<std::size_t>(k)]);
                 L.filmRaw[3] = 1;
             }
-            filmSoftFields(L, s);                                           // 0.81.0
             if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }
             L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread; L.glareTables = glareCardOn() ? glareTablesFn : nullptr;
         }
@@ -492,7 +482,6 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
                 for (int k = 0; k < 3; k++) L.discFix[k] = static_cast<float>(m > 1 ? c[k] / m : c[k]);
                 L.discFix[3] = 1;
             }
-            filmSoftFields(L, s);                                           // 0.81.0
             if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
             L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread; L.glareTables = glareCardOn() ? glareTablesFn : nullptr;   // 0.55.5
         }
@@ -520,11 +509,11 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         if (lookUse_) { L.whiteMode = 1; L.expStep = 4; }                   // 0.56.0: the card finds the exposure (spin 0 too; 0.70.0: your choice too)
         gasFields(L, s, gasT);                                              // 0.72.0: the moving gas: the travel times, the sky frame's x and y on the view
         L.discTime = &disc_->tValues();
-        if (const HeightTable* ht = g_hgtHookOff ? nullptr : g.height) {    // 0.79.0: the disc's true thickness (Real, spin 0: lab.h discHeight)
+        if (const HeightTable* ht = g_hgtHookOff ? nullptr : g.height) {    // 0.79.0: the disc's true thickness (lab.h discHeight, discThickDrawn)
             L.hgt = &ht->h;
             L.hgtR[0] = static_cast<float>(ht->ln0); L.hgtR[1] = static_cast<float>(ht->dln); L.hgtR[2] = static_cast<float>(ht->h.size()); L.hgtR[3] = 1;
             std::uint64_t hh = 1469598103934665603ULL;
-            for (double x : {s.feed, s.massSun}) { std::uint64_t b; std::memcpy(&b, &x, sizeof b); hh = (hh ^ b) * 1099511628211ULL; }
+            for (double x : {s.feed, s.massSun, s.spin}) { std::uint64_t b; std::memcpy(&b, &x, sizeof b); hh = (hh ^ b) * 1099511628211ULL; }
             L.hgtVersion = hh | 1;
         }
         {   Vec3 rows[3];
@@ -1576,115 +1565,6 @@ void toneCompare(render::Renderer2D& R) {
     }
 }
 
-// 0.81.0 (PLAN_DISC.md D4): Film's soft edges and see-through disc on the card (kKerrSkyFS, the app's Film pass) against the processor in double. The
-// Film look at the paper's view (J15 Figure 13: 74.1 M, 86.56 deg, field of view 30) and 3 degrees below the disc's plane, 640 x 400, Sky: Black, no glow,
-// the streaks and the clump at kSkyGasT read with no footprint. The reference at each pixel's centre: traceClosed (kerr_closed.h, timed) gives every crossing
-// of the disc's plane, its phi and t; at each crossing in [rIn, rOut]: gas.h's streak factor S and clump n, the light L = the film's colour x S (1 + A n)
-// over the card's screen's white (scaled into the screen as the shader does), the cover 1 - exp(-1.5 S edge) (looks.h); laid front to back (looks.h
-// layFrontToBack), encoded. Pixels whose 3 x 3 neighbours do not all end alike with the same crossings on the disc are left out (there the card's own
-// anti-aliasing covers a part). Counted: pixels over 8 levels of 255 in any channel (the limit: at most 1 %), over 1 level (float rounding, reported),
-// and "through": disc pixels of the reference (all, not only the inner ones) where light from a farther crossing adds more than 2 levels (the far side and
-// the thin rings seen through the near side: thin rings, so mostly next to another image).
-void filmSoftCompare(render::Renderer2D& R) {
-    const int W = 640, H = 400;
-    const FilmChoices film;
-    streakField();                                                          // (made now: the pass below needs it)
-    for (double tilt : {film.camTheta, kPi / 2 + 3 * kPi / 180}) {
-        BlackHoleView view;
-        Settings u = settingsDefaults();
-        applyPreset(u, kFeedingKey);
-        u.skyOurs = false; u.glare = false;
-        setLook(u, Look::Film); paperView(u); setFov(u, 30);
-        u.pitch = tilt;
-        const Settings s = shown(u);
-        view.exact_ = true;
-        view.ensureSpin(s, true);
-        view.prepare(s, W, H, W / 2.0, H / 2.0, nullptr);
-        const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
-        view.skyUse_ = true; view.lookUse_ = true;
-        view.ensureSkyF(s.spin);
-        view.gasT = kSkyGasT; g_gasHookOff = false;
-        render::Renderer2D::LensSky L = view.lensFor(s, v);
-        view.gasT = 0; g_gasHookOff = true;
-        L.gasNoFoot = true; L.glareKeep = 0; L.glow[0] = L.glow[1] = L.glow[2] = 0;
-        Fbo f = makeFbo(W, H, false);
-        R.skyWhiteWait();
-        R.begin(W, H); R.lensSky(L); endFbo(R, W, H, f);
-        R.skyWhiteWait();
-        DiscLook cl = cardReadLook(R.skyStats());
-        const bool ok = cl.any && finishLook(cl, s) && L.gas && L.filmSoft[3] > 0;
-        const DiscGeom g = discGeom(s);
-        const LookRule rule = lookRule(Look::Film);
-        Clump clp;
-        clp.a = s.spin; clp.rc = gasClumpRadius(s); clp.init();
-        const std::array<double, 3> col = filmDiscLinear();
-        const double camPhi = std::remainder(cameraPhi(v), 2 * kPi);
-        const Camera cam{s.dist, s.pitch, 0};
-        std::vector<int> key(static_cast<std::size_t>(W) * H, -1);          // (end kind) x 16 + the mask of crossings on the disc
-        std::vector<std::array<double, 3>> ref(key.size()), first(key.size());
-        parallelFor(H, [&](int j) {
-            for (int i = 0; i < W; i++) {
-                const double X = i + 0.5, Y = H - 1 - j + 0.5, dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
-                const std::size_t at = static_cast<std::size_t>(j) * W + i;
-                if (!(th <= kPi) || d == 0) continue;
-                double chi = std::atan2(-dx / d, dy / d);
-                if (chi < 0) chi += 2 * kPi;
-                const ClosedEnd e = traceClosed(s.spin, cam, lookAt(th, chi), kClosedCross, true);
-                int mask = 0;
-                std::vector<FilmLayer> lay;
-                for (int k = 0; k < e.nCross && k < 4; k++) {
-                    if (!(e.u[k] > 0)) continue;
-                    const double r = 1 / e.u[k];
-                    if (r < g.rIn || r > g.rOut) continue;
-                    mask |= 1 << k;
-                    const double te = kSkyGasT - e.t[k], ph = e.phi[k] + camPhi;
-                    const double S = streakField().factor(r, ph, te, s.spin), gf = S * (1 + clp.A * clp.density(r, ph, te));
-                    FilmLayer q;
-                    double m = 0;
-                    for (int c = 0; c < 3; c++) { q.light[static_cast<std::size_t>(c)] = col[static_cast<std::size_t>(c)] * gf / cl.white; m = std::max(m, q.light[static_cast<std::size_t>(c)]); }
-                    if (m > 1) for (double& c : q.light) c /= m;
-                    q.cover = filmCover(filmTau(S, filmEdge(r, g.rIn, g.rOut, rule.fade), rule.tau));
-                    lay.push_back(q);
-                }
-                key[at] = static_cast<int>(e.kind) * 16 + mask;
-                ref[at] = layFrontToBack(lay);
-                if (!lay.empty()) { lay.resize(1); first[at] = layFrontToBack(lay); }
-            }
-        });
-        const auto enc = [](double l) { l = std::clamp(l, 0.0, 1.0); return 255 * (l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055); };
-        long n = 0, over = 0, over1 = 0, through = 0;
-        int maxd = 0;
-        for (int j = 1; j + 1 < H; j++)
-            for (int i = 1; i + 1 < W; i++) {
-                const std::size_t at = static_cast<std::size_t>(j) * W + i;
-                if (key[at] < 0 || (key[at] & 15) == 0) continue;
-                int dthr = 0;                                                   // (the reference's own: how much a farther crossing adds, every disc pixel)
-                for (int k = 0; k < 3; k++) dthr = std::max(dthr, int(std::lround(enc(ref[at][static_cast<std::size_t>(k)]))) - int(std::lround(enc(first[at][static_cast<std::size_t>(k)]))));
-                if (dthr > 2) through++;
-                bool inner = true;
-                for (int dj = -1; dj <= 1; dj++) for (int di = -1; di <= 1; di++) inner = inner && key[static_cast<std::size_t>(j + dj) * W + i + di] == key[at];
-                if (!inner || f.px.size() < at * 4 + 3) continue;
-                n++;
-                int dmax = 0;
-                for (int k = 0; k < 3; k++) dmax = std::max(dmax, std::abs(int(f.px[at * 4 + k]) - int(std::lround(enc(ref[at][static_cast<std::size_t>(k)])))));
-                maxd = std::max(maxd, dmax);
-                if (dmax > 8) over++;
-                if (dmax > 1) over1++;
-            }
-        if (const char* dir = std::getenv("PL_BH_FILMSHOT")) {                  // (by hand: the card's picture as a PNG, rows from the top)
-            std::vector<std::uint8_t> rgb(static_cast<std::size_t>(W) * H * 3);
-            for (int j = 0; j < H && f.px.size() >= static_cast<std::size_t>(W) * H * 4; j++)
-                for (int i = 0; i < W; i++) for (int k = 0; k < 3; k++) rgb[(static_cast<std::size_t>(H - 1 - j) * W + i) * 3 + k] = f.px[(static_cast<std::size_t>(j) * W + i) * 4 + k];
-            const std::vector<std::uint8_t> png = app::encodePng(W, H, rgb.data());
-            const std::string path = std::string(dir) + "/filmsoft_" + std::to_string(static_cast<int>(std::lround(tilt * 1000))) + ".png";
-            if (FILE* fo = std::fopen(path.c_str(), "wb")) { std::fwrite(png.data(), 1, png.size(), fo); std::fclose(fo); }
-        }
-        std::printf("PLBHFILMSOFT tilt=%.5f ok=%d white=%.6g fade=%g tau=%g pixels=%ld over8=%ld share=%.5f over1=%ld maxdiff=%d through=%ld\n", tilt, ok ? 1 : 0, cl.white,
-                    static_cast<double>(L.filmSoft[2]), static_cast<double>(L.filmSoft[3]), n, over, n ? double(over) / n : 1.0, over1, maxd, through);
-        dropFbo(f);
-    }
-}
-
 void compareHook(render::Renderer2D& R, const char* spec) {
     if (!R.vulkan()) { std::printf("PLBHCOMPARE skipped: no Vulkan\n"); return; }   // on Vulkan
     g_gasHookOff = true;                                                    // 0.72.0: the hooks' pictures without the moving gas (but 2a's)
@@ -1749,7 +1629,6 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                         cpu, card, card > 0 ? std::fabs(card / cpu - 1) : 1.0, R.skyStats().expN, la, lt, lc, la > 0 ? std::fabs(lc / la - 1) : 1.0);
         }
         toneCompare(R);                                                     // 0.70.0
-        filmSoftCompare(R);                                                 // 0.81.0
         // the card's moving picture and its picture at rest come from the same formulas: at the same resolution not one pixel differs (Film, the paper's
         // view and 3 degrees below the plane); at half the resolution (a pass forced slow) the pixels that differ by more than 8 levels of 255 are counted
         for (double tilt : {film.camTheta, kPi / 2 + 3 * kPi / 180}) {
@@ -1785,8 +1664,8 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         return;
     }
     // 0. 0.55.3, the looks: Real's saved case to the pixel; Film at the paper's view (J15 Figure 13: 74.1 M, 86.56 deg; field of view 30 degrees) against the double
-    //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
-    //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.
+    //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc (0.86.0: J15's opaque,
+    //    hard-edged disc; the lab's own glow and see-through disc are gone, PLAN_REVIEW.md R6).
     {
         // 0.55.9: the fine table's rays now come from the closed forms (spin_sky.h kSpinFineFill, kerr_closed.h): the same picture drawn with 0.55.8's rays
         // (Mino's form, kSpinFineFillMino) gives 0.55.8's saved hash, and the two pictures differ by at most one level of 255 (their largest difference and
@@ -1833,24 +1712,17 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         std::vector<float> dbg;
         readF(L, dbg);
         render::Renderer2D::LensSky Lc = view.lensFor(s, v);
-        const float glow0[3] = {Lc.glow[0], Lc.glow[1], Lc.glow[2]};
-        Lc.glow[0] = Lc.glow[1] = Lc.glow[2] = 0;
-        std::vector<unsigned char> plain, glowed, discOnly;
-        read8(Lc, plain);
-        Lc.sky = false;                                                     // 0.55.4: the disc's own light (the glow is made from it alone)
+        std::vector<unsigned char> discOnly;
+        Lc.sky = false;                                                     // the disc's own light (0.86.0: Film is J15's hard-edged opaque disc, no glow)
         read8(Lc, discOnly);
-        Lc.sky = true;
-        Lc.glow[0] = glow0[0]; Lc.glow[1] = glow0[1]; Lc.glow[2] = glow0[2];
-        read8(Lc, glowed);
         // the double lookup at every pixel (row 0 at the bottom, as read back)
         std::vector<int> kk(static_cast<std::size_t>(W0) * H0, -2), km(kk.size(), 0);
         std::vector<double> rr(kk.size(), 0);
-        // 0.81.0: the laid colour of every pixel (looks.h: each crossing of the table in [rIn, rOut] covers 1 - exp(-1.5 edge), the table's pass has no
-        // moving gas so S = 1; front to back) and km, the mask of its crossings on the disc; refC1: the first crossing's alone (how much shows through)
-        const LookRule rule = lookRule(Look::Film);
+        // 0.86.0 (PLAN_REVIEW.md R6): the CPU Film reference: J15's opaque disc, so a pixel whose ray crosses the disc in [rIn, rOut] is the film's one colour
+        // (the first crossing covers it all); km, the mask of its crossings on the disc. (0.81.0 to 0.85: the lab's own see-through layers.)
         double fixD[3] = {Lc.discFix[0], Lc.discFix[1], Lc.discFix[2]};
         const double* fix = fixD;
-        std::vector<std::array<double, 3>> refC(kk.size(), std::array<double, 3>{0, 0, 0}), refC1(kk.size(), std::array<double, 3>{0, 0, 0});
+        std::vector<std::array<double, 3>> refC(kk.size(), std::array<double, 3>{0, 0, 0});
         for (int j = 0; j < H0; j++)
             for (int i = 0; i < W0; i++) {
                 const double X = i + 0.5, Y = H0 - 1 - j + 0.5, dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
@@ -1861,22 +1733,14 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
                 const std::size_t at = static_cast<std::size_t>(j) * W0 + i;
                 kk[at] = sd.order; rr[at] = sd.r;
-                std::vector<FilmLayer> lay;
                 for (int k = 0; k < kSpinCross && k < 4; k++) {
                     if (!(h.u[k] > 0) || 1 / h.u[k] < g.rIn || 1 / h.u[k] > g.rOut) continue;
                     km[at] |= 1 << k;
-                    lay.push_back(FilmLayer{{fix[0], fix[1], fix[2]}, filmCover(filmTau(1, filmEdge(1 / h.u[k], g.rIn, g.rOut, rule.fade), rule.tau))});
                 }
-                refC[at] = layFrontToBack(lay);
-                if (!lay.empty()) { lay.resize(1); refC1[at] = layFrontToBack(lay); }
+                if (km[at]) refC[at] = {fix[0], fix[1], fix[2]};
             }
         const auto enc8 = [](double l) { l = std::clamp(l, 0.0, 1.0); return static_cast<int>(std::lround(255 * (l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055))); };
-        int maxOff = 0, through = 0;                                        // through: disc pixels where a farther crossing adds more than 2 levels (the reference's own)
-        for (std::size_t q = 0; q < refC.size(); q++) {
-            int thr = 0;
-            for (int k = 0; k < 3; k++) thr = std::max(thr, enc8(refC[q][static_cast<std::size_t>(k)]) - enc8(refC1[q][static_cast<std::size_t>(k)]));
-            if (thr > 2) through++;
-        }
+        int maxOff = 0;
         int discPx = 0, wrong = 0, edgeWrong = 0, colours = 0, offColour = 0;
         double rMin = 1e9, rMax = 0, shift = 0;
         unsigned char want[3];
@@ -1912,10 +1776,10 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                     }
                 if (!inner || rr[at] - g.rIn < 2 * step || g.rOut - rr[at] < 2 * step) continue;
                 discPx++;
-                const unsigned char* q = &discOnly[at * 4];                     // (0.81.0: the disc alone: the sky now shows through it; until 0.80 plain)
+                const unsigned char* q = &discOnly[at * 4];                     // (the disc alone)
                 const std::uint32_t key = (static_cast<std::uint32_t>(q[0]) << 16) | (static_cast<std::uint32_t>(q[1]) << 8) | q[2];
                 if (std::find(seen.begin(), seen.end(), key) == seen.end()) seen.push_back(key);
-                int off = 0;                                                    // 0.81.0: the laid colour (until 0.80: the one colour want everywhere)
+                int off = 0;                                                    // 0.86.0: the one colour want everywhere again (0.81.0 to 0.85: the laid colour)
                 for (int k = 0; k < 3; k++) off = std::max(off, std::abs(int(q[k]) - enc8(refC[at][static_cast<std::size_t>(k)])));
                 maxOff = std::max(maxOff, off);
                 if (off > 1) {
@@ -1925,66 +1789,8 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 }
             }
         colours = static_cast<int>(seen.size());
-        // the glow against its reference (glowReference works top-down; at a height divisible by 4 the blocks are the same either way): 0.55.4: made from the
-        // disc's own light (the picture with the sky black), added to the picture with the sky; where the reference adds nothing the picture is the plain one
-        std::vector<double> lin(static_cast<std::size_t>(W0) * H0 * 3), dl(lin.size());
-        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)
-            for (int k = 0; k < 3; k++) {
-                const double e = plain[q * 4 + k] / 255.0, e2 = discOnly[q * 4 + k] / 255.0;
-                lin[q * 3 + k] = e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4);
-                dl[q * 3 + k] = e2 <= 0.04045 ? e2 / 12.92 : std::pow((e2 + 0.055) / 1.055, 2.4);
-            }
-        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)   // (a pixel wholly on the disc: its colour unrounded, as the glow pass reads it)
-            if (km[q] && discOnly[q * 4] == enc8(refC[q][0]) && discOnly[q * 4 + 1] == enc8(refC[q][1]) && discOnly[q * 4 + 2] == enc8(refC[q][2]))
-                for (int k = 0; k < 3; k++) dl[q * 3 + k] = std::clamp(refC[q][static_cast<std::size_t>(k)], 0.0, 1.0);   // (0.81.0: the laid colour)
-        const std::vector<double> gref = glowReference(dl, W0, H0);
-        int skyTouched = 0, skyFree = 0;
-        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++) {
-            if (gref[q * 3] > 0 || gref[q * 3 + 1] > 0 || gref[q * 3 + 2] > 0) continue;
-            skyFree++;
-            for (int k = 0; k < 3; k++) if (glowed[q * 4 + k] != plain[q * 4 + k]) { skyTouched++; break; }
-        }
-        {   const std::vector<double> gAll = glowReference(lin, W0, H0);  // what 0.55.3's rule (from the whole picture) would have added beyond the disc's glow
-            double extra = 0;
-            for (std::size_t q = 0; q < gAll.size(); q++) extra += std::max(0.0, gAll[q] - gref[q]);
-            std::printf("PLBHGLOWSKY free=%d touched=%d oldextra=%.6g\n", skyFree, skyTouched, extra); }
-        int darker = 0, glowDiff = 0, brighter = 0;
-        double added = 0, addedRef = 0;
-        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)
-            for (int k = 0; k < 3; k++) {
-                const int a0 = plain[q * 4 + k], a1 = glowed[q * 4 + k];
-                if (a1 < a0) darker++;
-                if (a1 > a0) brighter++;
-                const double l = std::clamp(lin[q * 3 + k] + kGlowStrength * gref[q * 3 + k], 0.0, 1.0), e = l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055;
-                glowDiff = std::max(glowDiff, std::abs(a1 - static_cast<int>(std::lround(e * 255))));
-                const double e1 = a1 / 255.0;
-                added += (e1 <= 0.04045 ? e1 / 12.92 : std::pow((e1 + 0.055) / 1.055, 2.4)) - lin[q * 3 + k];
-                addedRef += std::min(1.0, lin[q * 3 + k] + kGlowStrength * gref[q * 3 + k]) - lin[q * 3 + k];
-            }
-        std::printf("PLBHFILM spin=%g dist=%g theta=%.6f rin=%g rout=%g pixels=%d wrong=%d edgewrong=%d edgeshift=%.3e rmin=%.6f rmax=%.6f colours=%d offcolour=%d maxoff=%d through=%d want=%d,%d,%d white=%.6g "
-                    "darker=%d brighter=%d glowdiff=%d added=%.6g addedref=%.6g fade=%g tau=%g\n", s.spin, s.dist, s.pitch, g.rIn, g.rOut, discPx, wrong, edgeWrong, shift, rMin, rMax, colours, offColour,
-                    maxOff, through, want[0], want[1], want[2], view.st_.look.white, darker, brighter, glowDiff, added, addedRef, static_cast<double>(Lc.filmSoft[2]), static_cast<double>(Lc.filmSoft[3]));
-        // the glow pass's time: the picture drawn anew with and without it (best of 3), the difference
-        for (const auto& sz : {std::array<int, 2>{1280, 800}, std::array<int, 2>{3840, 2160}}) {
-            Settings s2 = s;
-            double best[2] = {1e30, 1e30};
-            for (int withGlow = 0; withGlow < 2; withGlow++) {
-                Fbo f = makeFbo(sz[0], sz[1], false);
-                for (int rep = 0; rep < 3; rep++) {
-                    s2.yaw += 0.001;                                            // a new view each time: drawn anew
-                    const HoleView v2 = holeView(s2, sz[0], sz[1], sz[0] / 2.0, sz[1] / 2.0);
-                    render::Renderer2D::LensSky L2 = view.lensFor(s2, v2);
-                    if (!withGlow) L2.glow[0] = L2.glow[1] = L2.glow[2] = 0;
-                    R.begin(sz[0], sz[1]);
-                    R.lensSky(L2);
-                    const auto t0 = std::chrono::steady_clock::now();
-                    endFbo(R, sz[0], sz[1], f);
-                    best[withGlow] = std::min(best[withGlow], msSince(t0));
-                }
-                dropFbo(f);
-            }
-            std::printf("PLBHTIME film size=%dx%d discms=%.1f withglowms=%.1f glowms=%.1f\n", sz[0], sz[1], best[0], best[1], best[1] - best[0]);
-        }
+        std::printf("PLBHFILM spin=%g dist=%g theta=%.6f rin=%g rout=%g pixels=%d wrong=%d edgewrong=%d edgeshift=%.3e rmin=%.6f rmax=%.6f colours=%d offcolour=%d maxoff=%d want=%d,%d,%d white=%.6g\n",
+                    s.spin, s.dist, s.pitch, g.rIn, g.rOut, discPx, wrong, edgeWrong, shift, rMin, rMax, colours, offColour, maxOff, want[0], want[1], want[2], view.st_.look.white);
     }
     // 0b. 0.55.4, the eye's glare on Real's saved case: the light the veil lays on the picture against the light it spreads (light leaving the picture: the
     //     difference, which is small and positive here), the picture with Glare Off = without the glare's passes (the hash above), the glare's time at

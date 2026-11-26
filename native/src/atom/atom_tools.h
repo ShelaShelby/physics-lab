@@ -2,6 +2,9 @@
 // (INVENTORY.md section 2: the "View" row and "the bar under the picture"). Every button calls the same AtomLab function the old control called.
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "atom/atom_sim.h"
 
 namespace atom {
@@ -23,6 +26,19 @@ enum class Tool {
 };
 
 void pressTool(AtomLab& L, Tool t);
+
+// 0.86.0 (PLAN_REVIEW.md R5, the owner's decision of 25 Nov 2026): the made-up learning pictures are kept, labelled kMadeUpLabel next to their choice and in their
+// caption, and are never the realistic choice. They are: the Orbit picture (its electrons as balls gliding on circles: atom_sim.h gAng, glideOrbit), the Simple
+// quark style (three balls joined by flux tubes) and the Nucleons look's colours and glow. key: "picture" (the view), "qstyle", "style".
+constexpr const char* kMadeUpLabel = "Made up, for learning";
+bool madeUpChoice(const std::string& key, const std::string& value);
+std::string madeUpCaption(const std::string& key);           // starts with kMadeUpLabel; empty for a key with no made-up choice
+const char* madeUpValue(const std::string& key);             // the made-up value of that key ("Orbit", "Simple", "Nucleons"); nullptr: none
+std::vector<std::string> madeUpOn(const AtomLab& L);         // the made-up choices the lab has now, as "key=value"
+// The Atom Lab's realistic choices (ui/realest.cpp's dots and its Most realistic button read the values from here, its reasons stay there): Cloud 3D, then
+// each setting below. tests/test_atom.cpp checks that none is made up and that no element or zoom brings one back.
+const char* realisticValue(const std::string& key);          // nullptr: no realistic choice for that key
+void applyRealistic(AtomLab& L);
 bool toolOn(const AtomLab& L, Tool t);       // the button is lit: Atom / Nucleus by the level shown, Cloud / Cloud 3D / Slice each by its own view only (5l), Chart by the chart
 bool toolShown(const AtomLab& L, Tool t);    // Centre and DragMode appear only when the old bar showed them; the others always
 

@@ -1,8 +1,8 @@
 // The Black Hole Lab's GPU programs on Vulkan, from the shader text in render/shaders.h (
 // made into SPIR-V at build time: CMakeLists.txt PL_VK2D_SHADERS; kKerrSkyFS assembled from its parts as render/kerr_sky.cpp does). Renderer2D's Black Hole
-// calls (lensSky, skyProbe, kerrSky's stages, the exposure, the glow and the glare) hand their work to this object on Vulkan. The rules:
+// calls (lensSky, skyProbe, kerrSky's stages, the exposure and the glare) hand their work to this object on Vulkan. The rules:
 // the picture drawn anew only when the view changed, the exposure reduced on the card, the lower resolution while
-// moving on a slow card, the open-sky mask kept with the picture, the Film glow and the eye's glare (its veil made on a thread of its own).
+// moving on a slow card, the open-sky mask kept with the picture and the eye's glare (its veil made on a thread of its own).
 //
 // The passes are recorded into the card programs' batch (render/vk_card.h VkCards) that is submitted before the frame that shows them; the frame then lays
 // the finished picture over the lab's picture (VkDraw2D kComposite, no blend). Vulkan 1.3 is used here from the start: dynamic
@@ -40,7 +40,7 @@ class VkBlackHole {
 public:
     using LensSky = Renderer2D::LensSky;
     // the programs (each its SPIR-V from shaders.h's text); the first six are made on the worker thread
-    enum Prog { pLens, pKerr, pSkyTiny, pSkyMath, pSky, pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy, pExpSum, pGlareLevel, pGlareSum, pProgCount };
+    enum Prog { pLens, pKerr, pSkyTiny, pSkyMath, pSky, pMaxDown, pGlareDown, pGlareAdd, pCopy, pExpSum, pGlareLevel, pGlareSum, pProgCount };
     static const char* progName(int p);
     static std::size_t spirvBytes(int p);
 
@@ -132,7 +132,6 @@ private:
     void exposure(VkCommandBuffer cb, const LensSky& L, const std::function<void(int nx, int ny)>& sample);
     void times();
     void skyPicture(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool raw);
-    void makeGlow(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH);
     void glareDown(VkCommandBuffer cb, int fbW, int fbH, int b, int nx, int ny);
     void glareUpload(VkCommandBuffer cb, int nx, int ny, const std::vector<float>& veil);
     void makeGlare(const LensSky& L, int fbW, int fbH);
@@ -162,7 +161,7 @@ private:
     std::vector<std::thread> workers_;
     std::atomic<int> skyStage_[3] = {{0}, {0}, {0}};    // per KerrSky stage: as Program::state
     // the textures
-    Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
+    Tex lensTex_, layer_[2], mask_, out_, low_[4], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
     void toneUniforms(VkUniforms& u, const LensSky& L);   // 0.70.0
     void gasTextures(VkCommandBuffer cb, const LensSky& L);   // 0.79.0: the streaks' field and the thickness table to the card when new
     void gasUniforms(VkUniforms& u, const LensSky& L);    // 0.72.0
@@ -186,7 +185,7 @@ private:
     LensSky last_{};
     double lastPtW_ = 0, ptW_ = 1, ptH_ = 1;
     int skyTexW_ = 1;
-    bool lensValid_ = false, skyDrawn_ = false, maskValid_ = false, glowValid_ = false, glareValid_ = false, composed_ = false;
+    bool lensValid_ = false, skyDrawn_ = false, maskValid_ = false, glareValid_ = false, composed_ = false;
     VkImageView pictureView_ = VK_NULL_HANDLE;
     long redraws_ = 0;
     int guardState_ = 0;                                 // the lens guard: 0 its pipelines, 1 its first full picture under way, 2 done, -1 failed

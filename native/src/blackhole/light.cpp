@@ -19,19 +19,13 @@ constexpr double kDeg = kPi / 180;
 }  // namespace
 
 // ---- part B ----
-double sunSolidAngle() { const double a = units::kSunRadius / units::kAU; return kPi * a * a; }
-double starLight(double m) { return sunSolidAngle() * std::pow(10.0, -0.4 * (m - kSunV)); }
+double sunSolidAngle() { return orbit::sunSolidAngle(); }                       // 0.86.0: orbit/star_light.h, one formula for both labs
+double starLight(double m) { return orbit::starLight(m); }
 double starSurface(double m, double omegaSr) { return starLight(m) / omegaSr; }
 double starDotArea() { return kPi * orbit::kStarMinRadius * orbit::kStarMinRadius; }
-double starTrueLight(double m, double white, double ptSr) { return starLight(m) / (white * ptSr); }
-bool starVisible(double m, double white, double ptSr) {
-    // the dot's light per square point (its opacity, for a dot no larger than the smallest) reaches the screen's faintest step; a larger dot is at opacity 1
-    return orbit::starDrawLight(starTrueLight(m, white, ptSr)).alpha >= kScreenStep;
-}
-double pointSolidAngle(double K, double cx, double cy, double X, double Y) {
-    const double th = std::hypot(X - cx, Y - cy) / K;
-    return (th > 1e-9 ? std::sin(th) / th : 1.0) / (K * K);
-}
+double starTrueLight(double m, double white, double ptSr) { return orbit::starTrueLight(m, white, ptSr); }
+bool starVisible(double m, double white, double ptSr) { return orbit::starShown(orbit::starDrawLight(starTrueLight(m, white, ptSr))); }
+double pointSolidAngle(double K, double cx, double cy, double X, double Y) { return orbit::mapPointSr(K, cx, cy, X, Y); }
 TrueSkyNumbers trueSkyNumbers(double brightMag, double discY, double white, double ptSr) {
     TrueSkyNumbers t;
     t.starY = starSurface(brightMag, starDotArea() * ptSr);

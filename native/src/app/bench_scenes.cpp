@@ -29,10 +29,6 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), "
             "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "
             "round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.");
-        add(true, "blackhole.film_soft", BenchKind::BlackHoleFilmSoft, -1, "Black Hole Lab, the Film look's see-through disc and streaks, turning",
-            "The Film look at the paper's view (74.1 GM/c\xC2\xB2, 86.6\xC2\xB0 from the spin axis) with a 30\xC2\xB0 view: the soft-edged, partly see-through disc "
-            "(up to four crossings laid per pixel) with its streaks and the clump moving at the fastest rate (10^7), the camera turning slowly round the axis. "
-            "A new picture every frame on the graphics card.");
         add(true, "blackhole.circle_spin", BenchKind::BlackHoleCircleSpin, -1, "Black Hole Lab, circling the spinning hole and its disc as a user drags, with the glide",
             "A feeding hole spinning at 0.9, Real, the disc on, a 45\xC2\xB0 view, at the closest distance where the shadow does not fill the picture: dragged "
             "round 2 rad a second and up or down through the disc's plane for 0.6 s, then let go to glide 0.6 s, over and over. Each tilt needs new light paths.");
@@ -103,6 +99,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "orbit.oort_region", BenchKind::OrbitOortRegion, -1, "Orbit Lab, zoomed out to the Oort cloud's model dots",
             "The heaviest view's settings (belts and the Oort cloud's 3,000 model dots, every extra, the full sky) zoomed out to show 100,000 AU (zoom -4.4), "
             "Sedna, 2012 VP113 and 2015 TG387 marked, the camera turning 0.5 rad a second.");
+        // 0.86.0: the stars on the camera's exposure (orbit/star_light.h); in the Hard list in place of blackhole.film_soft (its drawing removed, PLAN_REVIEW.md R6)
+        add(true, "orbit.true_light_stars", BenchKind::OrbitTrueLightStars, -1, "Orbit Lab, True sunlight with the stars on Neptune's exposure, turning",
+            "Lighting True sunlight, Stars Full, 3D, true scale, Neptune followed from the closest zoom (1.5 of its radii): the exposure set for Neptune shows the "
+            "most stars (about 2,900 of the catalogue's; their number does not depend on the zoom), each by its true light. The camera turns 0.5 rad a second as a user drags.");
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
         add(false, "orbit.saturn", BenchKind::OrbitSaturn, -1, "Orbit Lab, Saturn close up, the camera turning",
             "Saturn followed, true scale, 3D, zoom 4.1 (log10, the control goes to 5.5; the rings and part of the planet fill the picture), the camera turning 0.5 rad a "
@@ -230,6 +230,7 @@ double benchPlannedS() {
 // 9 new) and 42 waits (response.blackhole_dolly): 260.2 s planned. The limit is fixed at 4.5 minutes (kBenchLimitS) and is not raised again.
 // 0.85.0: 30 scenes (orbit.true_light, orbit.sun_edge, orbit.oort_region) and 45 waits (response.sunspot_table): 291.0 s planned. The owner raised the limit
 // once to 4.9 minutes for them (25 Nov 2026, DECISIONS.md).
+// 0.86.0: 30 scenes: orbit.true_light_stars in place of blackhole.film_soft (removed with Film's see-through disc, R6), the same 291.0 s.
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= kBenchLimitS,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,

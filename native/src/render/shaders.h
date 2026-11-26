@@ -972,13 +972,6 @@ vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each chan
     return m > 1.0 ? o / m : o;
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
-// 0.81.0, Film: kKerrSkyFS's soft edges and see-through (uFilmSoft; w = 0: off). The table's pass draws no moving gas, so S = 1 here.
-uniform vec4 uFilmSoft;
-float filmCoverAt(float r) {
-    float u = log(r), e1 = clamp((u - uFilmSoft.x) / uFilmSoft.z, 0.0, 1.0), e2 = clamp((uFilmSoft.y - u) / uFilmSoft.z, 0.0, 1.0);
-    float edge = e1 * e1 * (3.0 - 2.0 * e1) * e2 * e2 * (3.0 - 2.0 * e2);
-    return 1.0 - exp(-uFilmSoft.w * edge);
-}
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0);
     vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
@@ -1021,7 +1014,6 @@ void main() {
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.x, uDR.y);
-        if (uFilmSoft.w > 0.0) cov *= filmCoverAt(rc);       // 0.81.0
         vec3 cr = discColourRaw(rc, shiftKerr(rc, b) * (uFido.x - b * uFido.y));   // 0.84.0: times the held camera's own f_c/f' for this ray's b
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
@@ -1034,71 +1026,6 @@ void main() {
 }
 )";
 
-// 0.55.3: the Black Hole Lab's Film look: the app's own glow (blackhole/looks.h glowReference is the same in double; no source: the film's flare is a
-// measured point-spread function that is not published). Down: each 4 x 4 block of the disc's own light (0.55.4: the lens pass's second output, linear, the
-// disc and its images only; until 0.55.3 the whole picture, sky included) -> the mean of max(light - uThr, 0).
-// Blur: a Gaussian of uSig blocks over -uR..uR along uDir, light outside the picture counted as none, the weights summing to 1. Add: the picture plus uStr x the
-// blur (bilinear between the blocks' centres, indices clamped at the edges) in linear light, encoded again: it only adds light.
-static const char* const kGlowDownFS = R"(#version 330 core
-uniform sampler2D uTex;
-uniform ivec2 uSize;
-uniform float uThr;
-out vec4 fragColor;
-vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
-void main() {
-    ivec2 b = ivec2(gl_FragCoord.xy);
-    vec3 acc = vec3(0.0);
-    int n = 0;
-    for (int j = 0; j < 4; j++)
-        for (int i = 0; i < 4; i++) {
-            ivec2 p = b * 4 + ivec2(i, j);
-            if (p.x < uSize.x && p.y < uSize.y) { acc += max(texelFetch(uTex, p, 0).rgb - vec3(uThr), vec3(0.0)); n++; }
-        }
-    fragColor = vec4(acc / float(max(n, 1)), 1.0);
-}
-)";
-static const char* const kGlowBlurFS = R"(#version 330 core
-uniform sampler2D uTex;
-uniform ivec2 uN;
-uniform ivec2 uDir;
-uniform int uR;
-uniform float uSig;
-out vec4 fragColor;
-void main() {
-    ivec2 p = ivec2(gl_FragCoord.xy);
-    vec3 acc = vec3(0.0);
-    float sum = 0.0;
-    for (int k = -uR; k <= uR; k++) {
-        float w = exp(-0.5 * float(k * k) / (uSig * uSig));
-        sum += w;
-        ivec2 q = p + uDir * k;
-        if (q.x >= 0 && q.y >= 0 && q.x < uN.x && q.y < uN.y) acc += w * texelFetch(uTex, q, 0).rgb;
-    }
-    fragColor = vec4(acc / sum, 1.0);
-}
-)";
-static const char* const kGlowAddFS = R"(#version 330 core
-in vec2 vUV;
-uniform sampler2D uTex;
-uniform sampler2D uGlow;
-uniform ivec2 uN;
-uniform float uStr;
-out vec4 fragColor;
-vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
-vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
-vec3 G(int x, int y) { return texelFetch(uGlow, ivec2(x, y), 0).rgb; }
-void main() {
-    ivec2 sz = textureSize(uTex, 0);
-    ivec2 px = clamp(ivec2(vUV * vec2(sz)), ivec2(0), sz - 1);
-    vec3 base = decS(texelFetch(uTex, px, 0).rgb);
-    vec2 q = (vec2(px) + 0.5) / 4.0 - 0.5;
-    ivec2 i0 = ivec2(floor(q));
-    vec2 f = q - vec2(i0);
-    ivec2 a = clamp(i0, ivec2(0), uN - 1), b = clamp(i0 + 1, ivec2(0), uN - 1);
-    vec3 g = mix(mix(G(a.x, a.y), G(b.x, a.y), f.x), mix(G(a.x, b.y), G(b.x, b.y), f.x), f.y);
-    fragColor = vec4(encS(base + uStr * g), 1.0);
-}
-)";
 
 // 0.55.4: the eye's glare in the Real look (blackhole/light.h: the CIE general disability glare equation). Down: each uB x uB block of the disc's own light
 // (the lens pass's second output, before its colour is scaled into the screen) -> its mean (pixels outside the picture not counted); read back, the veil is
@@ -2761,15 +2688,7 @@ vec3 discLightRaw(float r, float g, float gf) {
     return lightOfT(T);
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }
-// 0.81.0, Film (blackhole/looks.h filmEdge, filmTau, filmCover; the lab's own, not the film's): uFilmSoft = (ln rIn, ln rOut, the fade's width in ln r, the
-// tau scale); w = 0: hard edges and an opaque disc (Real). A crossing at r with the streaks' factor S covers cov x (1 - exp(-w S edge)) of the pixel.
-uniform vec4 uFilmSoft;
 uniform int uGasFoot;                                 // 0.81.0 (tests): 0 the streaks read with no footprint (as kLensFS's uGasFoot)
-float filmCoverAt(float r, float S) {
-    float u = log(r), e1 = clamp((u - uFilmSoft.x) / uFilmSoft.z, 0.0, 1.0), e2 = clamp((uFilmSoft.y - u) / uFilmSoft.z, 0.0, 1.0);
-    float edge = e1 * e1 * (3.0 - 2.0 * e1) * e2 * e2 * (3.0 - 2.0 * e2);
-    return 1.0 - exp(-uFilmSoft.w * S * edge);
-}
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0); maskOut = vec4(0.0);
     if (uMode == 12) {                                // 0.70.0: the camera curve on one colour from 10^-3 to 10^4 of it, even in log over the pass's pixels, at uLw
@@ -2828,16 +2747,14 @@ void main() {
         float w = fw[k];
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (probe ? k != first : cov <= 0.0) continue;
-        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0, sk = 1.0, fc = uFido.x - R.b * uFido.y;   // 0.84.0: fc, the held camera's own shift for this ray
+        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0, fc = uFido.x - R.b * uFido.y;   // 0.84.0: fc, the held camera's own shift for this ray
         if (uGas == 1 && R.tt[k] >= 0.0 && (uMode == 0 || uMode == 5)) {
             bool fz = uMode == 5 || uGasFoot == 0;        // (the probe: no footprint, as gas.cpp's factor)
             vec2 gl = gasLight(rc, R.ph[k] + uGasCam, uGasTau - R.tt[k], fz ? 0.0 : 0.3 * fw[k] / rk[k], fz ? 0.0 : fph[k]);
             if (uMode == 5) { fragColor = vec4(R.ph[k] + uGasCam, R.tt[k], gl.x, gl.y); return; }
             gf = gl.x * (1.0 + uGasT.w * gl.y);
-            sk = gl.x;
-            if (isnan(gf) || isinf(gf)) { gf = 1.0; sk = 1.0; }
+            if (isnan(gf) || isinf(gf)) gf = 1.0;
         }
-        if (uFilmSoft.w > 0.0 && uMode == 0) cov *= filmCoverAt(rc, sk);   // 0.81.0: Film's soft edges and see-through (the exposure's samples keep the light)
         if (uMode == 5) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
         vec3 raw = discLightRaw(rc, g * fc, gf);
         if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }

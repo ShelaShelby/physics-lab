@@ -52,12 +52,15 @@
 
 #include <vector>
 
+#include "orbit/star_light.h"
+
 namespace blackhole {
 
 // ---- part B: one true exposure ----
-constexpr double kSunV = -26.76;           // the Sun's apparent V magnitude (Vega system): Willmer 2018 Table 3, Johnson V, column (5)
-constexpr double kSunAbsV = 4.81;          // its absolute V magnitude: Table 3 column (2), the abstract's M_V = 4.81
-constexpr double kScreenStep = 0.5 / (255 * 12.92);   // the faintest linear light (over the screen's white) an 8-bit sRGB screen shows (IEC 61966-2-1)
+// 0.86.0: the numbers and the formula live in orbit/star_light.h, one formula for both labs (the Orbit Lab's stars on its exposure use it too)
+constexpr double kSunV = orbit::kSunV;     // the Sun's apparent V magnitude (Vega system): Willmer 2018 Table 3, Johnson V, column (5)
+constexpr double kSunAbsV = orbit::kSunAbsV;   // its absolute V magnitude: Table 3 column (2), the abstract's M_V = 4.81
+constexpr double kScreenStep = orbit::kScreenStep;   // the faintest linear light (over the screen's white) an 8-bit sRGB screen shows (IEC 61966-2-1)
 double sunSolidAngle();                    // pi (R_Sun / 1 AU)^2, sr
 double starLight(double magV);             // E(m) = Omega_Sun 10^(-0.4 (m - m_Sun)): the Sun's surface luminance x sr
 double starSurface(double magV, double omegaSr);   // the same spread over omegaSr: luminance in units of the Sun's surface

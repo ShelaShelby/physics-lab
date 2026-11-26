@@ -7,7 +7,7 @@ Every number below comes from a saved source. Each source has a line in native/d
 ## The order
 - **0.85.0 Orbit Lab**: R1 true dimming and exposure, R2 the Sun's edge (and the same law in the eclipse code), R3 sunspots, R4 the Oort cloud.
 - **0.86.0 Atom Lab and Film**: R5 the made-up learning pictures labelled, R6 Film cleaned, R7 the Dirac citation, R8 the old Lamb-shift comment.
-- **0.87.0 Black Hole disc**: R9 colour-correction factor, R10 limb darkening, R11 returning radiation, R12 spinning thickness.
+- **0.87.0 Black Hole disc**: R9 colour-correction factor, R10 limb darkening, R11 returning radiation. (R12 spinning thickness: moved to 0.86.0.)
 - **Later (sources found, not in the three jobs)**: R13 Earth's air (ozone, aerosol), R14 the giants' limb darkening and the moons' opposition surge.
 - The owner's answers of 25 Nov 2026 (DECISIONS.md): R3's table is in the public repo; R4's dots sample a published model and Sedna-like objects are shown with the sentence.
 
@@ -78,7 +78,7 @@ Rules for every job below: the tests are written first and fail on the old build
 
 ---
 
-## R5. The made-up learning pictures: kept, labelled as made up, never in the realistic choice (0.86.0)
+## R5. The made-up learning pictures: kept, labelled as made up, never in the realistic choice (0.86.0) -- DONE in 0.86.0
 - **Source**: none needed (no physics number). The owner's decision of 25 Nov 2026.
 - **Which**: the Simple quark style (qstyle Simple, with its flux tubes), the nucleus colours and glow (the Nucleons style's colours and glow), the Orbit view's electron ball and glide (atom_sim.h gAng, glideOrbit).
 - **What the user sees**: each of them has the label "Made up, for learning" next to its choice and in its caption. The realistic choice (the dot) and Most realistic never show them.
@@ -86,14 +86,14 @@ Rules for every job below: the tests are written first and fail on the old build
 - **Tests**: after applyAtom, none of the made-up pictures is on, for every element and view. The label text is there in each of the three. This closes ROADMAP's "Simple quark style's flux tubes: remove, or keep as a labelled cartoon" (kept, labelled).
 - **GPU path**: no new drawing.
 
-## R6. Film shows only the film paper's choices (0.86.0)
+## R6. Film shows only the film paper's choices (0.86.0) -- DONE in 0.86.0
 - **Source**: James, von Tunzelmann, Franklin & Thorne 2015 (J15), the extract native/data/blackhole/arxiv/1502.03808_james2015.extract.txt (sections 4.1-4.3, App. A.6, already saved).
 - **What goes**: the lab's own glow (blackhole/looks.h kGlow*, glowReference, the glow passes) and the see-through, soft-edged disc (kFilmFade, kFilmTau, 0.81.0). Their tests go with them. Film's label loses "our own glow".
 - **What the user sees**: Film with J15's choices only: the hard-edged opaque disc, J15's colour choices. The caption says the film's lens flare is not drawn: its measured point-spread function is not published (J15 4.3.1, already quoted in looks.h).
 - **Tests**: Film pixels against a CPU Film reference without glow and fade. The ROADMAP lines on Film's see-through disc and the glow's lens spread function are removed.
 - **GPU path**: passes removed. The benchmark scenes that used Film still run (fewer passes).
 
-## R7. The Dirac energy's citation (0.86.0)
+## R7. The Dirac energy's citation (0.86.0) -- DONE in 0.86.0
 - **Source**: Yerokhin & Shabaev 2015, J. Phys. Chem. Ref. Data 44, 033103, the LaTeX source already saved (data/lamb), Hlike8.tex Equations (2)-(4).
   Extract: native/data/lamb/yerokhin_shabaev_2015_dirac.extract.txt. E_D = m c^2 [ sqrt(1 - (Z alpha)^2 / N^2) - 1 ], N = sqrt((n_r + gamma)^2 + (Z alpha)^2), gamma = sqrt(kappa^2 - (Z alpha)^2), n_r = n - |kappa|.
 - **Check against the app (done here, algebra)**: |kappa| = j + 1/2, so n - delta = n_r + gamma, and sqrt(1 - (Z alpha)^2/N^2) = (n_r + gamma)/N = (1 + (Z alpha)^2/(n - delta)^2)^(-1/2). It is the app's formula (atom/dirac.h line 21).
@@ -101,7 +101,7 @@ Rules for every job below: the tests are written first and fail on the old build
 - **The fix**: atom/dirac.h line 23 cites YS15 (2)-(4) in place of "written from knowledge, NOT looked up". tools/make_lamb_data.py also reads the DIRAC rows (1s, 2s-1s, 2p3/2-2p1/2 for Z = 1-110) into lamb_data.inc.
 - **Tests**: diracInfiniteEV against the DIRAC rows for every Z, in units of h c R_inf. The bound is derived from the difference of the two alpha values (CODATA 2022 in the app; the paper's alpha is not named in the extract), not chosen.
 
-## R8. The old Lamb-shift comment (0.86.0)
+## R8. The old Lamb-shift comment (0.86.0) -- DONE in 0.86.0
 - atom/dirac.h line 7 says "No Lamb shift, no other QED effect". Since 0.49.3 the lab adds the Lamb shift of 1s, 2s, 2p for Z = 1-110 (lambShiftEV, the same YS15 table). The comment is rewritten to that.
   The app text that says the same is found by grep and fixed with it. No source needed beyond YS15 (saved).
 
@@ -143,7 +143,7 @@ Rules for every job below: the tests are written first and fail on the old build
 - **Tests**: T_f at the 100 grid points of Table 1 and 2 within a bound derived from the tables' printed digits and the lab's ray-count error. f_o -> 0 as spin -> 0 at the ISCO (the abstract's statement, as a trend).
 - **GPU path**: T_f is computed once per spin by the GPU light-path pass (a 10 x 10 or finer grid), solved on the CPU (a small linear system), and enters the disc's temperature table. A response line for the table at a new spin.
 
-## R12. The disc's thickness round a spinning hole (0.87.0)
+## R12. The disc's thickness round a spinning hole (moved to 0.86.0) -- DONE in 0.86.0 for the calculation; the drawing at spin is left (REPORT 0.86.0, ROADMAP)
 - **Sources**: Abramowicz, Lanza & Percival (arXiv:astro-ph/9611101, "ALP97"; extract native/data/blackhole/arxiv/astro-ph_9611101_abramowicz_lanza_percival1997.extract.txt): (27) with L*^2 = L^2 - a^2 (E - 1), E = u_t, metric (+,-,-,-).
   Abramowicz & Fragile 2013 (Living Rev. Relativity 16, 1; saved; extract native/data/blackhole/arxiv/1104.5499_abramowicz_fragile2013_vertical.extract.txt): (92) Pi / (Sigma H^2) = (L^2 - a^2 (E^2 - 1)) / (2 r^4), E = -u_t.
   The vertical epicyclic frequency (40): omega_theta^2 = Omega_K^2 (1 - 4 a x^-3/2 + 3 a^2 x^-2).

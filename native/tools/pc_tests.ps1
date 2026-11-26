@@ -214,9 +214,6 @@ if ($Parts -contains 'bh') {
         $floor = $(if ($x['case'] -eq 'close') { 2000 } else { 50000 })
         Add-Check "3c.bh.tone.$($x['case'])" ($x['ok'] -eq '1' -and [int]$x['pixels'] -gt $floor -and (N $x['share']) -le 0.01) "the camera curve's picture: $($x['over8']) of $($x['pixels']) disc pixels over 8 levels (max $($x['maxdiff']))"
     }
-    foreach ($x in (Get-Rows $r.Out 'PLBHFILMSOFT')) {
-        Add-Check "3c.bh.filmsoft.$($x['tilt'])" ($x['ok'] -eq '1' -and (N $x['share']) -le 0.01) "Film's see-through disc: $($x['over8']) of $($x['pixels']) disc pixels over 8 levels"
-    }
     foreach ($x in (Get-Rows $r.Out 'PLBHSKYPIC')) {
         $kvs = ($x.Keys | Sort-Object | ForEach-Object { "$_=$($x[$_])" }) -join ' '
         Add-Info "3c.bh.skypic.$($x['case'])" $kvs

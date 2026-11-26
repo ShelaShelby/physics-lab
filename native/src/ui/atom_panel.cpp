@@ -25,6 +25,7 @@
 #include "look.h"
 #include "style_draw.h"
 #include "orbit/format.h"
+#include "atom/atom_tools.h"
 #include "atom/hfs.h"
 #include "atom/zeeman.h"
 #include "atom/atom_learn.h"
@@ -175,10 +176,10 @@ static const Choices F_AX = {{"z3", "fz³ · two lobes and two rings"}, {"xz2", 
 const AtomChoices& atomChoices(const std::string& key) {
     static const std::map<std::string, AtomChoices> m = {
         {"scale", {{"Auto", "Auto-fit (orbit fills the canvas)"}, {"Fixed", "Fixed (same scale for every atom)"}}},
-        {"qstyle", {{"Accurate", "Accurate · a cloud of dots: where the quarks and gluons carry the momentum, from measured data"}, {"Simple", "Simple · three balls joined by flux tubes, a model for learning"}}},   // 0.43 (owner, 8 Nov 2026): Cinematic gone, Classic is Simple
+        {"qstyle", {{"Accurate", "Accurate · a cloud of dots: where the quarks and gluons carry the momentum, from measured data"}, {"Simple", "Simple · " + atom::madeUpCaption("qstyle")}}},   // 0.43 (owner, 8 Nov 2026): Cinematic gone, Classic is Simple
         {"detail", {{"Valence", "Valence quarks only"}, {"+ Gluons", "+ Gluons (sparks)"}, {"+ Sea", "+ Sea (virtual pairs)"}}},
         {"style", {{"Density", "Density · the measured charge density, smooth with a soft edge (what electron scattering sees); nucleons only when you zoom in further"},
-                   {"Nucleons", "Nucleons · one snapshot of the nucleons, each with the proton's charge profile; a model: real nucleons overlap and move"}}},   // (no note in brackets at the end: splitLabel would take it as the note and the rest as the button) 0.43: Fuzzy renamed, Hard balls gone
+                   {"Nucleons", "Nucleons · " + atom::madeUpCaption("style")}}},   // (no note in brackets at the end: splitLabel would take it as the note and the rest as the button) 0.43: Fuzzy renamed, Hard balls gone
         {"dspin", {{"Unpolarised", "Unpolarised · the three spin states mixed, as in ordinary deuterium: round"},
                    {"M = ±1", "M = ±1 · the charge a little longer along the spin axis (the nucleon centres' densest region is a dumbbell)"},
                    {"M = 0", "M = 0 · the charge a little flatter (the nucleon centres' densest region is a doughnut round the spin axis)"}}},   // 0.46.5: the deuteron's spin states (CD-Bonn wave function)

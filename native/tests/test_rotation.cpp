@@ -565,6 +565,28 @@ static void testMorseMeasured() {
     }
 }
 
+// 0.86.0 (Part D): the Bond energy card's Morse gap is computed, not typed. For each molecule with a measured D0: De = we^2 / (4 wexe) and
+// G(0) = we / 2 - wexe / 4 written out here from the lab's measured constants (vib::anharmonic), D0(Morse) = De - G(0); the words give exactly that gap
+// above the measured D0 in cm^-1 and per cent (as printed: %.0f and %.1f), and say "overestimates" where it is above.
+static void testMorseGap() {
+    int n = 0;
+    for (const char* id : {"H2", "N2", "O2", "HCl"}) {
+        const vib::Anharmonic* a = vib::anharmonic(id);
+        const double d0 = morse::d0Measured(id);
+        if (!a || !std::isfinite(d0)) continue;
+        n++;
+        const double De = a->we * a->we / (4 * a->wexe), G0 = a->we / 2 - a->wexe / 4, dm = De - G0;
+        const morse::MorseGap g = morse::morseGap(id);
+        const std::string w = morse::morseGapWords(id);
+        char cm[32], pc[32];
+        std::snprintf(cm, sizeof cm, "%.0f cm⁻¹", dm - d0); std::snprintf(pc, sizeof pc, "(%.1f %%)", 100 * (dm / d0 - 1));
+        check(std::fabs(g.cm - (dm - d0)) < 1e-9 * d0 && std::fabs(g.share - (dm / d0 - 1)) < 1e-12 && g.over == (dm > d0) &&
+              w.find(cm) != std::string::npos && w.find(pc) != std::string::npos && (dm > d0) == (w.find("overestimates") != std::string::npos),
+              std::string("Morse gap (") + id + "): the card says " + cm + " " + pc + ", the computed D0(Morse) - D0(measured)");
+    }
+    check(n == 4 && morse::morseGapWords("H2O").empty(), "Morse gap: all four diatomics have a measured D0; none for a molecule without one");
+}
+
 int main() {
     testConstants();
     testWeights();
@@ -576,6 +598,7 @@ int main() {
     testMorseLevels();
     testMorseMotion();
     testMorseMeasured();
+    testMorseGap();
     std::printf("rotation_tests: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

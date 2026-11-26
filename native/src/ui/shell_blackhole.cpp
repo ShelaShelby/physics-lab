@@ -117,13 +117,13 @@ std::string filmDiscText() {
 }
 const char* kFilmShifts = "None: no colour shift and no brightness shift from the gas's speed and gravity, and none from your own place (the film's choice, Figure 15a)";
 std::string filmColourText() { return "The paper's white balance: a " + fmt::commas(blackhole::filmChoices().whiteT) + " K black body drawn white (appendix A.6), by the app's CIE 1931 eye in place of the film stock's colours"; }
-const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the disc's bright parts, laid over the sky (the film's lens data is not published)";
+// 0.86.0 (PLAN_REVIEW.md R6): Film shows only the paper's choices: the lab's own glow (0.55.3) and its soft, see-through disc (0.81.0) are gone
+const char* kFilmGlow = "Not drawn: the film's lens flare is the measured blur of the IMAX lenses, which is not published (James et al. 2015, section 4.3.1)";
 const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the film's Houdini volume disc, the real lens flare and the film's colour grading are not published and are not here.";
-// 0.81.0 (blackhole/looks.h kFilmFade, kFilmTau): what the lab adds to the film's disc, labelled as its own
+// what the lab adds to the film's disc, labelled as its own (0.86.0: only the moving gas; until 0.85 also soft edges, a see-through disc and a glow)
 std::string filmOwnText() {
-    return "The lab's own, not the film's: the edges fade over " + sig(blackhole::kFilmFade, 2) + " in ln r inside the paper's edges; the disc is partly see-through "
-           "(the paper: \"marginally optically thick\"; each crossing covers 1 − e^−τ, τ = " + sig(blackhole::kFilmTau, 2) + " × the streaks' brightness × the fade), so the far side "
-           "and the thin rings show through faintly; the streaks, the clump and the glow";
+    return "The lab's own, not the film's: only the moving gas's streaks and clump, when they are on (Moving gas). The disc is opaque with hard edges: the paper "
+           "publishes no texture, density or edge profile for it";
 }
 const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding: Glare draws the veil an average eye would see. "
                            "The picture uses a camera's response curve (Reinhard et al. 2002), our display choice; the colours and the light's ratios are the physics.";
@@ -208,8 +208,8 @@ void blackholeCard(AppState& app, Panel& p) {
             pStat(p, "Light from the infalling gas", sig(100 * r.efficiency, 3) + " % of its mass (the rest falls in)");
             pStat(p, "Hottest ring", tempText(r.tHot) + " at " + sig(r.rHot, 3) + " GM/c²  ·  " + kmText(r.rHotKm));
         }
-        // 0.55.9: the camera can stand exactly in the disc's plane (the tilt reaches 90 degrees); the model's disc has no thickness
-        if (std::fabs(sv.pitch - 1.5707963267948966) < 1e-9) pCaption(p, "You are exactly in the disc's plane: a disc with no thickness seen exactly edge on is a line (the model's disc is infinitely thin).");
+        // 0.55.9: the camera can stand exactly in the disc's plane (the tilt reaches 90 degrees). 0.86.0: the words follow the shape drawn (lab.h discEdgeOnWords)
+        if (std::fabs(sv.pitch - 1.5707963267948966) < 1e-9) pCaption(p, blackhole::discEdgeOnWords(sv));
         if (!app.blackhole.bend) pCaption(p, "Gravity bends light: Off: the disc is not drawn (it needs the hole).");
         else if (L.any) {
             pStat(p, "Brightest part", timesText(L.brightY) + (blackhole::allLightOn(sv) ? " × the Sun's surface in all light (all wavelengths)" : " × the Sun's surface in visible light"));
@@ -352,6 +352,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         else {
             float t = static_cast<float>(shownSpin);
             if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop))) blackhole::setSpin(s, std::round(t * 100) / 100);
+            // 0.86.0 (PLAN_REVIEW R12, its stop rule): the thickness is calculated at every spin, but drawn only without spin (lab.h discThickDrawn)
+            if (s.disc && shownSpin > 0) pCaption(p, "Round a spinning hole the disc is drawn in its plane, with no thickness: the light paths there find only where they cross the plane. Its calculated thickness is in the Disc section.", false);
         }
         if (shownSpin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
         if (pButton(p, "blackhole.guide", "What is real in this picture")) { app.bhLearn = 1; app.bhLearnJump = "top"; }
@@ -434,7 +436,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pStat(p, "Disc", filmDiscText());
             pStat(p, "Shifts", kFilmShifts);
             pStat(p, "Colour", filmColourText());
-            pStat(p, "Glow", kFilmGlow);
+            pStat(p, "Lens flare", kFilmGlow);
             pStat(p, "Ours", filmOwnText());
             if (pButton(p, "blackhole.paperview", "The paper's view")) blackhole::paperView(s);
             const blackhole::FilmChoices& c = blackhole::filmChoices();
@@ -516,15 +518,13 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 pCaption(p, "The model does not set an outer edge. The default, 2000 GM/c² (a thousand Schwarzschild radii, about 0.01 parsec for 100 million Suns), is where such discs "
                             "are believed to end: farther out the disc's own gravity breaks it up (Goodman 2003). The same physics all the way out: the disc fades by itself as it cools "
                             "outward; most of its light comes from inside 30 GM/c² (Luminet 1979). The inner edge is the innermost stable orbit, " + sig(r.rIn, 2) + " GM/c²: inside it the gas falls in and gives no light here.");
-                if (blackhole::heightOn(s.spin)) {                          // 0.79.0: the true thickness (disc.h; Zhu et al. 2012 App. B)
+                if (blackhole::heightOn(s.spin)) {                          // 0.79.0: the true thickness (disc.h; Zhu et al. 2012 App. B); 0.86.0: every spin (AF13 (92))
                     const blackhole::DiscPhys dp = blackhole::discPhys(s);
                     double hr = 0, at = 0;
                     for (double q = r.rIn * 1.001; q < std::min(200.0, s.outer); q *= 1.01) { const double t = dp.height(q) / q; if (t > hr) { hr = t; at = q; } }
                     pStat(p, "Thickness", "at most " + sig(100 * hr, 2) + " % of the radius (at " + sig(at, 3) + " GM/c²)  ·  " + sig(dp.height(std::min(2000.0, s.outer)), 2) + " GM/c² at the outer edge");
-                    pCaption(p, "The disc is drawn at its true thickness: its surface sits at the height h where the pressure of its light and gas holds it up against the hole's pull "
-                                "(Zhu et al. 2012, one zone in height). It thins to nothing at the innermost stable orbit, where the gas stops making heat. Limits: one zone in height, "
-                                "the surface drawn opaque at h, no darkening towards its edge, no light from inside the innermost orbit.");
-                } else pCaption(p, "Round a spinning hole the disc is drawn in its plane (no thickness): the thickness's spin term is not yet checked against its source.");
+                    pCaption(p, blackhole::discThicknessWords(blackhole::shown(s)));   // 0.86.0: follows the shape drawn (lab.h)
+                }
             }
             if (s.disc || film) {                                           // 0.72.0: the moving gas (blackhole/gas.h; PLAN_MOVINGGAS.md)
                 pHeading(p, "Moving gas");
@@ -627,11 +627,11 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         pHeading(p, "What is real in this picture");
         if (film) {
             pCaption(p, "The film's choices on a calculated black hole: spin " + sig(blackhole::filmChoices().spin, 2) + ", a thin disc at one temperature, no colour or brightness shift. "
-                        "Our own: the soft edges, how see-through the disc is, the streaks, the clump and the glow. " + std::string(kFilmHonest), false);
+                        "Our own: the streaks and the clump, when they are on. The film's lens flare is not drawn: its measured blur is not published. " + std::string(kFilmHonest), false);
             pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars, the disc's shape. The Real look is still a model, not a photograph.", false);
         } else {
             const std::string kind = s.spin > 0 ? "a black hole spinning at " + sig(s.spin, 3) + " of the largest possible spin (your choice)" : std::string("a black hole that does not spin");
-            pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: flat, thin, opaque, each face a perfect black body, steady." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
+            pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: " + blackhole::discShapeWords(s) + ", each face a perfect black body, steady." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
                                : "A calculated model: " + kind + " with no gas around it. Real black holes have gas; switch on the gas disc to see the standard model of one.", false);
             pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars" + std::string(s.disc ? ", the disc's shape, its colour shift and brightness by the model" : "") +
                         ". Soft: the sky map's own sharpness (about 0.09° a map pixel). Drawn: your own shift of colour and brightness, exact for a camera held still at this distance "

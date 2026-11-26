@@ -355,7 +355,7 @@ void moleculeBondCard(AppState& app, Panel& p) {
         pStat(p, "D₀ measured", cmK(d0) + std::string(" (") + ms::d0Source(mo.id) + ")");
         std::snprintf(b, sizeof b, "%s, %+.1f %% against measured", cmK(dm).c_str(), (dm / d0 - 1) * 100);
         pStat(p, "D₀ Morse = De − G(0)", b);
-        pCaption(p, "Two constants fix only the bottom of the well: higher up the real rungs close up faster than the Morse ladder's straight-line spacing, so the Morse well is too deep.", true);
+        pCaption(p, ms::morseGapWords(mo.id), true);                  // 0.86.0: the gap computed (molecule/morse.h morseGap)
     } else {
         pStat(p, "D₀ Morse = De − G(0)", cmK(dm) + " (model, no measured value saved)");
     }

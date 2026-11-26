@@ -4,8 +4,9 @@
 // What this is and is not (the app says the same, in plain words):
 //   - It changes the ENERGIES and LINES of the two spectrum cards. The clouds, orbitals, outlines and the radial graph are still the non-relativistic wave functions; the photon of a jump and
 //     the quantum beats keep the non-relativistic level (the lab's orbitals have no spin and so no j to give them). (Since 0.46 the energy over the picture is the Dirac level from kRelativityZ on, whatever this setting.)
-//   - No Lamb shift, no other QED effect and no finite nuclear size: in Dirac theory 2s(1/2) and 2p(1/2) have exactly the same energy, in reality they do not. The measured NIST lines therefore still differ from
-//     these a little (tested: NIST lies between the Dirac line and the non-relativistic one for Lyman-alpha of every ion).
+//   - The Dirac energy alone has no Lamb shift and no finite nuclear size: in Dirac theory 2s(1/2) and 2p(1/2) have exactly the same energy, in reality they do not. Since 0.49.3 the lab adds the Lamb
+//     shift of 1s, 2s, 2p1/2 and 2p3/2 for Z = 1-110 (lambShiftEV below: QED with the finite nuclear size, Yerokhin & Shabaev 2015, row LAMB); levels with n >= 3 have none (no source). 0.86.0: this line
+//     said "No Lamb shift, no other QED effect" until then (PLAN_REVIEW.md R8).
 //   - The nucleus's motion: see diracCorrectionEV below. The main energy has the reduced mass, as always in the lab; the relativistic correction is that of an infinitely heavy nucleus. Recoil terms beyond the
 //     reduced mass are not included (no source for them could be read).
 #pragma once
@@ -19,12 +20,20 @@ namespace atom {
 
 // The exact Dirac energy of a one-electron atom, point nucleus of infinite mass, level (n, j = twoJ / 2), WITHOUT the electron's rest energy (so a bound level is negative), eV:
 //   E = m c^2 [ (1 + (Z alpha)^2 / (n - delta)^2)^(-1/2) - 1 ],   delta = (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2).
-// The Sommerfeld fine-structure formula, the exact solution of the Dirac equation for a Coulomb potential (standard textbook material: Bethe & Salpeter, Quantum Mechanics of One- and Two-Electron Atoms;
-// Griffiths ch. 6 gives its expansion). Written from knowledge, NOT looked up in the session that wrote it (only physics.nist.gov was reachable): the tests check it against hand arithmetic, its expansion and the
-// measured NIST lines. Constants: alpha and m c^2 from CODATA 2022 (atom_core.h). Written with no subtraction of nearly equal numbers (0.10.8 stage 2): delta = (Z alpha)^2 / ((j + 1/2) + sqrt(...)) and
+// The Sommerfeld fine-structure formula, the exact solution of the Dirac equation for a Coulomb potential. 0.86.0 (PLAN_REVIEW.md R7): the source is V. A. Yerokhin and V. M. Shabaev, J. Phys. Chem.
+// Ref. Data 44, 033103 (2015), arXiv:1506.01885, Eqs. (2)-(4): E_D = m c^2 [ sqrt(1 - (Z alpha)^2 / N^2) - 1 ], N = sqrt((n_r + gamma)^2 + (Z alpha)^2), gamma = sqrt(kappa^2 - (Z alpha)^2), n_r = n - |kappa|
+// (extract: data/lamb/yerokhin_shabaev_2015_dirac.extract.txt). The same formula: |kappa| = j + 1/2, so n_r + gamma = n - delta and sqrt(1 - (Z alpha)^2 / N^2) = (n - delta) / N
+// = (1 + (Z alpha)^2 / (n - delta)^2)^(-1/2). Tested against that paper's DIRAC rows for every Z = 1-110 (1s, 2s-1s, 2p3/2-2p1/2; tests/test_atom.cpp testDiracRows086), and against hand
+// arithmetic, its expansion and the measured NIST lines. (Until 0.85: "written from knowledge, NOT looked up".) Constants: alpha and m c^2 from CODATA 2022 (atom_core.h). Written with no subtraction of nearly equal numbers (0.10.8 stage 2): delta = (Z alpha)^2 / ((j + 1/2) + sqrt(...)) and
 // E = -m c^2 t / (s (1 + s)), t = (Z alpha)^2 / (n - delta)^2, s = sqrt(1 + t), so only +, *, / and sqrt are used and the result is good to a few units of the last digit (the naive form loses up to 10 digits).
 // Valid for Z alpha < j + 1/2, i.e. every Z up to 118 (Z alpha = 0.86).
 double diracInfiniteEV(int Z, int n, int twoJ);
+// 0.86.0: the same energy in units of h c R_inf = alpha^2 m c^2 / 2 (Yerokhin & Shabaev 2015's table unit, "in Rydbergs"), for a given alpha (their table used CODATA 2010's)
+double diracInfiniteRy(int Z, int n, int twoJ, double alpha = kAlpha);
+// 0.86.0: Yerokhin & Shabaev 2015's DIRAC row for Z (1-110) as printed: [0] 1s, [1] 2s-1s, [2] 2p3/2-2p1/2 in h c R_inf, each with its printed decimals and its bracketed
+// uncertainty in units of the last digit (0: none); nullptr outside 1-110 (lamb_data.inc, tools/make_lamb_data.py)
+struct DiracPrinted { double v; int decimals, unc; };
+const DiracPrinted* diracPrinted(int Z);
 // The defect delta = (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2) used inside it (it depends on Z and j only): (Z alpha)^2 / ((j + 1/2) + sqrt(...)), so it keeps its digits where the naive difference loses them.
 double diracDelta(int Z, int twoJ);
 // The relativistic correction alone: the Dirac energy minus the non-relativistic one with the SAME constants, -(1/2) m c^2 (Z alpha)^2 / n^2. It is of the order (Z alpha)^2 of the level, negative (the level lies deeper). Worked out directly (see dirac.cpp), NOT as the difference of the two energies, which would lose about 5 digits for hydrogen.

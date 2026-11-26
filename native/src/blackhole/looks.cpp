@@ -29,30 +29,9 @@ LookRule lookRule(Look l) {
     r.shifts = false;                                    // Figure 15a, Figure 16's caption
     r.oneTemperature = true; r.discT = c.discT;          // section 4.1.1 p. 26
     r.whiteBalance = true; r.whiteT = c.whiteT;          // App. A.6 p. 43
-    r.glow = true;                                       // ours, in place of the flare of Figure 16 / section 4.3.1
     r.fixedSpin = true; r.spin = c.spin;                 // section 4.1.1 p. 26
     r.rIn = c.rIn; r.rOut = c.rOut;                      // Figure 13's caption p. 24
-    r.fade = kFilmFade; r.tau = kFilmTau;                // 0.81.0: the lab's own, not the film's (looks.h)
     return r;
-}
-
-double filmEdge(double r, double rIn, double rOut, double fade) {
-    if (!(r > rIn && r < rOut)) return 0;
-    const double u = std::log(r);
-    const double e1 = std::min((u - std::log(rIn)) / fade, 1.0), e2 = std::min((std::log(rOut) - u) / fade, 1.0);
-    return e1 * e1 * (3 - 2 * e1) * e2 * e2 * (3 - 2 * e2);
-}
-double filmTau(double S, double edge, double scale) { return S > 0 && edge > 0 ? scale * S * edge : 0.0; }
-double filmCover(double tau) { return tau > 0 ? -std::expm1(-tau) : 0.0; }
-std::array<double, 3> layFrontToBack(const std::vector<FilmLayer>& layers, double* left) {
-    std::array<double, 3> o{0, 0, 0};
-    double t = 1;
-    for (const FilmLayer& q : layers) {
-        for (int k = 0; k < 3; k++) o[static_cast<std::size_t>(k)] += t * q.cover * q.light[static_cast<std::size_t>(k)];
-        t *= 1 - q.cover;
-    }
-    if (left) *left = t;
-    return o;
 }
 
 std::array<double, 3> whiteBalanceGains(double whiteT) {
@@ -80,62 +59,6 @@ double filmDiscY() {
     return y;
 }
 
-double glowSigmaBlocks(int H) { return kGlowSigma * H / kGlowBlock; }
-int glowRadiusBlocks(int H) { return std::max(1, static_cast<int>(std::ceil(3 * glowSigmaBlocks(H)))); }
-
-std::vector<double> glowReference(const std::vector<double>& lin, int W, int H) {
-    const int gw = (W + kGlowBlock - 1) / kGlowBlock, gh = (H + kGlowBlock - 1) / kGlowBlock;
-    std::vector<double> src(static_cast<std::size_t>(gw) * gh * 3, 0.0), tmp(src.size(), 0.0), blur(src.size(), 0.0);
-    for (int by = 0; by < gh; by++)
-        for (int bx = 0; bx < gw; bx++) {
-            double acc[3] = {0, 0, 0};
-            int n = 0;
-            for (int y = by * kGlowBlock; y < std::min(H, (by + 1) * kGlowBlock); y++)
-                for (int x = bx * kGlowBlock; x < std::min(W, (bx + 1) * kGlowBlock); x++) {
-                    for (int c = 0; c < 3; c++) acc[c] += std::max(lin[(static_cast<std::size_t>(y) * W + x) * 3 + c] - kGlowThreshold, 0.0);
-                    n++;
-                }
-            for (int c = 0; c < 3; c++) src[(static_cast<std::size_t>(by) * gw + bx) * 3 + c] = acc[c] / n;
-        }
-    const double sg = glowSigmaBlocks(H);
-    const int R = glowRadiusBlocks(H);
-    std::vector<double> w(static_cast<std::size_t>(2 * R + 1));
-    double sum = 0;
-    for (int k = -R; k <= R; k++) sum += (w[static_cast<std::size_t>(k + R)] = std::exp(-0.5 * k * k / (sg * sg)));
-    for (double& v : w) v /= sum;
-    for (int y = 0; y < gh; y++)                         // rows
-        for (int x = 0; x < gw; x++)
-            for (int k = -R; k <= R; k++) {
-                const int xx = x + k;
-                if (xx < 0 || xx >= gw) continue;
-                for (int c = 0; c < 3; c++) tmp[(static_cast<std::size_t>(y) * gw + x) * 3 + c] += w[static_cast<std::size_t>(k + R)] * src[(static_cast<std::size_t>(y) * gw + xx) * 3 + c];
-            }
-    for (int y = 0; y < gh; y++)                         // columns
-        for (int x = 0; x < gw; x++)
-            for (int k = -R; k <= R; k++) {
-                const int yy = y + k;
-                if (yy < 0 || yy >= gh) continue;
-                for (int c = 0; c < 3; c++) blur[(static_cast<std::size_t>(y) * gw + x) * 3 + c] += w[static_cast<std::size_t>(k + R)] * tmp[(static_cast<std::size_t>(yy) * gw + x) * 3 + c];
-            }
-    std::vector<double> out(lin.size(), 0.0);            // bilinear between the blocks' centres (indices clamped at the picture's edges)
-    for (int y = 0; y < H; y++) {
-        const double qy = (y + 0.5) / kGlowBlock - 0.5;
-        const int y0 = static_cast<int>(std::floor(qy));
-        const double fy = qy - y0;
-        const int ya = std::clamp(y0, 0, gh - 1), yb = std::clamp(y0 + 1, 0, gh - 1);
-        for (int x = 0; x < W; x++) {
-            const double qx = (x + 0.5) / kGlowBlock - 0.5;
-            const int x0 = static_cast<int>(std::floor(qx));
-            const double fx = qx - x0;
-            const int xa = std::clamp(x0, 0, gw - 1), xb = std::clamp(x0 + 1, 0, gw - 1);
-            for (int c = 0; c < 3; c++) {
-                const auto B = [&](int xx, int yy) { return blur[(static_cast<std::size_t>(yy) * gw + xx) * 3 + c]; };
-                out[(static_cast<std::size_t>(y) * W + x) * 3 + c] = (1 - fy) * ((1 - fx) * B(xa, ya) + fx * B(xb, ya)) + fy * ((1 - fx) * B(xa, yb) + fx * B(xb, yb));
-            }
-        }
-    }
-    return out;
-}
 
 std::vector<FilmRow> filmRows() {
     const FilmChoices& c = filmChoices();
@@ -153,7 +76,7 @@ std::vector<FilmRow> filmRows() {
          "The true disc \"is exceedingly lopsided, with the hole's shadow barely discernible\"", "Section 4.2 (pp. 26-28), sections 4.1.1-4.1.2, Figures 15a and 15c (p. 27)"},
         {"The eye's colours: true colour (the app's CIE 1931 observer, white D65)", b[3],
          "The film camera's colour (film-stock curves, which the paper does not give: the app uses the CIE observer with this gain)", "Appendix A.6 (p. 43)"},
-        {"No lens: nothing between the light and the eye", "Lens flare from the measured blur of the IMAX lenses (a soft glow); in the app: our own glow, in place of the film's lens flare",
+        {"No lens: nothing between the light and the eye", "Lens flare from the measured blur of the IMAX lenses (a soft glow); not drawn in the app: the measured blur is not published",
          "Film audiences expect pictures through a real camera, for continuity with filmed shots", "Section 4.2 (p. 28), section 4.3.1 (p. 29), Figure 16's caption (p. 28)"},
     };
 }

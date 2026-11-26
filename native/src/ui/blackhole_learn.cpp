@@ -12,6 +12,14 @@
 #include "rich_text.h"
 #include "ui/reading.h"
 
+#include "atom/atom_core.h"
+#include "blackhole/disc.h"
+
+namespace {
+// 0.86.0 (Part D): the electron-scattering opacity of ionised hydrogen, sigma_T / m_p, m^2/kg: sigma_T = (8 pi / 3) r_e^2, r_e = alpha^2 a_0 (CODATA 2022, atom_core.h)
+double kappaHydrogen() { const double re = atom::kAlpha * atom::kAlpha * atom::kA0; return 8 * 3.14159265358979323846 / 3 * re * re / atom::kMpKg; }
+}  // namespace
+
 namespace ui {
 
 namespace {
@@ -102,12 +110,10 @@ std::vector<BhLearnSection> blackholeLearnSections() {
                           "Thorne (2015) state them, on the same calculated hole and the same light paths as the Real look. One row per choice:");
         for (const blackhole::FilmRow& r : blackhole::filmRows())
             h += "<p class=\"lrnP\"><b>" + r.physics + "</b><br>The film: " + r.choice + ".<br>Why: " + r.reason + ".<br><small>" + r.where + "</small></p>";
-        h += p("<b>The lab's own, not the film's.</b> The paper calls the film's disc \"physically thin and marginally optically thick\" (section 4.1.1): light from "
-               "behind it gets partly through. It does not publish how much, nor the disc's texture. So the lab adds its own: the disc's edges fade over " +
-               fmt::fixed(blackhole::kFilmFade, 2) + " in ln r inside the paper's edges (no hard rim); each time a ray crosses the disc it covers 1 − e^−τ of what is behind, "
-               "with τ = " + fmt::fixed(blackhole::kFilmTau, 1) + " × the streaks' brightness × the fade, and the crossings are laid front to back, so the far side and the thin "
-               "rings show through faintly; the streaks and the clump (see Moving gas); and the glow, a simple blur of the disc's bright parts (the sky and the stars "
-               "are not part of it). Each is the lab's choice, not a number from the film.") +
+        h += p("<b>The lab's own, not the film's.</b> The paper calls the film's disc \"physically thin and marginally optically thick\" (section 4.1.1). It does not "
+               "publish how much light gets through, nor the disc's texture or edges, so the Film look draws the paper's thin disc opaque, with hard edges at the "
+               "paper's radii. The lab adds only the moving gas's streaks and the clump, when they are on (see Moving gas). The film's lens flare (a soft glow) is "
+               "not drawn: it is the measured blur of the IMAX lenses, which is not published (section 4.3.1).") +
              p("<b>Not in the app:</b> the artists' textures (fractal noise in the close-ups), the film's volume disc (built in Houdini, about 17 million voxels), the "
                "real lens flare (the measured blur of the IMAX lenses) and the film's colour grading are not published (James et al. 2015, appendix A.6 and section "
                "4.3.1). The paper gives no mass for the film's black hole.") +
@@ -133,13 +139,21 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "(Schnittman et al.). Where each streak is, is drawn at random; their strength is set so that the ring from 6 to 10 GM/c² flickers by the 43.8 % of "
           "Schnittman et al.'s Table 2. In the Film look both are added by the lab: the film's own disc texture is not published and James et al. 2015 does not "
           "say how it moved.") +
-        p("<b>The disc's thickness</b> (Real, a non-spinning hole). The disc is drawn at its true thickness: its surface sits at the height h where the pressure "
+        p("<b>The disc's thickness</b> (Real). Without spin the disc is drawn at its true thickness: its surface sits at the height h where the pressure "
           "of its own light (near the hole) and of its gas (far out) holds it up against the hole's pull, from the vertical balance of Zhu et al. 2012 (their "
           "appendix B, one zone in height). At a tenth of the Eddington limit it is at most about 1.5 % of its radius thick, near 20 GM/c²: the bright disc of a feeding "
           "hole really is nearly flat, which is why it shows only as a slightly fuller inner rim. It thins to nothing at the innermost stable orbit, where the gas "
           "stops making heat, instead of ending at a sharp line. Limits: one zone in height; the surface drawn opaque at h; the gas at the surface moving as in the "
-          "plane; no darkening towards the disc's edge; no light from inside the innermost orbit (simulations put about 4 % of the light there); a spinning hole's disc "
-          "is drawn in its plane.") +
+          "plane; no darkening towards the disc's edge; no light from inside the innermost orbit (simulations put about 4 % of the light there). Round a spinning "
+          "hole the thickness is calculated with the spin's own term in the hole's pull (Abramowicz and Fragile 2013, eq. 92, the form that gives their vertical "
+          "frequency, eq. 40) and shown in numbers, but the disc is drawn in its plane: the lab's light paths round a spinning hole find only where they cross "
+          "the plane, not a surface above it.") +
+        p("<b>Two opacities, each from its own source.</b> The Eddington limit (the feeding rate's yardstick) uses the electron-scattering opacity " +
+          fmt::precision(blackhole::kKappaEs * 10, 2) + " cm²/g, the value Yuan and Narayan 2014 give as the usual one: it is that of ionised pure hydrogen, "
+          "σ_T / m_p = " + fmt::precision(kappaHydrogen() * 10, 4) + " cm²/g (CODATA 2022), rounded. The thickness uses Zhu et al.'s own " +
+          fmt::precision(blackhole::kZhuKappa * 10, 4) + " cm²/g, for their gas of 70 % hydrogen and 30 % helium by mass (electron scattering in such a gas "
+          "is (1 + X) / 2 of hydrogen's, X = 0.7: " + fmt::precision(kappaHydrogen() * 10 * 0.85, 4) + " cm²/g). Each number follows the paper whose formula "
+          "it enters, so the two are not made equal.") +
         p("<b>How it is drawn.</b> The graphics card works out, for every pixel, where on the disc its light left and when, from the same closed forms, then the "
           "surface's height there, then the clump and the streaks; streaks finer than a pixel are drawn as their average over the pixel. The processor keeps the same steps in double "
           "precision: the lab checks the card against it when it first draws, and uses it where the card cannot.")});

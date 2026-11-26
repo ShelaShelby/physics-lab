@@ -2242,9 +2242,9 @@ static void testLooks() {
     check(text.find("lens flare to an image by convolving it with this point spread function") != std::string::npos, "the flare: a measured point-spread function (section 4.3.1)");
     // the rule
     const LookRule F = lookRule(Look::Film), R = lookRule(Look::Real);
-    check(!F.shifts && F.oneTemperature && F.discT == c.discT && F.whiteBalance && F.whiteT == c.whiteT && F.glow && F.fixedSpin && F.spin == c.spin && F.rIn == c.rIn && F.rOut == c.rOut,
+    check(!F.shifts && F.oneTemperature && F.discT == c.discT && F.whiteBalance && F.whiteT == c.whiteT && F.fixedSpin && F.spin == c.spin && F.rIn == c.rIn && F.rOut == c.rOut,
           "lookRule(Film) = the paper's choices");
-    check(R.shifts && !R.oneTemperature && !R.whiteBalance && !R.glow && !R.fixedSpin, "lookRule(Real): the model, unchanged (shifts on, no white balance, no glow)");
+    check(R.shifts && !R.oneTemperature && !R.whiteBalance && !R.fixedSpin, "lookRule(Real): the model, unchanged (shifts on, no white balance)");
     Look l;
     check(lookFromKey("film", l) && l == Look::Film && lookFromKey("real", l) && l == Look::Real && !lookFromKey("Film", l) && std::string(lookKey(Look::Film)) == "film", "look keys");
     // the colour: the CIE black body at 4500 K (disc.h blackBodyLinear) through one gain per channel that makes 6500 K grey with its own luminance
@@ -2287,106 +2287,14 @@ static void testLooks() {
     check(loadSettings(m).look == Look::Real, "an unknown look opens as Real");
     const Readout rf = readout(shown(sf));
     check(rf.look == Look::Film && rf.filmT == c.discT && rf.discEdgeIn == c.rIn && rf.discEdgeOut == c.rOut && rf.spin == c.spin, "the readout in the Film look");
-    // the glow's reference (the app's own rule, looks.h): adds light only; spreads the light above the threshold without loss away from the picture's edges
-    {   const int W = 320, H = 200;
-        std::vector<double> img(static_cast<std::size_t>(W) * H * 3, 0.1);
-        double above = 0;
-        for (int y = 90; y < 110; y++)
-            for (int x = 150; x < 170; x++)
-                for (int k = 0; k < 3; k++) { const double q = k == 0 ? 1.0 : k == 1 ? 0.8 : 0.45; img[(static_cast<std::size_t>(y) * W + x) * 3 + k] = q; above += std::max(q - kGlowThreshold, 0.0); }
-        const std::vector<double> gl = glowReference(img, W, H);
-        double sum = 0, mn = 1e9;
-        for (double q : gl) { sum += q; mn = std::min(mn, q); }
-        check(mn >= 0, "glow: adds light only (smallest " + f(mn) + ")");
-        check(std::fabs(sum / above - 1) < 2e-3, "glow: the light above the threshold spread without loss away from the edges (" + f(sum / above) + ")");
-        check(glowRadiusBlocks(800) == 8 && std::fabs(glowSigmaBlocks(800) - 2.5) < 1e-15, "glow: sigma H/80 = 10 px at 800 (2.5 blocks), reach 3 sigma");
-        std::vector<double> dim(img.size(), kGlowThreshold);
-        const std::vector<double> g0 = glowReference(dim, W, H);
-        check(*std::max_element(g0.begin(), g0.end()) == 0, "glow: nothing above the threshold, no glow");
-        double peak = 0, far = 0;
-        for (int k = 0; k < 3; k++) { peak = std::max(peak, gl[(static_cast<std::size_t>(100) * W + 160) * 3 + k]); far = std::max(far, gl[(static_cast<std::size_t>(100) * W + 10) * 3 + k]); }
-        check(peak > 0.1 && far == 0, "glow: round the bright part, none beyond 3 sigma + a block (" + f(peak) + ", " + f(far) + ")");
-    }
-}
-
-// ---------------------------------------------------------------------------------------------------------------------------------------------
-// 0.81.0 (PLAN_DISC.md D4): the Film disc's soft edges and see-through, the lab's own (looks.h). Written before the code: on 0.80.1 none of it exists.
-// References: J15's numbers (testLooks reads each from the extract; here the rule must keep them), the smoothstep's closed form (value 1/2 at the middle,
-// slope at most 1.5 / width, second derivative at most 6 / width^2), 1 - exp(-tau) written out, and the algebra of laying two layers front to back.
-static void testFilmSoft() {
-    const FilmChoices& c = filmChoices();
-    const LookRule F = lookRule(Look::Film), R = lookRule(Look::Real);
-    check(F.spin == 0.6 && F.discT == 4500 && F.rIn == 9.26 && F.rOut == 18.70 && F.whiteT == 6500 && !F.shifts && F.oneTemperature && F.whiteBalance && F.glow &&
-          F.spin == c.spin && F.discT == c.discT && F.rIn == c.rIn && F.rOut == c.rOut && F.whiteT == c.whiteT,
-          "Film keeps J15's numbers: spin 0.6, 4500 K, edges 9.26 and 18.70 M, white at 6500 K, no shifts (each read from the extract in testLooks)");
-    check(F.fade == 0.12 && F.tau == 1.5 && R.fade == 0 && R.tau == 0, "Film adds the lab's own fade 0.12 in ln r and tau = 1.5 S edge; Real keeps hard edges and an opaque disc");
-    {   // the guide's facts about the film's disc that the lab does not have (App. A.6 pp. 42-43, the extract's lines; the original with PL_SOURCES_DIR in testLooks)
-        const std::string ex = readExtract("blackhole/arxiv/1502.03808_james2015.extract.txt");
-        check(ex.find("intersections of the beam with the disk. At each intersection") != std::string::npos && ex.find("we attenuate the beam by the optical\nthickness") != std::string::npos,
-              "J15 App. A.6: the thin disc sampled at each crossing, the beam attenuated by the optical thickness");
-        check(ex.find("Houdini software and stored in a volumetric data structure containing roughly 17 million\nvoxels") != std::string::npos && ex.find("such as fractal noise") != std::string::npos,
-              "J15 App. A.6: the volume disc (Houdini, roughly 17 million voxels) and the close-ups' procedural textures (fractal noise), not published as numbers");
-    }
-    // the fade
-    const double rIn = c.rIn, rOut = c.rOut, w = kFilmFade, l0 = std::log(rIn), l1 = std::log(rOut);
-    bool inside = true, outside = true;
-    for (int i = 0; i <= 1000; i++) {
-        const double u = l0 + w + (l1 - l0 - 2 * w) * i / 1000.0;
-        inside = inside && filmEdge(std::exp(u), rIn, rOut) == 1.0;
-    }
-    for (double r : {rIn, rOut, rIn * 0.999, rOut * 1.001, 0.5 * rIn, 2.0 * rOut, 1.0, 1000.0}) outside = outside && filmEdge(r, rIn, rOut) == 0.0;
-    check(inside, "fade: 1 everywhere from 0.12 in ln r inside the edges");
-    check(outside, "fade: 0 at the edges and beyond them");
-    check(std::fabs(filmEdge(std::exp(l0 + w / 2), rIn, rOut) - 0.5) < 1e-12 && std::fabs(filmEdge(std::exp(l1 - w / 2), rIn, rOut) - 0.5) < 1e-12,
-          "fade: 1/2 halfway across its width (the smoothstep 3x^2 - 2x^3 at x = 1/2)");
-    {   const double h = 1e-5;
-        double jump = 0, slopeJump = 0, endSlope = 0;
-        const auto e = [&](double u) { return filmEdge(std::exp(u), rIn, rOut); };
-        for (double base : {l0, l1 - w})
-            for (double u = base - 0.03; u < base + w + 0.03; u += h) {
-                jump = std::max(jump, std::fabs(e(u + h) - e(u)) / h);
-                const double d0 = (e(u) - e(u - h)) / h, d1 = (e(u + h) - e(u)) / h;
-                slopeJump = std::max(slopeJump, std::fabs(d1 - d0) / h);
-            }
-        for (double u : {l0, l0 + w, l1 - w, l1}) endSlope = std::max(endSlope, std::max(std::fabs(e(u + h) - e(u)), std::fabs(e(u) - e(u - h))) / h);
-        check(jump <= 1.5 / w * (1 + 1e-3), "fade: no jump in value (largest slope " + f(jump) + ", the smoothstep's 1.5 / width = " + f(1.5 / w) + ")");
-        check(slopeJump <= 6 / (w * w) * 1.01, "fade: no jump in slope (largest change of slope per unit " + f(slopeJump) + ", the smoothstep's 6 / width^2 = " + f(6 / (w * w)) + ")");
-        check(endSlope < 6 / (w * w) * h * 1.01, "fade: slope 0 at both ends of its width, at each edge (" + f(endSlope) + ")");
-    }
-    // the cover
-    bool closed = true;
-    for (double t : {1e-6, 1e-3, 0.1, 0.5, 1.5, 3.0, 10.0, 40.0}) closed = closed && std::fabs(filmCover(t) - (1 - std::exp(-t))) <= 2e-16;
-    check(closed && filmCover(0) == 0 && filmCover(std::numeric_limits<double>::infinity()) == 1, "cover: 1 - exp(-tau) (0 at tau 0, 1 as tau -> infinity)");
-    check(filmTau(1.3, 0.7) == 1.5 * 1.3 * 0.7 && filmTau(2, 0) == 0 && filmTau(0, 1) == 0 && filmTau(1, 0, std::numeric_limits<double>::infinity()) == 0,
-          "tau = 1.5 x S x edge (0 at and beyond the edges, also for an opaque disc)");
-    check(std::fabs(filmCover(filmTau(1, 1)) - 0.77686983985157021) < 1e-15, "a crossing well inside with S = 1 covers 1 - e^-1.5 = 0.7769 of the pixel");
-    // laying front to back: two crossings of known light and cover
-    {   const std::array<double, 3> L1{0.31, 0.52, 0.17}, L2{0.9, 0.25, 0.6};
-        const double c1 = filmCover(filmTau(1.2, 0.8)), c2 = filmCover(filmTau(0.6, 1.0));
-        double left = -1;
-        const std::array<double, 3> o = layFrontToBack({{L1, c1}, {L2, c2}}, &left);
-        double err = 0;
-        for (int k = 0; k < 3; k++) err = std::max(err, std::fabs(o[static_cast<std::size_t>(k)] - (L1[static_cast<std::size_t>(k)] * c1 + L2[static_cast<std::size_t>(k)] * c2 * (1 - c1))));
-        check(err < 1e-16 && std::fabs(left - (1 - c1) * (1 - c2)) < 1e-16, "two crossings: the pixel gets L1 c1 + L2 c2 (1 - c1), the sky behind (1 - c1)(1 - c2) (" + f(err) + ")");
-        double lw = -1;
-        const std::array<double, 3> u = layFrontToBack({{{1, 1, 1}, c1}, {{1, 1, 1}, c2}, {{1, 1, 1}, 0.3}}, &lw);
-        check(std::fabs(u[0] + lw - 1) < 1e-15 && std::fabs(u[2] + lw - 1) < 1e-15, "laying conserves light: unit layers and the part behind sum to 1");
-        check(c2 * (1 - c1) > 0.05, "the far side shows through the near side (" + f(c2 * (1 - c1)) + " of a pixel)");
-        const double inf = std::numeric_limits<double>::infinity();
-        double l2 = -1;
-        const std::array<double, 3> q = layFrontToBack({{L1, filmCover(filmTau(1.2, 0.8, inf))}, {L2, filmCover(filmTau(0.6, 1.0, inf))}}, &l2);
-        check(q == L1 && l2 == 0, "tau -> infinity: the first crossing's light exactly, nothing behind (the opaque disc of 0.55-0.80)");
-    }
-    {   // the old picture's light at a crossing (lab.cpp discLight, Film) comes back exactly from the laying with an opaque disc
-        Settings s = settingsDefaults();
-        applyPreset(s, kFeedingKey);
-        setLook(s, Look::Film);
-        const Settings v = shown(s);
-        DiscPixel a, b;
-        discLight(v, 12, 1.3, a); discLight(v, 15, 0.7, b);
-        const double inf = std::numeric_limits<double>::infinity();
-        const std::array<double, 3> q = layFrontToBack({{a.rgb, filmCover(filmTau(1, filmEdge(12, rIn, rOut), inf))}, {b.rgb, filmCover(filmTau(1, filmEdge(15, rIn, rOut), inf))}});
-        check(q == filmDiscLinear() && a.rgb == filmDiscLinear(), "tau -> infinity: the Film pixel = the old opaque Film colour, to the bit");
+    // 0.86.0 (PLAN_REVIEW.md R6): Film shows only J15's choices: no glow of the lab's own (the film's flare is a measured point-spread function the paper does not
+    // publish, checked above) and no see-through, soft-edged disc; the guide's row says the flare is not drawn
+    {   bool rowSays = false, rowOwn = false;
+        for (const FilmRow& r : filmRows()) {
+            if (r.choice.find("Lens flare") == 0) rowSays = r.choice.find("not drawn") != std::string::npos;
+            if (r.choice.find("our own glow") != std::string::npos) rowOwn = true;
+        }
+        check(rowSays && !rowOwn, "Film: the guide's lens-flare row says the flare is not drawn and names no glow of the lab's own");
     }
 }
 
@@ -3233,6 +3141,97 @@ static void testDiscHeight() {
     }
 }
 
+// 0.86.0 (PLAN_REVIEW.md R12), THE THICKNESS'S SPIN TERM (disc.h, SPIN). Written before the change (the old zhuQ took no spin and heightOn was a = 0 only):
+//  1. the midplane restoring term Q = (L^2 - a^2 (E^2 - 1)) / r^4 (AF13 (92)) equals (u^t)^2 omega_theta^2, omega_theta^2 = Omega_K^2 (1 - 4 a r^-3/2 + 3 a^2 r^-2)
+//     (AF13 (40), "measured at infinity"), Omega_K = 1 / (r^3/2 + a) (BPT (2.16)), u^t = 1 / (E - Omega_K L) (u.u = -1 on the circular orbit, E and L of BPT
+//     (2.12), (2.13)): the restoring term per unit proper time squared. a = 0, 0.5, 0.9, 0.99; r from r_ms to 100 M (200 radii, even in ln r); 1e-10.
+//     The two other printed forms (Zhu (6): a^2 (u_t - 1) with u_t = -E; ALP97 (27): a^2 (E - 1)) are shown to differ at a = 0.99 (the reason for the choice).
+//  2. a = 0: Q is 0.79.0's L^2 / r^4 to the bit, and R_F is (1 - 2/r) / (1 - 3/r) to the bit, so the thickness at spin 0 is today's.
+//  3. heightOn holds for every spin the lab reaches (0 to kSpinTop); the thickness at a = 0.5 and 0.99 is 0 at r_ms and positive outside it.
+//  4. Zhu's (B1a)-(B1f) hold with the spin's R_F and Q at a = 0.5 and 0.99 (each equation's two sides within 1e-9) at 20, 300, 2000 M.
+static void testDiscHeightSpin() {
+    double worst = 0, zhuOff = 0, alpOff = 0;
+    for (double a : {0.0, 0.5, 0.9, 0.99}) {
+        const double rms = discInner(a);
+        for (int i = 0; i < 200; i++) {
+            const double r = rms * std::exp(std::log(100.0 / rms) * i / 199.0);
+            const double E = orbitEnergy(r, a), L = orbitAngMom(r, a), Om = orbitOmega(r, a), ut = 1 / (E - Om * L);
+            const double wth2 = Om * Om * (1 - 4 * a / std::pow(r, 1.5) + 3 * a * a / (r * r));
+            const double want = ut * ut * wth2;
+            worst = std::max(worst, std::fabs(zhuQ(r, a) / want - 1));
+            if (a == 0.99) {
+                zhuOff = std::max(zhuOff, std::fabs((L * L + a * a * (-E - 1)) / std::pow(r, 4) / want - 1));
+                alpOff = std::max(alpOff, std::fabs((L * L - a * a * (E - 1)) / std::pow(r, 4) / want - 1));
+            }
+        }
+    }
+    check(worst < 1e-10, "thickness, spin: Q = (L^2 - a^2 (E^2 - 1)) / r^4 against (u^t)^2 x AF13 (40)'s omega_theta^2 for a = 0, 0.5, 0.9, 0.99, r_ms to 100 M: " + f(worst) + " (1e-10)");
+    check(zhuOff > 1e-3 && alpOff > 1e-3, "thickness, spin: the other printed forms miss AF13 (40) at a = 0.99: Zhu (6) by " + f(zhuOff) + ", ALP97 (27) by " + f(alpOff) + " (the reason for AF13 (92)'s)");
+    bool bit = true;
+    for (double r = 6.001; r < 3000; r *= 1.07) {
+        const double L = orbitAngMom(r, 0);
+        bit = bit && zhuQ(r, 0) == L * L / (r * r * r * r) && zhuRF(r, 0) == (1 - 2 / r) / (1 - 3 / r) && zhuQ(r) == zhuQ(r, 0);
+    }
+    check(bit, "thickness, spin: at a = 0 Q and R_F are 0.79.0's to the bit (the thickness without spin is unchanged)");
+    bool on = true;
+    for (double a = 0; a <= kSpinTop + 1e-12; a += 0.01) on = on && heightOn(a);
+    check(on && heightOn(kSpinTop), "thickness, spin: heightOn holds for every spin from 0 to " + f(kSpinTop) + " (the Spin slider's range, 0.01 steps)");
+    const double c = 299792458.0, kB = 1.380649e-23, sig = stefanBoltzmann(), aR = 4 * sig / c, mH = 1.00782503223 * 1.66053906892e-27;
+    double worstB = 0;
+    bool edge = true;
+    for (double a : {0.5, 0.99}) {
+        DiscPhys p;
+        p.aSigned = a;
+        const double rms = discInner(a), rg = gravRadiusM(p.massSun);
+        edge = edge && p.height(rms) == 0 && p.height(rms * 1.01) > 0 && p.heightRad(rms * 1.01) > 0;
+        for (double r : {20.0, 300.0, 2000.0}) {
+            const double h = p.height(r) * rg, F = p.flux(r), Q = (c / rg) * (c / rg) * zhuQ(r, a), Om = c / rg / std::pow(r, 1.5);
+            const double RF = (1 - 2 / r + a * a / (r * r)) / (1 - 3 / r + 2 * a / std::pow(r, 1.5));   // (B1d) as Zhu prints it
+            const double W = 4 * F / (3 * Om * RF), Pt = W / (2 * h * kDiscAlpha), rho = Pt / (Q * h * h), Sig = 2 * h * rho;
+            const double Prad = F * kZhuKappa * Sig / (4 * c), T = std::pow(3 * Prad / aR, 0.25), Pg = rho * kB * T / (kZhuMu * mH);
+            worstB = std::max(worstB, std::fabs((Pg + Prad) / Pt - 1));
+        }
+    }
+    check(edge && worstB < 1e-9, "thickness, spin: h = 0 at r_ms and > 0 outside at a = 0.5 and 0.99; Zhu (B1a)-(B1f) hold with the spin's R_F and Q at 20, 300, 2000 M: " + f(worstB) + " (1e-9)");
+    for (double a : {0.0, 0.5, 0.99}) {
+        DiscPhys p;
+        p.aSigned = a;
+        double hr = 0, at = 0;
+        for (double r = discInner(a) * 1.001; r < 200; r *= 1.01) { const double t = p.height(r) / r; if (t > hr) { hr = t; at = r; } }
+        std::printf("  thickness at spin %.2f (10^8 Suns, 0.1 L_Edd): largest h/R %.4f at %.3g M, h at 2000 M %.3g M\n", a, hr, at, p.height(2000));
+    }
+}
+
+// 0.86.0 (Part A), THE WORDS FOLLOW THE PICTURE (lab.h discShapeWords, discEdgeOnWords, discThicknessWords). Written before the change (until 0.85 "What is
+// real" said "flat, thin" and the edge-on caption "infinitely thin, a line" while the Real disc at spin 0 was drawn thick). For both looks and spins 0, 0.5,
+// 0.99: the picture's thickness is discGeom(s).height (what the CPU and GPU pictures draw from); the words name a thickness exactly when it is drawn and say
+// "no thickness" (and the edge-on "line") exactly when it is not.
+static void testDiscWords() {
+    int bad = 0, n = 0;
+    std::string why;
+    const auto has = [](const std::string& t, const char* w) { return t.find(w) != std::string::npos; };
+    for (Look look : {Look::Real, Look::Film})
+        for (double a : {0.0, 0.5, 0.99}) {
+            Settings s = settingsDefaults();
+            applyPreset(s, kFeedingKey);
+            setLook(s, look);
+            setSpin(s, a);
+            const Settings v = shown(s);
+            const bool thick = discGeom(v).height != nullptr && discGeom(v).height->on();
+            const std::string shape = discShapeWords(v), edge = discEdgeOnWords(v), thk = discThicknessWords(v);
+            const bool saysThick = has(shape, "calculated thickness (") && has(edge, "drawn at its calculated thickness") && has(thk, "drawn at its calculated thickness");
+            const bool saysFlat = has(shape, "no thickness") && has(edge, "no thickness") && has(edge, "it is a line") && (look == Look::Film || has(thk, "no thickness"));
+            const bool flatWords = has(shape, "no thickness") || has(edge, "it is a line") || has(edge, "no thickness") || has(shape, "thin,");
+            const bool thickWords = has(shape, "calculated thickness (") || has(edge, "drawn at its calculated thickness");
+            n++;
+            if (thick ? !(saysThick && !flatWords) : !(saysFlat && !thickWords)) { bad++; why += std::string(" ") + lookKey(look) + "@" + f(a); }
+        }
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    check(discThickDrawn(s) && discGeom(s).height, "words: the feeding preset at spin 0 (Real) is drawn thick (the case the old words got wrong)");
+    check(bad == 0, "words: for Real and Film at spins 0, 0.5, 0.99 the disc's words name a thickness exactly when it is drawn (" + std::to_string(n) + " cases, wrong:" + (why.empty() ? std::string(" none") : why) + ")");
+}
+
 // THE STREAKS (gas.h StreakField):
 //  1. the field at level 0: mean 0 and variance 1 over its texels (1e-3: the values are normal quantiles of their ranks)
 //  2. the mean of S = exp(c f - c^2 s^2 / 2) over 2^20 points spread evenly (another hash) at random times up to 10^9 M: 1 within 3 standard errors of the
@@ -3653,7 +3652,7 @@ static void testHotColour() {
 
 int main() {
     if (const char* only = std::getenv("PL_BH_ONLY")) {             // (by hand: one of 0.79.0's tests)
-        if (!std::strcmp(only, "height")) testDiscHeight();
+        if (!std::strcmp(only, "height")) { testDiscHeight(); testDiscHeightSpin(); testDiscWords(); }
         if (!std::strcmp(only, "streaks")) testStreaks();
         if (!std::strcmp(only, "surface")) testDiscSurface();
         if (!std::strcmp(only, "hot")) { testHotModel(); testHotEmissivity(); testHotTransfer(); testHotSpectrum(); testHotColour(); }
@@ -3698,13 +3697,14 @@ int main() {
     testMovingTable();
     testSpinLab();
     testLooks();
-    testFilmSoft();
     testCameraMotion();
     testTrueLight();
     testGlare();
     testGas();
     testGasCard();
     testDiscHeight();
+    testDiscHeightSpin();
+    testDiscWords();
     testStreaks();
     testDiscSurface();
     testHotModel();

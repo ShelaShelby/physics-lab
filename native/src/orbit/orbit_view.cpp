@@ -1,4 +1,5 @@
 #include "orbit_view.h"
+#include "orbit/star_light.h"
 #include "orbit/label_clip.h"
 
 #include <algorithm>
@@ -152,7 +153,10 @@ void drawAxesGizmo(render::Renderer2D& R, TextPainter& T, double gx, double gy, 
 // size, and each group is one instanced draw call. lv = how bright the sky is drawn (0–1).
 // 0.75.0: L, the lens: 2D the map of orbit/sky.cpp skyScreen (the angle from straight ahead becomes the distance from the middle, 100 degrees at the corner);
 // 3D the scene's own pinhole camera (orbit/camera.h), so the sky and the planets move together when the view turns.
-void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv, const Sky& S, const SkyLens& SL) {   // 0.73.0: S, the sky seen from where the scene is
+// 0.86.0: trueWhite > 0 (Lighting: True sunlight): the screen's white in units of the Sun's surface luminance (orbit/star_light.h sunlitWhite). Each star then gets
+// its true light on that exposure (skyStarDot) and is drawn only where it reaches the screen's faintest step; the Gaia map, which has no calibrated brightness
+// (blackhole/light.h), is not drawn. trueWhite 0 (Even): the sky exactly as before.
+void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv, const Sky& S, const SkyLens& SL, double trueWhite = 0) {   // 0.73.0: S, the sky seen from where the scene is
     const double cx = W / 2, cy = H / 2, diag = std::hypot(W, H) / 2, K = diag / 1.75;   // K: points per radian away from the middle (100° reaches the corner)
     // a direction -> screen (orbit/sky.cpp skyScreenLens)
     const auto scr = [&](const Vec3& v, double& X, double& Y) { return skyScreenLens(v, W, H, ca, sa, cb, sb, SL, X, Y); };
@@ -166,7 +170,8 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
         skyViewToGalactic(S, ca, sa, cb, sb, M);
         float Mf[9];
         for (int k = 0; k < 9; k++) Mf[k] = static_cast<float>(M[k]);
-        if (SL.pinhole) R.skyMapPinhole(W, H, SL.ppx, SL.ppy, SL.F, Mf, lv);   // 0.75.0: each pixel's direction by the pinhole turned back
+        if (trueWhite > 0) {}                             // 0.86.0: not on the exposure: not drawn (its pixels have no calibrated brightness)
+        else if (SL.pinhole) R.skyMapPinhole(W, H, SL.ppx, SL.ppy, SL.F, Mf, lv);   // 0.75.0: each pixel's direction by the pinhole turned back
         else R.skyMap(W, H, K, Mf, lv);
     }
     // stars: 0.50 (review item 5): every star by the one rule of sky.h starDraw (light ∝ 10^(-0.4 m), drawn light ∝ light^0.5), a disc in its colour bucket's colour.
@@ -184,9 +189,12 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
         if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
         static const bool logStars = std::getenv("PL_LOG_STARS") != nullptr;   // 0.75.0, for automatic checks only: where the stars brighter than 6 are drawn
         if (logStars && S.stars[i].mag < 6) std::printf("PLSTARPX %zu %.3f %.3f\n", i, X, Y);
-        const StarDraw d = starDraw(S.stars[i].mag);
+        // 0.86.0: one dot rule (orbit/star_light.h skyStarDot): Even exactly starDraw x lv; True sunlight the star's true light on the exposure
+        const double ptSr = trueWhite > 0 ? (SL.pinhole ? pinholePointSr(SL.F, SL.ppx, SL.ppy, X, Y) : mapPointSr(K, cx, cy, X, Y)) : 0.0;
+        const SkyDot d = skyStarDot(S.stars[i].mag, lv, trueWhite, ptSr);
+        if (!d.drawn) continue;
         const auto& c = S.colours[S.stars[i].bucket];
-        R.disc(X, Y, d.radius, rgba(c[0], c[1], c[2], static_cast<float>(d.alpha * lv)));
+        R.disc(X, Y, d.radius, rgba(c[0], c[1], c[2], static_cast<float>(d.alpha)));
     }
     if (cons != ConsMode::Off) {                          // constellation lines (Stellarium's modern sky culture)
         const double cl2 = std::max(lv, 0.6);
@@ -569,11 +577,21 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     R.setSpace(0.2126f * kBg.r + 0.7152f * kBg.g + 0.0722f * kBg.b < 0.25f ? kBg : Color{0, 0, 0, 1});
     hits_.clear();
     drawnSel_ = DrawnSel{};
+    // 0.85.0 (R1): the true sunlight. The camera's exposure is set for the followed body or moon (its distance from the Sun); nothing followed: 1 au.
+    double expAU = kTrueLightRefAU;
+    std::string expName;
+    if (set.trueLight && follow && (sel.kind == Selection::Body || sel.kind == Selection::Moon)) {
+        if (const Body* fb = findBody(sys, sel.bodyId)) {
+            expAU = std::max(length(fb->pos), 1.0) / kAU;
+            expName = sel.kind == Selection::Moon && sel.moon >= 0 && sel.moon < static_cast<int>(fb->moons.size()) ? std::string(fb->moons[std::size_t(sel.moon)].data->name) : fb->name;
+        }
+    }
     if (set.sky != SkyMode::Off) {                        // the night sky: dim close up, brighter as you zoom out
         const double zt = std::clamp(-set.zoom / 3.5, 0.0, 1.0), lv = set.sky == SkyMode::Full ? 0.45 + 0.55 * zt : 0.16 + 0.6 * zt;
         SkyLens lens;                                     // 0.75.0: 3D the scene's pinhole camera; 2D the map as before
         if (d3) { lens.pinhole = true; lens.ppx = cam.ppx; lens.ppy = cam.ppy; lens.F = cam.F; }
-        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv, skyData(), lens);
+        // 0.86.0: True sunlight: the stars on the planets' exposure (orbit/star_light.h sunlitWhite); Even: lv from the zoom, as before
+        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv, skyData(), lens, set.trueLight ? sunlitWhite(expAU) : 0.0);
     }
 
     // the Sun as a star of 1 solar mass
@@ -807,14 +825,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     };
     // 0.85.0 (R1): the true sunlight. The camera's exposure is set for the followed body or moon (its distance from the Sun); nothing followed: 1 au.
     // Each ball and ring system is drawn with lightAt(its place): (d_exposure / d)^2 (orbit/true_light.h); even lighting: 1.
-    double expAU = kTrueLightRefAU;
-    std::string expName;
-    if (set.trueLight && follow && (sel.kind == Selection::Body || sel.kind == Selection::Moon)) {
-        if (const Body* fb = findBody(sys, sel.bodyId)) {
-            expAU = std::max(length(fb->pos), 1.0) / kAU;
-            expName = sel.kind == Selection::Moon && sel.moon >= 0 && sel.moon < static_cast<int>(fb->moons.size()) ? std::string(fb->moons[std::size_t(sel.moon)].data->name) : fb->name;
-        }
-    }
+    // (0.86.0: expAU and expName are set before the sky, which takes the same exposure)
     const auto lightAt = [&](const Vec3& p) { return lightFactor(std::max(length(p), 1.0) / kAU, expAU, set.trueLight); };
     exposureText.clear();
     if (set.trueLight) {

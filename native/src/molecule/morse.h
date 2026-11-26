@@ -53,6 +53,12 @@ double dissociatedE(const Curve& c);                               // the energy
 double d0Measured(const std::string& id);
 const char* d0Source(const std::string& id);
 double d0Morse(const Curve& c);                                    // De - level(c, 0)
+// 0.86.0 (Part D): the Morse D0 against the measured D0, computed (NaN where none is measured): how far above (cm^-1, and as a share of the measured value)
+struct MorseGap { double cm = 0, share = 0; bool over = false; };
+MorseGap morseGap(const std::string& id);
+// the Bond energy card's caption for it: where the Morse D0 is above the measured one (all four molecules: H2, N2, O2, HCl), it says the Morse curve fixed
+// by omega_e and omega_e x_e alone overestimates the dissociation energy, by the computed cm^-1 and per cent; empty where none is measured
+std::string morseGapWords(const std::string& id);
 constexpr double kKJmolToCm = 1000 / (6.02214076e23 * 6.62607015e-34 * 299792458.0 * 100);   // 1 kJ/mol in cm^-1 (CODATA 2022, exact): 83.5935
 // The rotation link: Pekeris' alpha_e of a Morse curve, and the measured one
 double alphaPekeris(double we, double wexe, double Be);

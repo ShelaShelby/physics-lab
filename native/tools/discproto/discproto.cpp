@@ -5,8 +5,7 @@
 //                              thickness, fading inner edge, streaks)
 //   discproto sgra <out.png>   Sagittarius A*, Real: today (the thin disc one click away, 0.1 L_Edd) | the hot flow (BL06's RIAF) at the same exposure |
 //                              the hot flow at its own exposure (the factor printed)
-//   discproto film <out.png>   Film (J15's disc): today | proposed (soft edges, streaks, partly see-through; the lab's own, labelled)
-//   discproto film081 <out.png> <fades.png>  0.81.0: Film today | the app's new Film (soft edges, see-through), two views; the fade at 0.06, 0.12, 0.2
+//   (0.86.0: the film and film081 modes are gone with the Film look's own glow and see-through disc, PLAN_REVIEW.md R6)
 //   discproto real079 <out.png> 0.79.0: today | the app's new disc (gas.h streaks, disc.h thickness table, the clump), each at its own automatic exposure
 //   discproto count            steps per ray and samples per ray for the GPU estimate (PLAN_DISC.md section 6)
 // Every number is from a named source (PLAN_DISC.md sections 2-5) or is marked CHOICE (the prototype's own, labelled in the plan).
@@ -15,8 +14,7 @@
 //   the middle; the equidistant projection of the lab (schwarzschild.h HoleView: the angle from the middle is the distance from it). The camera sits at
 //   theta = 100 degrees (lab.h kTiltDefaultDeg), phi = 0, screen up = e_theta (towards -z), so the disc is below the hole as in the lab.
 //   The gas turns anticlockwise seen from +z (lab.h): the side coming towards the camera is on the right.
-// THE EXPOSURE: Real: the lab's camera curve (tone.h, Reinhard et al. 2002) made from TODAY's disc pixels and used for both panels. Film: the screen's white
-//   at the film disc's own colour (its largest channel), then the lab's own glow (looks.h glowReference) on both panels. No sky (the lab's black background).
+// THE EXPOSURE: Real: the lab's camera curve (tone.h, Reinhard et al. 2002) made from TODAY's disc pixels and used for both panels. No sky (the lab's black background).
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -554,183 +552,7 @@ int sgraPicture(const std::string& out) {
     return 0;
 }
 
-int filmPicture(const std::string& out) {
-    Settings s = settingsDefaults();
-    applyPreset(s, kFeedingKey);
-    setLook(s, Look::Film);
-    s = shown(s);                                                       // spin 0.6, J15's edges 9.26 and 18.70 M, one colour
-    const DiscGeom dg = discGeom(s);
-    const View v;
-    const KerrBL ch(s.spin);
-    Field fld; fld.make(78102);
-    patches078::GasPattern gp = patches078::GasPattern::reduced(); gp.a = s.spin; gp.rIn = dg.rIn; gp.rOut = dg.rOut;
-    Clump cl; cl.a = s.spin; cl.rc = gasClumpRadius(s); cl.init();
-    const auto film = filmDiscLinear();
-    // CHOICES (the lab's own, labelled in the plan): the edges fade over kFade in ln r inside J15's edges; the disc is "marginally optically thick" (J15 4.1.1):
-    // each crossing covers 1 - exp(-tau), tau = kTau x the texture x the edge; the crossings are laid front to back
-    constexpr double kFade = 0.12, kTau = 1.5;
-    Panel A = newPanel(), B = newPanel();
-    const double t0 = now();
-    forRows([&](int y) {
-        for (int x = 0; x < kW; x++) {
-            std::array<double, 3> ca{0, 0, 0}, cb{0, 0, 0};
-            int na = 0;
-            for (int k = 0; k < kSub * kSub; k++) {
-                const double X = x + (0.5 + (k % kSub)) / kSub, Y = y + (0.5 + (k / kSub)) / kSub;
-                const RayPath p = traceRay(ch, v, X, Y);
-                g_rays++; g_steps += p.end.steps;
-                bool done = false;
-                double left = 1;
-                for (std::size_t c = 0; c + 5 <= p.cross.size(); c += 5) {
-                    const double r = p.cross[c];
-                    if (r < dg.rIn || r > dg.rOut) continue;
-                    if (!done) {
-                        const auto L = todayLight(s, r, p.cross[c + 2], 1, gp, cl);
-                        for (int q = 0; q < 3; q++) ca[q] += L[q];
-                        na++; done = true;
-                    }
-                    const double u = std::log(r);
-                    const double e1 = std::clamp((u - std::log(dg.rIn)) / kFade, 0.0, 1.0), e2 = std::clamp((std::log(dg.rOut) - u) / kFade, 0.0, 1.0);
-                    const double edge = e1 * e1 * (3 - 2 * e1) * e2 * e2 * (3 - 2 * e2);
-                    const double S = fld.S(r, p.cross[c + 2]);
-                    const double cover = 1 - std::exp(-kTau * S * edge);
-                    for (int q = 0; q < 3; q++) cb[q] += left * cover * film[q] * S;
-                    left *= 1 - cover;
-                }
-            }
-            const std::size_t i = static_cast<std::size_t>(y) * kW + x;
-            for (int q = 0; q < 3; q++) { A.rgb[i][q] = ca[q] / (kSub * kSub); B.rgb[i][q] = cb[q] / (kSub * kSub); }
-            A.on[i] = na > 0;
-        }
-    });
-    const double secs = now() - t0;
-    const double white = std::max({film[0], film[1], film[2]});   // the screen's white: the film's disc colour (its largest channel), both panels
-    std::vector<std::vector<std::array<double, 3>>> outP;
-    for (Panel* P : {&A, &B}) {
-        std::vector<double> lin(static_cast<std::size_t>(kW) * kH * 3);
-        for (std::size_t i = 0; i < P->rgb.size(); i++) for (int q = 0; q < 3; q++) lin[3 * i + q] = std::clamp(P->rgb[i][q] / white, 0.0, 1.0);
-        const std::vector<double> gl = glowReference(lin, kW, kH);
-        std::vector<std::array<double, 3>> o(P->rgb.size());
-        for (std::size_t i = 0; i < o.size(); i++) for (int q = 0; q < 3; q++) o[i][q] = lin[3 * i + q] + kGlowStrength * gl[3 * i + q];
-        outP.push_back(o);
-    }
-    int W = 0;
-    const auto joined = joinPanels(outP, W);
-    writePng(out, joined, W, kH);
-    std::printf("film: %s %d x %d (two panels), %.1f s; spin %.2f, edges %.2f-%.2f M, white = the film disc's colour (%.4g x the Sun's surface, largest channel)\n", out.c_str(), W, kH, secs,
-                s.spin, dg.rIn, dg.rOut, white);
-    std::printf("  rays %ld, integrator steps %.1f a ray\n", g_rays.load(), double(g_steps) / g_rays);
-    return 0;
-}
-
-// 0.81.0 (PLAN_DISC.md D4): Film as the app draws it today (0.80.1: the opaque disc with hard rims, gas.h's streaks and the clump) beside the new one
-// (looks.h: the soft edges and the see-through disc, the lab's own), at the same exposure and glow. Two views: the lab's starting view (as disc078) and the
-// paper's view (J15 Figure 13: 74.1 M, 86.56 deg; field of view 30). One moment (T = 0), no light travel time (the app's picture has it; here it is left out
-// on both sides alike). Then the fade's three widths 0.06, 0.12, 0.2 side by side at the starting view (out2).
-int film081Picture(const std::string& out, const std::string& out2) {
-    Settings s = settingsDefaults();
-    applyPreset(s, kFeedingKey);
-    setLook(s, Look::Film);
-    s = shown(s);
-    const DiscGeom dg = discGeom(s);
-    const KerrBL ch(s.spin);
-    Clump cl; cl.a = s.spin; cl.rc = gasClumpRadius(s); cl.init();
-    const StreakField& sf = streakField();
-    const auto film = filmDiscLinear();
-    const double white = std::max({film[0], film[1], film[2]});            // the screen's white: the film disc's colour (its largest channel), every panel
-    const FilmChoices fc;
-    View vs;                                                                // the lab's starting view
-    View vp; vp.rC = fc.camR; vp.thC = fc.camTheta; vp.fovDeg = 30;         // the paper's view
-    const double fades[3] = {0.06, kFilmFade, 0.2};
-    const auto finish = [&](Panel& P) {                                     // the glow on the disc's light over the white (each crossing scaled into the screen)
-        std::vector<double> lin(static_cast<std::size_t>(kW) * kH * 3);
-        for (std::size_t i = 0; i < P.rgb.size(); i++) for (int q = 0; q < 3; q++) lin[3 * i + q] = std::clamp(P.rgb[i][q], 0.0, 1.0);
-        const std::vector<double> gl = glowReference(lin, kW, kH);
-        std::vector<std::array<double, 3>> o(P.rgb.size());
-        for (std::size_t i = 0; i < o.size(); i++) for (int q = 0; q < 3; q++) o[i][q] = lin[3 * i + q] + kGlowStrength * gl[3 * i + q];
-        return o;
-    };
-    const auto stats = [&](const char* name, const Panel& P, const std::vector<std::array<double, 3>>& o, long through) {
-        double sl = 0, sl2 = 0; long n = 0;
-        for (std::size_t i = 0; i < o.size(); i++) {
-            if (!P.on[i]) continue;
-            const double y = 0.2126 * o[i][0] + 0.7152 * o[i][1] + 0.0722 * o[i][2];
-            if (y <= 0) continue;
-            sl += std::log(y); sl2 += std::log(y) * std::log(y); n++;
-        }
-        const double m = n ? sl / n : 0;
-        std::printf("  %-26s disc pixels %6ld  mean ln Y %.3f  spread of ln Y %.3f  pixels lit through a nearer crossing (over 2 levels) %ld\n", name, n, m,
-                    n ? std::sqrt(std::max(0.0, sl2 / n - m * m)) : 0.0, through);
-    };
-    const double t0 = now();
-    std::vector<std::vector<std::array<double, 3>>> rowsS, rowsP, fadeP;
-    for (int view = 0; view < 2; view++) {
-        const View& v = view == 0 ? vs : vp;
-        Panel A = newPanel(), F[3] = {newPanel(), newPanel(), newPanel()};
-        std::vector<long> thr(kH, 0);
-        forRows([&](int y) {
-            for (int x = 0; x < kW; x++) {
-                std::array<double, 3> ca{0, 0, 0}, cf[3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, c1{0, 0, 0};
-                bool on = false;
-                for (int k = 0; k < kSub * kSub; k++) {
-                    const double X = x + (0.5 + (k % kSub)) / kSub, Y = y + (0.5 + (k / kSub)) / kSub;
-                    const RayPath p = traceRay(ch, v, X, Y);
-                    g_rays++; g_steps += p.end.steps;
-                    std::vector<double> rs, Ss;
-                    std::vector<std::array<double, 3>> Ls;
-                    for (std::size_t c = 0; c + 5 <= p.cross.size(); c += 5) {
-                        const double r = p.cross[c], ph = p.cross[c + 2];
-                        if (r < dg.rIn || r > dg.rOut) continue;
-                        const double S = sf.factor(r, ph, 0, s.spin), gf = S * (1 + cl.A * cl.density(r, ph, 0));
-                        std::array<double, 3> L;
-                        double m = 0;
-                        for (int q = 0; q < 3; q++) { L[q] = film[q] * gf / white; m = std::max(m, L[q]); }
-                        if (m > 1) for (double& c2 : L) c2 /= m;           // (each crossing scaled into the screen, as the shaders do)
-                        rs.push_back(r); Ss.push_back(S); Ls.push_back(L);
-                    }
-                    if (rs.empty()) continue;
-                    on = true;
-                    for (int q = 0; q < 3; q++) ca[q] += Ls[0][q];          // today: the first crossing, opaque, hard edges
-                    for (int fi = 0; fi < 3; fi++) {
-                        std::vector<FilmLayer> lay;
-                        for (std::size_t c = 0; c < rs.size(); c++) lay.push_back({Ls[c], filmCover(filmTau(Ss[c], filmEdge(rs[c], dg.rIn, dg.rOut, fades[fi])))});
-                        const auto o = layFrontToBack(lay);
-                        for (int q = 0; q < 3; q++) cf[fi][q] += o[q];
-                        if (fi == 1) { lay.resize(1); const auto o1 = layFrontToBack(lay); for (int q = 0; q < 3; q++) c1[q] += o1[q]; }
-                    }
-                }
-                const std::size_t i = static_cast<std::size_t>(y) * kW + x;
-                const double n = kSub * kSub;
-                for (int q = 0; q < 3; q++) { A.rgb[i][q] = ca[q] / n; for (int fi = 0; fi < 3; fi++) F[fi].rgb[i][q] = cf[fi][q] / n; }
-                A.on[i] = F[0].on[i] = F[1].on[i] = F[2].on[i] = on;
-                int d = 0;
-                for (int q = 0; q < 3; q++) d = std::max(d, static_cast<int>(std::lround(255 * encS(cf[1][q] / n))) - static_cast<int>(std::lround(255 * encS(c1[q] / n))));
-                if (d > 2) thr[static_cast<std::size_t>(y)]++;
-            }
-        });
-        long through = 0;
-        for (long t : thr) through += t;
-        const auto oa = finish(A), o1 = finish(F[1]);
-        std::printf("%s:\n", view == 0 ? "the lab's starting view (50 M, 10 deg below the plane, field 45 deg)" : "the paper's view (74.1 M, 86.56 deg from the axis, field 30 deg)");
-        stats("today (0.80.1)", A, oa, 0);
-        stats("0.81.0 (fade 0.12)", F[1], o1, through);
-        (view == 0 ? rowsS : rowsP) = {oa, o1};
-        if (view == 0) for (int fi = 0; fi < 3; fi++) { fadeP.push_back(fi == 1 ? o1 : finish(F[fi])); if (fi != 1) stats(fi == 0 ? "fade 0.06" : "fade 0.2", F[fi], fadeP.back(), 0); }
-    }
-    const double secs = now() - t0;
-    int W = 0;
-    const auto top = joinPanels(rowsS, W), bottom = joinPanels(rowsP, W);
-    std::vector<std::array<double, 3>> both(top);
-    both.resize(top.size() + static_cast<std::size_t>(W) * 4, {0.2, 0.2, 0.2});
-    both.insert(both.end(), bottom.begin(), bottom.end());
-    writePng(out, both, W, 2 * kH + 4);
-    int W2 = 0;
-    const auto fadesJoined = joinPanels(fadeP, W2);                        // (W2 set here, before writePng reads it)
-    writePng(out2, fadesJoined, W2, kH);
-    std::printf("film081: %s %d x %d, %s %d x %d, %.1f s; spin %.2f, edges %.2f-%.2f M, white %.4g (the film disc's largest channel); rays %ld, %.1f steps a ray\n", out.c_str(), W,
-                2 * kH + 4, out2.c_str(), W2, kH, secs, s.spin, dg.rIn, dg.rOut, white, g_rays.load(), double(g_steps) / std::max(1L, g_rays.load()));
-    return 0;
-}
+// 0.86.0: the Film modes (film, film081) went with the Film look's own glow and see-through disc (PLAN_REVIEW.md R6)
 
 // the counts for the GPU estimate: a row through the middle of the feeding preset's view and of Sagittarius A*'s
 int counts() {
@@ -771,9 +593,7 @@ int main(int argc, char** argv) {
     if (m == "real") return realPicture(out);
     if (m == "real079") return realPicture(out, true);   // 0.79.0: the app's model on the right, each panel at its own exposure
     if (m == "sgra") return sgraPicture(out);
-    if (m == "film") return filmPicture(out);
-    if (m == "film081") return film081Picture(out, argc > 3 ? argv[3] : "fades.png");   // 0.81.0
     if (m == "count") return counts();
-    std::fprintf(stderr, "usage: discproto real|real079|sgra|film <out.png> | film081 <out.png> <fades.png> | count\n");
+    std::fprintf(stderr, "usage: discproto real|real079|sgra <out.png> | count\n");
     return 1;
 }

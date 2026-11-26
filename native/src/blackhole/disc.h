@@ -94,14 +94,23 @@ struct DiscPhys {                                   // a disc in numbers
 //   The feeding rate stays L / L_Edd with the lab's L_Edd (kKappaEs = 0.4 cm^2/g, YN): the gas's own opacity sets the thickness.
 //   alpha = 0.1: a CHOICE (Zhu's Model B; their models span 0.03 to 0.22, Table 1). It enters only where the gas's pressure counts (far out): there h goes as
 //   alpha^(-1/10) (the gas-pressure limit below), 6 % between 0.1 and 0.055.
-//   SPIN: R_z's spin term is printed as a^2 (u_t - 1) and has not been checked against Abramowicz et al. 1997 (not saved): the thickness is drawn for a
-//   non-spinning hole only (heightOn); a spinning hole's disc stays at the plane (said in the app). m_H: the hydrogen-1 atom, 1.00782503223 u (NIST, from AME2020,
+//   SPIN (0.86.0, PLAN_REVIEW.md R12): Zhu's (6) prints R_z's spin term as a^2 (u_t - 1), Abramowicz, Lanza & Percival 1997 (27) as L*^2 = L^2 - a^2 (E - 1),
+//   Abramowicz & Fragile 2013 (92) as L^2 - a^2 (E^2 - 1), E = -u_t (extracts: data/blackhole/arxiv/astro-ph_9611101_abramowicz_lanza_percival1997.extract.txt,
+//   1104.5499_abramowicz_fragile2013_vertical.extract.txt). Only AF13 (92)'s form gives AF13 (40)'s vertical epicyclic frequency, so it is used:
+//   R_z = (L^2 - a^2 (E^2 - 1)) / r, Q = (L^2 - a^2 (E^2 - 1)) / r^4 (M = 1), E and L of the circular orbit (BPT (2.12), (2.13), signed a).
+//   The test (tests/test_blackhole.cpp testDiscHeightSpin): Q = (u^t)^2 omega_theta^2, omega_theta^2 = Omega_K^2 (1 - 4 a r^-3/2 + 3 a^2 r^-2) (AF13 (40),
+//   Omega_K = 1 / (r^3/2 + a), BPT (2.16)), u^t = 1 / (E - Omega_K L) (u.u = -1 on a circular orbit): the restoring term per unit proper time squared is the
+//   squared vertical frequency at infinity times (dt/dtau)^2. Within 1e-10 for a = 0, 0.5, 0.9, 0.99 from r_ms to 100 M. At a = 0 Q is 0.79.0's L^2 / r^4 to the bit.
+//   (B1d)'s R_F takes the spin as Zhu prints it. The thickness is computed for every spin (heightOn). The picture draws it at a = 0 only (lab.h discThickDrawn):
+//   the light paths round a spinning hole (spin_sky.h) store only where they cross the plane, not the path near it, so a surface above the plane cannot be
+//   found there yet (ROADMAP). m_H: the hydrogen-1 atom, 1.00782503223 u (NIST, from AME2020,
 //   as atom/atom_learn.cpp), u = 1.66053906892e-27 kg (CODATA 2022).
 constexpr double kZhuKappa = 0.03383;               // m^2/kg (0.3383 cm^2/g), Zhu App. B
 constexpr double kZhuMu = 0.615;                    // mean particle weight in m_H, Zhu App. B
 constexpr double kDiscAlpha = 0.1;                  // CHOICE, labelled (Zhu Model B)
-double zhuQ(double r);                              // Q at a = 0 for M = 1: Omega_k^2 R_z = (1 / r^3) (u_phi^2 / r), u_phi = BPT (2.13) = r / (r - 3)^(1/2)
-bool heightOn(double aSigned);                      // the thickness is modelled: a = 0 only
+double zhuQ(double r, double aSigned = 0);         // Q for M = 1: Omega_k^2 R_z = (L^2 - a^2 (E^2 - 1)) / r^4 (AF13 (92)); a = 0: L^2 / r^4, L = BPT (2.13) = r / (r - 3)^(1/2)
+double zhuRF(double r, double aSigned = 0);         // (B1d)'s R_F = (1 - 2/r + a^2/r^2) / (1 - 3/r + 2a/r^(3/2))
+bool heightOn(double aSigned);                      // the thickness is modelled: every spin the lab reaches (|a| < 1); 0.79.0 to 0.85: a = 0 only
 // the 1-D table the card reads (h in M, kHeightN values evenly in ln r from ln r_ms to ln(1.05 x 2000), linear between them): one table per disc (feeding
 // rate and mass); the processor's reference reads the same floats
 constexpr int kHeightN = 1024;

@@ -4,7 +4,7 @@
 //   blackhole_picture --spin <out.png>   0.55.2: the same disc round a hole spinning at 0.99 (spin_sky.h, the fine table in double; spinPicture below)
 //   blackhole_picture --eye <out.png>    0.55.4: Real at the same place (spin 0.6): True brightness (the map not drawn, stars by light.h) and the eye's glare (light.h glareVeil)
 //   blackhole_picture --film <out.png>   0.55.3: the Film look (blackhole/looks.h, James et al. 2015) at the paper's view (Figure 13: 74.1 M, 86.56 deg from the axis),
-//                                    field of view 30 deg: the same table and rays, the film's one-colour disc (lab.h discLight), the glow by looks.h glowReference, stars over it
+//                                    field of view 30 deg: the same table and rays, the film's one-colour disc (lab.h discLight), stars over it (0.86.0: no glow)
 //   blackhole_picture --disc <out.png>   0.55.1: the feeding preset's gas disc (blackhole/lab.h), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800:
 //                                    the sky by lensPixel, the disc by discPixel (the table the card uses, in double), 2 x 2 rays per pixel, laid over each other in
 //                                    linear light at the lab's automatic exposure (discLook); stars the disc covers are not drawn
@@ -315,12 +315,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
                 img[i] = lin[c] / 4; discImg[i] = dl[c] / 4; rawDisc[i] = rl[c] / 4;
             }
         }
-    if (film) {                                                           // the glow (looks.h) of the disc's own light (0.55.4), added over the sky and disc, before the stars (as the card)
-        std::vector<double> lin(img.size());
-        for (std::size_t i = 0; i < img.size(); i++) lin[i] = std::clamp(discImg[i], 0.0, 1.0);
-        const std::vector<double> gl = glowReference(lin, W, H);
-        for (std::size_t i = 0; i < img.size(); i++) img[i] = std::clamp(img[i], 0.0, 1.0) + kGlowStrength * gl[i];
-    }
+    // (0.86.0: Film has no glow of the lab's own any more, PLAN_REVIEW.md R6)
     double glareMs = 0;
     if (glareOn(s)) {                                                     // 0.55.4: the eye's glare (light.h), as the card: the disc keeps 1 - s, the veil laid round it
         const GlareGrid gg = glareGrid(W, H, v.cx, v.cy, v.K);

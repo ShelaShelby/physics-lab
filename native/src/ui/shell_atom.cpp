@@ -158,6 +158,8 @@ static void choiceRow(AppState& app, Panel& p, const char* key, const std::strin
         i = j;
     }
     if (!note.empty()) pCaption(p, displayable(note));
+    // 0.86.0 (R5): a made-up learning picture is labelled next to its choice even when it is not chosen (chosen, its caption above starts with the label)
+    if (const char* mv = atom::madeUpValue(key)) if (cur != mv) for (const auto& o : opts) if (o.first == mv) pCaption(p, displayable(std::string(mv) + ": " + atom::kMadeUpLabel), true);
 }
 // 0.47: "Put the outer electron in": one button per shell of this atom that has an orbital (AtomLab::valenceChoices), the current one chosen; a tap places the electron there with the
 // jump's cross-fade and no photon (AtomLab::placeValence). Each button is noted as "atom.place=<shell>" for the automatic checks. Packed into rows as choiceRow does.
@@ -318,6 +320,8 @@ static void viewSelector(Panel& p, atom::AtomLab& L) {
     };
     pCaption(p, "Picture");
     row(row1, 5, "atom.viewsel1", cur);
+    // 0.86.0 (R5): the Orbit picture is made up, for learning: labelled beside the row, and its caption when chosen (atom/atom_tools.h)
+    pCaption(p, std::string(cur) == "orbit" ? atom::madeUpCaption("picture") : std::string("Orbit: ") + atom::kMadeUpLabel, true);
     if (!L.chartOn()) { pCaption(p, "Zoom to"); row(row2, 3, "atom.viewsel2", zoom); }
     if (shellLogOn()) auditNote(std::string("viewsel ") + cur + " zoom=" + zoom);
 }

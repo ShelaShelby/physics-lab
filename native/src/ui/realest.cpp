@@ -35,24 +35,25 @@ const std::vector<Row>& table() {
         {"orbit", {"belts", "on", "they are there in the real Solar System."}},
         {"orbit", {"far", "on", "the nearest stars, the star clusters, the Voyager probes and the centre of the Galaxy are really there."}},
         // 0.77.0 (outside review): was "real stars do not get brighter as you zoom out", but Full brightens too (orbit_view.cpp: 0.45 to 1 of the stars' level, Soft 0.16 to 0.76)
-        {"orbit", {"sky", "Full", "the stars nearest their real brightness close up; Soft dims them more. Both still brighten as you zoom out, which real stars do not."}},
+        // 0.86.0: with True sunlight (the realistic Lighting above) the stars are on the camera's exposure (orbit/star_light.h); Full and Soft are then the same
+        {"orbit", {"sky", "Full", "with True sunlight each star is drawn by its true light on the camera's exposure, as the planets are. With Even lighting both choices squeeze the stars' brightness range and brighten as you zoom out, which real stars do not."}},
         {"orbit", {"cons", "Off", "constellation lines and names are drawn by people; they are not in the sky."}},
-        // ---- Atom Lab (the keys and values of ui/atom_panel.cpp atomChoices; "picture" is the View selector) ----
-        {"atom", {"picture", "Cloud 3D", "the electron is a cloud of probability in three dimensions. The Orbit picture is Bohr's 1913 model (electrons on circles), which quantum mechanics replaced."}},
-        {"atom", {"ostyle", "Modern", "a real nucleus, with quarks when you zoom in; Bohr 1913 is his simple drawing."}},
-        {"atom", {"scale", "Fixed", "every atom at the same scale, so their sizes compare truly; Auto stretches each one to fill the picture."}},
-        {"atom", {"qstyle", "Accurate", "a quark has no definite place inside a proton: Accurate draws where its quarks and gluons carry the momentum, fast ones near the centre, from measured data; Simple's balls and tubes are a model."}},   // 0.44
-        {"atom", {"detail", "+ Sea", "a real proton or neutron holds short-lived quark-antiquark pairs as well as its three valence quarks and the gluons."}},
-        {"atom", {"style", "Density", "the measured charge density of the nucleus (what electron scattering sees); Nucleons is a model."}},
-        {"atom", {"cstyle", "Glow", "the soft dots add up into a smooth density, as the probability is; Classic shows separate hard dots."}},
-        {"atom", {"cdens", "Ultra", "the most dots show the same probability most smoothly (the physics is the same)."}},
-        {"atom", {"phase", "Wheel", "the wave has a phase, not only a sign; the wheel shows every phase, Sign shows only + and −."}},
-        {"atom", {"dirac", "On", "real spectral lines are split by relativity (fine structure); the Dirac levels show it."}},
-        {"atom", {"elec", "All", "a real atom has all its electrons (the neutral atom, Dirac-Hartree-Fock); Hydrogen-like removes every electron but one."}},   // 0.40: was missing, so Most realistic left Electrons on One
-        {"atom", {"rscale", "True scale", "every electron at its real distance from the nucleus; Shells enlarged spreads the inner shells out so they can be seen."}},   // 0.46 (review A1): was missing, so Most realistic left the shells enlarged
-        {"atom", {"hrel", "Dirac", "a real one-electron ion obeys Dirac's equation: its cloud is the Dirac state (n, l, j) at every Z, not the non-relativistic orbital."}},   // 0.49.3
-        {"atom", {"vdots", "True share", "each electron gets its true share of the dots, so the outer electron is 1 in Z of them; Easier to see draws it denser so it and its jumps stand out."}},   // 0.54.1
-        {"atom", {"mrel", "Relativistic", "real electrons obey Dirac's equation: heavy atoms have smaller s and p shells and larger d and f than the non-relativistic picture."}},   // 0.41
+        // ---- Atom Lab (the keys and values of ui/atom_panel.cpp atomChoices; "picture" is the View selector). 0.86.0: the values from atom/atom_tools.h realisticValue ----
+        {"atom", {"picture", atom::realisticValue("picture"), "the electron is a cloud of probability in three dimensions. The Orbit picture is Bohr's 1913 model (electrons on circles), which quantum mechanics replaced."}},
+        {"atom", {"ostyle", atom::realisticValue("ostyle"), "a real nucleus, with quarks when you zoom in; Bohr 1913 is his simple drawing."}},
+        {"atom", {"scale", atom::realisticValue("scale"), "every atom at the same scale, so their sizes compare truly; Auto stretches each one to fill the picture."}},
+        {"atom", {"qstyle", atom::realisticValue("qstyle"), "a quark has no definite place inside a proton: Accurate draws where its quarks and gluons carry the momentum, fast ones near the centre, from measured data; Simple's balls and tubes are a model."}},   // 0.44
+        {"atom", {"detail", atom::realisticValue("detail"), "a real proton or neutron holds short-lived quark-antiquark pairs as well as its three valence quarks and the gluons."}},
+        {"atom", {"style", atom::realisticValue("style"), "the measured charge density of the nucleus (what electron scattering sees); Nucleons is a model."}},
+        {"atom", {"cstyle", atom::realisticValue("cstyle"), "the soft dots add up into a smooth density, as the probability is; Classic shows separate hard dots."}},
+        {"atom", {"cdens", atom::realisticValue("cdens"), "the most dots show the same probability most smoothly (the physics is the same)."}},
+        {"atom", {"phase", atom::realisticValue("phase"), "the wave has a phase, not only a sign; the wheel shows every phase, Sign shows only + and −."}},
+        {"atom", {"dirac", atom::realisticValue("dirac"), "real spectral lines are split by relativity (fine structure); the Dirac levels show it."}},
+        {"atom", {"elec", atom::realisticValue("elec"), "a real atom has all its electrons (the neutral atom, Dirac-Hartree-Fock); Hydrogen-like removes every electron but one."}},   // 0.40: was missing, so Most realistic left Electrons on One
+        {"atom", {"rscale", atom::realisticValue("rscale"), "every electron at its real distance from the nucleus; Shells enlarged spreads the inner shells out so they can be seen."}},   // 0.46 (review A1): was missing, so Most realistic left the shells enlarged
+        {"atom", {"hrel", atom::realisticValue("hrel"), "a real one-electron ion obeys Dirac's equation: its cloud is the Dirac state (n, l, j) at every Z, not the non-relativistic orbital."}},   // 0.49.3
+        {"atom", {"vdots", atom::realisticValue("vdots"), "each electron gets its true share of the dots, so the outer electron is 1 in Z of them; Easier to see draws it denser so it and its jumps stand out."}},   // 0.54.1
+        {"atom", {"mrel", atom::realisticValue("mrel"), "real electrons obey Dirac's equation: heavy atoms have smaller s and p shells and larger d and f than the non-relativistic picture."}},   // 0.41
         // ---- Molecule Lab ----
         {"molecule", {"style", "Density", "the electron density calculated from quantum mechanics (B3LYP); Ball-and-stick and Space-filling are models."}},
         {"molecule", {"dots", "100,000", "the most dots show the same density most smoothly (the physics is the same)."}},
@@ -98,11 +99,7 @@ void applyOrbit(AppState& app) {
     s.moons = s.dwarfs = s.comets = s.belts = s.far = true;
     s.sky = orbit::SkyMode::Full; s.cons = orbit::ConsMode::Off;
 }
-void applyAtom(AppState& app) {
-    atom::AtomLab& L = app.atom;
-    atom::pressTool(L, atom::Tool::Cloud3D);
-    for (const char* k : {"ostyle", "scale", "qstyle", "detail", "style", "cstyle", "cdens", "phase", "dirac", "elec", "rscale", "mrel", "hrel", "vdots"}) L.setParam(k, find("atom", k)->value);
-}
+void applyAtom(AppState& app) { atom::applyRealistic(app.atom); }   // 0.86.0: the values live in atom/atom_tools.h (tested there: no made-up picture, R5)
 void applyMolecule(AppState& app) {
     molecule::MoleculeLab& L = app.molecule;
     L.setStyle(molecule::Style::Realistic);

@@ -1,5 +1,7 @@
 #include "molecule/morse.h"
 
+#include <cstdio>
+
 #include <cmath>
 #include <iterator>
 #include <limits>
@@ -79,6 +81,26 @@ double dissociatedE(const Curve& c) { const int m = vMax(c); return c.De + (leve
 double d0Measured(const std::string& id) { const Row* r = row(id); return r ? r->d0 : kNaN; }
 const char* d0Source(const std::string& id) { const Row* r = row(id); return r ? r->src : ""; }
 double d0Morse(const Curve& c) { return c.De - level(c, 0); }
+MorseGap morseGap(const std::string& id) {
+    MorseGap g;
+    const double d0 = d0Measured(id);
+    if (!has(id) || !std::isfinite(d0)) { g.cm = g.share = kNaN; return g; }
+    const double dm = d0Morse(curve(id));
+    g.cm = dm - d0; g.share = dm / d0 - 1; g.over = dm > d0;
+    return g;
+}
+std::string morseGapWords(const std::string& id) {
+    const MorseGap g = morseGap(id);
+    if (!std::isfinite(g.cm)) return std::string();
+    char b[400];
+    if (g.over)
+        std::snprintf(b, sizeof b, "The Morse curve fixed by ωe and ωexe alone overestimates the dissociation energy: its D₀ is %.0f cm⁻¹ (%.1f %%) above "
+                      "the measured one. Two constants fix only the bottom of the well: higher up the real rungs close up faster than the Morse ladder's "
+                      "straight-line spacing, so the Morse well is too deep.", g.cm, 100 * g.share);
+    else
+        std::snprintf(b, sizeof b, "The Morse curve fixed by ωe and ωexe alone gives a D₀ %.0f cm⁻¹ (%.1f %%) below the measured one.", -g.cm, -100 * g.share);
+    return b;
+}
 
 double alphaPekeris(double we, double wexe, double Be) { return 6 * std::sqrt(wexe * Be * Be * Be) / we - 6 * Be * Be / we; }
 double alphaPekeris(const std::string& id) {

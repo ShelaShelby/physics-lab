@@ -1,5 +1,8 @@
 // Unit tests for the Atom Lab: against NIST (CODATA, ASD), NUBASE2020, AME2020, the IAEA tables, textbook formulas and conservation rules.
 #include <cctype>
+#include <iterator>
+#include <limits>
+#include <fstream>
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
@@ -3189,6 +3192,48 @@ static Miss worstMiss(int Z, int N, bool dirac) {
 
 #include "test_atom0493.inc"  // 0.49.3: the Lamb shift of n = 1, 2 (outside review); here, after the hand-made references it uses
 
+// 0.86.0 (PLAN_REVIEW.md R7): the Dirac energy (atom/dirac.h diracInfiniteEV) against its source, Yerokhin & Shabaev 2015 (YS15), J. Phys. Chem. Ref. Data 44,
+// 033103, Eqs. (2)-(4), and their table's DIRAC row for every Z = 1-110 (1s, 2s-1s, 2p3/2-2p1/2 in h c R_inf, as printed: tools/make_lamb_data.py, lamb_data.inc).
+// Their table used alpha^-1 = 137.035 999 074 (CODATA 2010, read from the extract here); the app uses CODATA 2022's alpha. The table's unit is h c R_inf =
+// alpha^2 m c^2 / 2 ("in Rydbergs", the caption in the extract), so the app's eV are divided by kMecEV alpha^2 / 2.
+//  1. With the paper's alpha (diracInfiniteRy, the same formula): every printed value within half a unit of its last printed digit, plus its bracketed
+//     uncertainty and the double arithmetic's own error (16 units of double's last place on each energy: dirac.h, "good to a few units of the last digit").
+//  2. The app's diracInfiniteEV: within the same, plus the difference the two alphas make (computed: the formula at each alpha), so the bound is derived, not chosen.
+static void testDiracRows086() {
+    std::ifstream f(PL_DATA_DIR "/lamb/yerokhin_shabaev_2015_dirac.extract.txt");
+    std::string ex((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    const std::string key = "\\alpha^{-1} &\\ = ";
+    const std::size_t at = ex.find(key);
+    std::string num;
+    if (at != std::string::npos) for (std::size_t i = at + key.size(); i < ex.size() && ex[i] != '('; i++) if (std::isdigit(static_cast<unsigned char>(ex[i])) || ex[i] == '.') num += ex[i];
+    const double aInv = num.empty() ? 0.0 : std::stod(num);
+    checkTrue("YS15: the alpha their table used, read from the extract (137.035999074, CODATA 2010), and the table is in units of h c R_inf",
+              aInv == 137.035999074 && ex.find("hydrogenlike atoms, in Rydbergs.") != std::string::npos && ex.find("E_{\\rm D} = mc^2\\, \\left[") != std::string::npos);
+    const double ap = 1 / aInv, ry = kMecEV * kAlpha * kAlpha / 2, eps = 16 * std::numeric_limits<double>::epsilon();
+    int rows = 0, badP = 0, badA = 0;
+    double worstP = 0, worstA = 0;
+    for (int Z = 1; Z <= 110; Z++) {
+        const DiracPrinted* d = diracPrinted(Z);
+        if (!d) continue;
+        rows++;
+        const double p1 = diracInfiniteRy(Z, 1, 1, ap), p2 = diracInfiniteRy(Z, 2, 1, ap), p3 = diracInfiniteRy(Z, 2, 3, ap);
+        const double a1 = diracInfiniteEV(Z, 1, 1) / ry, a2 = diracInfiniteEV(Z, 2, 1) / ry, a3 = diracInfiniteEV(Z, 2, 3) / ry;
+        const double vp[3] = {p1, p2 - p1, p3 - p2}, va[3] = {a1, a2 - a1, a3 - a2}, mag[3] = {std::fabs(p1), std::fabs(p1) + std::fabs(p2), std::fabs(p2) + std::fabs(p3)};
+        for (int k = 0; k < 3; k++) {
+            const double unit = std::pow(10.0, -d[k].decimals), bound = 0.5 * unit + d[k].unc * unit + eps * mag[k];
+            const double eP = std::fabs(vp[k] - d[k].v), eA = std::fabs(va[k] - d[k].v), alphaDiff = std::fabs(va[k] - vp[k]);
+            if (eP > bound) badP++;
+            if (eA > bound + alphaDiff + eps * mag[k]) badA++;
+            worstP = std::max(worstP, eP / bound); worstA = std::max(worstA, eA / (bound + alphaDiff + eps * mag[k]));
+        }
+    }
+    checkTrue("YS15 DIRAC rows, Z = 1-110 (1s, 2s-1s, 2p3/2-2p1/2): with the paper's alpha every printed digit (half a unit, bracket, double's error): " + std::to_string(badP) + " off, worst " + std::to_string(worstP) + " of the bound", rows == 110 && badP == 0);
+    checkTrue("YS15 DIRAC rows: the app's diracInfiniteEV (CODATA 2022 alpha) within the same plus the two alphas' difference: " + std::to_string(badA) + " off, worst " + std::to_string(worstA) + " of the bound", rows == 110 && badA == 0);
+    bool zero = true;
+    for (int Z = 1; Z <= 110; Z++) zero = zero && std::fabs(diracInfiniteEV(Z, 2, 1) / ry - diracInfiniteRy(Z, 2, 1)) <= eps * std::fabs(diracInfiniteRy(Z, 2, 1)) * 4;
+    checkTrue("diracInfiniteRy at the app's alpha = diracInfiniteEV / (m c^2 alpha^2 / 2) (2s, every Z, to double's rounding)", zero);
+}
+
 static void testDirac() {
     // Guards = the worst MEASURED value + 1 % (Linux GCC Release; improvement factors: measured - 1 %), from the first run of these tests:
     //  scaling of Dirac - non-relativistic with (Z alpha)^2: 0.50676 -> 0.5118 (the next-order coefficient is 1/2); log-log slope off 2 by at most 1.5412e-2 -> 1.557e-2; miss of the (Z alpha)^4 expansion 0.00782 -> 0.00790;
@@ -4246,6 +4291,35 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_stage4_cloud.inc"   // 0.13 stage 4 part C: the Cloud 2D view's buffers
 #include "test_chart_cache.inc"   // 0.13 stage 4 part B: the chart of nuclides kept on the GPU
 #include "test_atom_tools.inc"   // 0.15 stage 5a: the Atom Lab toolbar buttons -> lab state
+
+// 0.86.0 (PLAN_REVIEW.md R5): the made-up learning pictures (the Orbit picture's gliding electron balls, the Simple quark style's balls and flux tubes, the Nucleons
+// look's colours and glow) are labelled "Made up, for learning" and never the realistic choice. Written before atom_tools' madeUp* and applyRealistic existed.
+//  1. each of the three has the label at the start of its caption, and its value is not the realistic value of its setting;
+//  2. after Most realistic (applyRealistic), for every element Z = 1..118 and each zoom (the whole atom, the nucleus, one nucleon), none of them is on.
+static void testMadeUp086() {
+    bool labels = true;
+    for (const char* k : {"picture", "qstyle", "style"}) {
+        const char* mv = madeUpValue(k);
+        const char* rv = realisticValue(k);
+        labels = labels && mv && rv && std::string(mv) != rv && madeUpChoice(k, mv) && !madeUpChoice(k, rv) && madeUpCaption(k).rfind(std::string(kMadeUpLabel) + ": ", 0) == 0;
+    }
+    checkTrue("made-up pictures: Orbit, Simple and Nucleons each labelled \"Made up, for learning\" in its caption, none the realistic choice", labels && std::string(kMadeUpLabel) == "Made up, for learning" &&
+              std::string(madeUpValue("picture")) == "Orbit" && std::string(madeUpValue("qstyle")) == "Simple" && std::string(madeUpValue("style")) == "Nucleons");
+    AtomLab L;
+    L.viewW = 1000; L.viewH = 700;
+    std::string back;
+    int cases = 0;
+    for (int Z = 1; Z <= 118; Z++)
+        for (Tool t : {Tool::ZoomAtom, Tool::Nucleus, Tool::Nucleon}) {
+            L.setParam("view", std::string("Orbit")); L.setParam("qstyle", std::string("Simple")); L.setParam("style", std::string("Nucleons"));   // every made-up one on first
+            L.setParam("Z", double(Z));
+            applyRealistic(L);
+            pressTool(L, t);
+            cases++;
+            for (const std::string& m : madeUpOn(L)) back += " Z" + std::to_string(Z) + ":" + m;
+        }
+    checkTrue("made-up pictures: after Most realistic none is on, for every element and zoom (" + std::to_string(cases) + " cases;" + (back.empty() ? std::string(" none back)") : back + ")"), back.empty() && cases == 354);
+}
 #include "test_atom_chip.inc"   // 0.15 stage 5b: the element chip and its dropdown's controls
 
 // (0.43: the Accurate quarks are clouds now; the wandering quarks of 0.16 stage 6 and their test testQuarkWander are gone, see git.)
@@ -4497,6 +4571,7 @@ int main() {
     testAsdData();
     testDirac();
     testLamb0493();
+    testDiracRows086();
     testDiracCloud0493();
     testDiracLab0493();
     testDiracPrecision();
@@ -4545,6 +4620,7 @@ int main() {
     testCloudBuffers();
     testChartCache();
     testAtomTools();
+    testMadeUp086();
     testAtomChip();
     testDensityProjection0541();
     testTrueShare0541();

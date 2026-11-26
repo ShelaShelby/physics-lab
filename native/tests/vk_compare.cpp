@@ -40,6 +40,8 @@
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
 #include "orbit/lines_check.h"
+#include "orbit/sky.h"
+#include "orbit/star_light.h"
 #include "render/lines_card.h"
 #include "molecule/surface_check.h"
 #include "render/surface_card.h"
@@ -876,6 +878,72 @@ static void fallback33(const std::string& dir) {
     R33.useVulkan(nullptr);
 }
 
+// 0.86.0: the Orbit Lab's stars on the camera's exposure (orbit/star_light.h skyStarDot, as orbit_view.cpp drawSky draws them with Lighting: True sunlight):
+// the catalogue through the 3D camera's pinhole (F = 900 points, 960 x 600, two directions), the exposure set for Neptune (30.07 au), each shown star a disc of its
+// radius and opacity in its colour bucket's colour over black, drawn by the real renderer on Vulkan. The CPU reference: each pixel's centre through the shader's
+// own edge (kFragmentShader mode 1: 1 - smoothstep(1 - w, 1 + w, d), d = distance / radius, w = |dd/dx| + |dd/dy|), blended over black as the stars are laid in
+// order, then 8 bits. Counted: pixels over 8 levels in any channel (at most 1 % of the pixels any dot touches, the rule of DECISIONS.md "Tests and precision"),
+// and every drawn star's middle pixel lit on the GPU wherever the reference lights it.
+static void starDots(render::Renderer2D& R, const std::string& dir) {
+    const orbit::Sky& S = orbit::skyData();
+    const int W = 960, H = 600;
+    const double F = 900, ppx = W / 2.0, ppy = H / 2.0, white = orbit::sunlitWhite(30.07);
+    for (int view = 0; view < 2; view++) {
+        const double yaw = view ? 2.1 : 0.4, pitch = view ? -0.5 : 0.3, ca = std::cos(yaw), sa = std::sin(yaw), cb = std::cos(pitch), sb = std::sin(pitch);
+        orbit::SkyLens L; L.pinhole = true; L.ppx = ppx; L.ppy = ppy; L.F = F;
+        struct Dot { double x, y, r, a; float c[3]; };
+        std::vector<Dot> dots;
+        for (const auto& st : S.stars) {
+            double X, Y;
+            if (st.mag > 30 || !orbit::skyScreenLens(st.dir, W, H, ca, sa, cb, sb, L, X, Y) || X < 4 || X > W - 4 || Y < 4 || Y > H - 4) continue;
+            const orbit::SkyDot d = orbit::skyStarDot(st.mag, 1, white, orbit::pinholePointSr(F, ppx, ppy, X, Y));
+            if (!d.drawn) continue;
+            const auto& c = S.colours[st.bucket];
+            dots.push_back({X, Y, d.radius, d.alpha, {float(c[0] / 255.0), float(c[1] / 255.0), float(c[2] / 255.0)}});
+        }
+        const Picture gpu = draw1(R, W, H, Color{0, 0, 0, 1}, [&] { for (const Dot& d : dots) R.disc(d.x, d.y, d.r, Color{d.c[0], d.c[1], d.c[2], float(d.a)}); });
+        Picture cpu{W, H, std::vector<unsigned char>(std::size_t(W) * H * 4, 0)};
+        std::vector<double> acc(std::size_t(W) * H * 3, 0.0);
+        std::vector<char> touched(std::size_t(W) * H, 0);
+        for (const Dot& d : dots) {
+            const double half = d.r + 1.5;
+            for (int j = std::max(0, int(d.y - half)); j <= std::min(H - 1, int(d.y + half)); j++)
+                for (int i = std::max(0, int(d.x - half)); i <= std::min(W - 1, int(d.x + half)); i++) {
+                    const double px = i + 0.5 - d.x, py = j + 0.5 - d.y, dist = std::hypot(px, py), dd = dist / d.r;
+                    const double w = dist > 0 ? std::max((std::fabs(px) + std::fabs(py)) / (dist * d.r), 1e-4) : 1e-4;
+                    const double t = std::clamp((dd - (1 - w)) / (2 * w), 0.0, 1.0), edge = 1 - t * t * (3 - 2 * t);
+                    const double a = d.a * edge;
+                    if (a <= 0) continue;
+                    const std::size_t q = std::size_t(j) * W + std::size_t(i);
+                    touched[q] = 1;
+                    for (int k = 0; k < 3; k++) acc[q * 3 + std::size_t(k)] = d.c[k] * a + acc[q * 3 + std::size_t(k)] * (1 - a);
+                }
+        }
+        long over = 0, n = 0;
+        int worst = 0;
+        for (std::size_t q = 0; q < touched.size(); q++) {
+            for (std::size_t k = 0; k < 3; k++) cpu.px[q * 4 + k] = static_cast<unsigned char>(std::lround(255 * std::clamp(acc[q * 3 + k], 0.0, 1.0)));
+            cpu.px[q * 4 + 3] = 255;
+            if (!touched[q]) continue;
+            n++;
+            int m = 0;
+            for (std::size_t k = 0; k < 3; k++) m = std::max(m, std::abs(int(cpu.px[q * 4 + k]) - int(gpu.px[q * 4 + k])));
+            worst = std::max(worst, m);
+            if (m > 8) over++;
+        }
+        int lit = 0;
+        for (const Dot& d : dots) {
+            const std::size_t q = std::size_t(int(d.y)) * W + std::size_t(int(d.x));
+            const bool refLit = cpu.px[q * 4] + cpu.px[q * 4 + 1] + cpu.px[q * 4 + 2] > 0, gpuLit = gpu.px[q * 4] + gpu.px[q * 4 + 1] + gpu.px[q * 4 + 2] > 0;
+            if (gpuLit == refLit) lit++;
+        }
+        std::printf("stars on Neptune's exposure, view %d: %zu dots, %ld pixels touched, %ld over 8 levels (largest %d), %d of the dots' middles as the reference\n", view, dots.size(), n, over, worst, lit);
+        check("stars on the exposure (view " + std::to_string(view) + "): the GPU dots against the CPU reference, at most 1 % of the touched pixels over 8 levels, every middle lit alike",
+              dots.size() >= 50 && n > 0 && over * 100 <= n && lit == int(dots.size()));   // (the floor of 50 dots set after the first run: 198 and 93)
+        save(dir, "stars_exposure_" + std::to_string(view), cpu, gpu);
+    }
+}
+
 // 0.85.2: each part's name printed (and flushed) before it runs, so a crash on a driver names the part it died in (stdout is unbuffered too)
 static void part(const char* name) { std::printf("PART %s\n", name); std::fflush(stdout); }
 
@@ -916,6 +984,7 @@ int main(int argc, char** argv) {
     part("gpuGrains"); gpuGrains(R);   // 0.78.0
     part("chartPictures"); chartPictures(R, dir);
     part("chartShaderRules"); chartShaderRules(R);
+    part("starDots"); starDots(R, dir);   // 0.86.0
     part("fallback33"); fallback33(dir);
     vkDeviceWaitIdle(g_vk.dev);
     R.useVulkan(nullptr);                                              // (the card programs' objects deleted before the device)

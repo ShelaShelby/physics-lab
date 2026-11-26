@@ -6,6 +6,7 @@
 #include "atom/atom_core.h"
 #include "atom/atom_tools.h"
 #include "imgui.h"
+#include "orbit/star_light.h"
 #include "orbit/card_text.h"
 #include "orbit/date_text.h"
 #include "orbit/marker_colors.h"
@@ -368,7 +369,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         int sky = static_cast<int>(set.sky);
         real::markLabels("orbit", "sky", {"Soft", "Full", "Off"});
         if (pSegmented(p, "show.sky", {"Soft", "Full", "Off"}, &sky)) set.sky = static_cast<orbit::SkyMode>(sky);
-        pCaption(p, sky == 0 ? "dim close up, brighter as you zoom out" : sky == 1 ? "always bright" : "plain background");
+        pCaption(p, orbit::skyCaption(sky, set.trueLight && !set.alphaCen));   // 0.86.0: the exposure, or the squeezed range (orbit/star_light.h)
         if (!set.alphaCen) {   // 0.85.0 (outside review, R1): the sunlight at each body's distance, a camera's exposure (orbit/true_light.h)
             pHeading(p, "Lighting");
             int light = set.trueLight ? 0 : 1;

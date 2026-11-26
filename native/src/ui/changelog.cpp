@@ -19,6 +19,20 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.86.0", "Honest pictures: the words match what is drawn, and the stars on the camera's exposure",
+     "Orbit Lab: with Lighting: True sunlight the stars now share the planets' camera exposure. Each star is drawn by its true light, from its measured "
+     "brightness against the Sun's, and only when it reaches the faintest step the screen can show. A camera exposed for a sunlit planet near the Sun "
+     "records no stars, as photos from the Moon show; followed far out, at Neptune, nearly every star of the catalogue appears. The Milky Way's map has no "
+     "calibrated brightness, so it is not drawn then. With Even lighting the sky is exactly as before, and the Sky choice now says that its brightness "
+     "range is squeezed so the faint stars stay visible, with the numbers. "
+     "Black Hole Lab: the words now follow the disc that is drawn. Without spin the disc is drawn at its calculated thickness, and the captions say so (they "
+     "still said \"flat, thin\" and \"a line\" edge on). The thickness round a spinning hole is now calculated with the spin's own term (Abramowicz and "
+     "Fragile 2013) and shown in numbers; the picture still draws that disc in its plane, and says so beside the Spin slider. Film now shows only the film "
+     "paper's own choices: the lab's own glow and its soft, see-through disc are gone, and the caption says the film's lens flare is not drawn because its "
+     "measured blur is not published. The guide says which gas each of the lab's two opacities is for. "
+     "Molecule Lab: the Bond energy card says by how much the Morse curve overestimates the dissociation energy, computed for each molecule. "
+     "Atom Lab: the Orbit picture, the Simple quark style and the Nucleons look are labelled \"Made up, for learning\", and Most realistic never shows them. "
+     "The Dirac energy now names its source (Yerokhin and Shabaev 2015) and is checked against that paper's table for every element up to 110."},
     {"0.85.6", "Black Hole Lab: the build is whole again",
      "0.85.5 left one of the spinning hole's graphics card programs out of the build by mistake, so a fresh build failed. It is back. Nothing you "
      "see changed."},

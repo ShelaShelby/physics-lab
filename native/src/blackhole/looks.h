@@ -13,8 +13,8 @@
 //     audience". The paper's own disc figures 13 and 14 use a/M = 0.999 (above this lab's top, 0.99).
 //   - the disc: section 4.1.1 p. 26: "physically thin and marginally optically thick", in the equatorial plane, "not currently accreting", "cooled to a
 //     position-independent temperature T = 4500K, at which it emits a black-body spectrum". Drawn here as the model disc's geometry (the same thin opaque
-//     disc in the equatorial plane, the same ray tables) with one temperature: "marginally optically thick" is drawn opaque (the lab has no partly
-//     transparent disc). 0.81.0: partly see-through and soft-edged, the lab's own (below, kFilmFade, kFilmTau).
+//     disc in the equatorial plane, the same ray tables) with one temperature: "marginally optically thick" is drawn opaque, with hard edges (J15 publishes
+//     no texture, density or edge profile). 0.81.0 to 0.85: partly see-through and soft-edged, the lab's own; removed in 0.86.0 (PLAN_REVIEW.md R6).
 //   - its edges: the caption of Figure 13 p. 24: "inner and outer radii r = 9.26M and r = 18.70M" (the paint-swatch disc; Figure 14's artists' disc is drawn
 //     "with the same geometry", p. 25, and Figure 15a is that disc at a/M = 0.6, p. 27). The paper gives no other edges for the film's disc.
 //   - no shift: Figure 15a and its caption p. 27, Figure 16's caption p. 28 ("no colour or brightness shifts"); section 4.1.1 p. 24: the light's specific
@@ -25,8 +25,8 @@
 //     picture film" (its ref. [64], not in the paper): here the CIE 1931 observer and sRGB (disc.h blackBodyLinear, like every black body in the app) take
 //     their place, with one gain per channel so that a 6500 K black body has equal red, green and blue (and its own luminance Y).
 //   - the glow: Figure 16's caption p. 28 ("veiling flare", "the look of a soft glow"), section 4.3.1 p. 29: made by convolving the picture with the measured
-//     point-spread function of the IMAX lenses, which the paper does not publish. The app's glow is its OWN, a simple blur of the disc's bright parts (glow* below);
-//     the label says so ("our own glow, in place of the film's lens flare").
+//     point-spread function of the IMAX lenses, which the paper does not publish. So the lens flare is not drawn (the caption says so). 0.55.3 to 0.85: the
+//     app's own blur of the disc's bright parts stood in for it; removed in 0.86.0 (PLAN_REVIEW.md R6: Film shows only J15's choices).
 //   - the paper's view: Figure 13's caption p. 24: "a camera at rc = 74.1M and theta_c = 1.511 (86.56 deg)". The caption gives the camera's place only (not
 //     its motion nor its field of view); the lab's camera hovers there.
 //   NOT in the paper, so not in the app: the black hole's mass (no number is given), the artists' textures (section 4.3.2, App. A.6), the measured lens flare,
@@ -67,11 +67,9 @@ struct LookRule {
     double discT = 0;
     bool whiteBalance = false;                      // Film: a black body at whiteT drawn with equal channels
     double whiteT = 0;
-    bool glow = false;                              // Film: the app's own glow (glow* below)
     bool fixedSpin = false;                         // Film: the spin and the disc are the film's, the controls locked
     double spin = 0;
     double rIn = 0, rOut = 0;
-    double fade = 0, tau = 0;                       // 0.81.0, Film: the lab's own soft edges and see-through disc (below); 0: hard edges, opaque (Real)
 };
 LookRule lookRule(Look l);
 
@@ -80,38 +78,6 @@ std::array<double, 3> whiteBalanceGains(double whiteT);
 // The Film disc's light: the black body at discT through the white balance, linear sRGB in units of the Sun's surface luminance, and its luminance Y
 std::array<double, 3> filmDiscLinear();
 double filmDiscY();
-
-// THE GLOW (the app's own; no source: J15's flare is a measured point-spread function it does not publish). Its rule: the part of each pixel's linear light
-// FROM THE DISC AND ITS IMAGES ONLY (0.55.4: the film's flare came from its bright disc; the sky and the stars are drawn unchanged under the glow; until 0.55.3
-// the whole picture, so the Milky Way was washed out) above kGlowThreshold of the screen's white (per channel), averaged over 4 x 4 pixel blocks, blurred by a Gaussian of standard deviation kGlowSigma x the
-// picture's height (in two passes, rows then columns, over at most 3 sigma, light outside the picture counted as none), and kGlowStrength of it added back
-// (bilinear between the blocks' centres) in linear light. It adds light only, never darkens a pixel; it does not conserve light: away from the picture's
-// edges it adds kGlowStrength x the light above the threshold, spread out (the kernel sums to 1).
-constexpr double kGlowThreshold = 0.5, kGlowStrength = 0.6, kGlowSigma = 1.0 / 80;
-constexpr int kGlowBlock = 4;
-// the blur's standard deviation and reach in block units for a picture H pixels high
-double glowSigmaBlocks(int H);
-int glowRadiusBlocks(int H);
-// The reference (double): lin is W x H x 3 linear light of the disc alone over the screen's white, row by row; returns the glow to add (same layout), not yet times the strength
-std::vector<double> glowReference(const std::vector<double>& lin, int W, int H);
-
-// 0.81.0 (PLAN_DISC.md D4): THE FILM DISC'S SOFT EDGES AND SEE-THROUGH. Both are THE LAB'S OWN, NOT THE FILM'S. J15 says the disc is "physically thin and
-// marginally optically thick" (section 4.1.1 p. 26). Its App. A.6 (pp. 42-43) samples a thin disc "at each intersection" with the beam attenuated "by the
-// optical thickness", and builds a volume disc in Houdini (about 17 million voxels). It publishes no texture, density, voxel or edge-profile numbers.
-//   - the fade: the disc's cover goes from 0 at J15's edges (rIn, rOut) to 1 at kFilmFade inside them, in ln r, by the smoothstep 3x^2 - 2x^3 (value and slope
-//     continuous; slope 0 at both ends). The width is the lab's choice: tools/discproto's 0.12 (docs/blackhole/disc081_film.txt shows 0.06, 0.12, 0.2).
-//   - the see-through: each crossing of the disc's plane covers c = 1 - exp(-tau) of what is behind it, tau = kFilmTau x S x edge (S: the streaks' factor,
-//     gas.h; edge: the fade). kFilmTau = 1.5 is the lab's choice standing for "marginally optically thick" (tools/discproto's). The crossings are laid front to
-//     back: the pixel gets L1 c1 + L2 c2 (1 - c1) + ..., and the part (1 - c1)(1 - c2)... of the sky behind. A crossing's light L is the film's one colour
-//     (times the moving gas's factor), unchanged by tau: tau sets only how much of the pixel it covers. As tau -> infinity every crossing inside the edges
-//     covers 1 and the opaque disc of 0.55-0.80 comes back exactly.
-constexpr double kFilmFade = 0.12, kFilmTau = 1.5;
-double filmEdge(double r, double rIn, double rOut, double fade = kFilmFade);   // the fade (1 well inside, 0 at and beyond the edges)
-double filmTau(double S, double edge, double scale = kFilmTau);              // scale x S x edge (0 where S or edge is 0, also for an infinite scale)
-double filmCover(double tau);                                                // 1 - exp(-tau) (1 for an infinite tau)
-struct FilmLayer { std::array<double, 3> light{}; double cover = 0; };
-// the crossings laid front to back (layers[0] nearest the camera): sum of L_k c_k prod_{j<k} (1 - c_j); left (if given): prod (1 - c_k), the part of what is behind
-std::array<double, 3> layFrontToBack(const std::vector<FilmLayer>& layers, double* left = nullptr);
 
 // The guide's table "What the film changed": one row per choice
 struct FilmRow { std::string physics, choice, reason, where; };
