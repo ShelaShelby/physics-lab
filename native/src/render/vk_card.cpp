@@ -68,13 +68,13 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "slice") return "vulkan " + sliceShaderId();
     if (name == "jump") return "vulkan " + jumpShaderId();
     if (name == "lightpaths") return vkCardId("lightpaths", {kKerrTableCS});                       // 0.62.0 (step 4): the Black Hole Lab's
-    if (name == "sky") return vkCardId("sky", {kKerrSkyTinyFS, kKerrSkyHeadPart, kEllipticPart, kKerrSkyMathPart, kKerrSkyTracePart, kGasPart, kKerrSkyMainPart});
+    if (name == "sky") return vkCardId("sky", {kKerrSkyTinyFS, kKerrSkyHeadPart, kEllipticPart, kKerrSkyMathPart, kKerrSkyTracePart, kGasPart, kDiscLightPart, kKerrSkyMainPart});
     if (name == "rings") return vkCardId("rings", {kVertexShader, kRingsHeadFSPart, kRingsHeadCSPart, kRingsPart, kRingsMainFSPart, kRingsMainCSPart});   // 0.64.0
     if (name == "classic") return vkCardId("classic", {kClassicCS, kBlobVS, kBlobFS});   // 0.64.0
     if (name == "nucdensity") return vkCardId("nucdensity", {kNucDensCS, kBlobVS, kBlobFS});   // 0.67.0
     if (name == "surface") return vkCardId("surface", {kSurfaceCS, kSurfaceVSHeadPart, kSurfaceVSMainPart, kFragmentShader});   // 0.68.0
     if (name == "lines") return vkCardId("lines", {kLinesHeadCSPart, kLinesPart, kLinesMainCSPart, kLinesHeadVSPart, kLinesMainVSPart, kFragmentShader});   // 0.68.0
-    if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensHeadPart, kGasPart, kLensMainPart, kKerrFS, kMaxDownFS, kExpSumFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
+    if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensHeadPart, kGasPart, kDiscLightPart, kLensMainPart, kKerrHeadPart, kKerrMainPart, kMaxDownFS, kExpSumFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
     return "vulkan " + molCloudShaderId();
 }
 

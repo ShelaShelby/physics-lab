@@ -11,7 +11,7 @@ std::string kerrSkySource(int stage) {
     if (stage == 0) return kKerrSkyTinyFS;
     if (stage == 1) return std::string(kKerrSkyHeadPart) + kEllipticPart + kKerrSkyMathPart;
     static const char* stop = std::getenv("PL_BH_SKYSTOP");             // (tests, 0.56.2: the pass's parts timed: the ray stops after part 1, 2 or 3)
-    return std::string(kKerrSkyHeadPart) + (stop ? std::string("#define SKY_STOP ") + stop + "\n" : std::string()) + kEllipticPart + kKerrSkyTracePart + kGasPart + kKerrSkyMainPart;
+    return std::string(kKerrSkyHeadPart) + (stop ? std::string("#define SKY_STOP ") + stop + "\n" : std::string()) + kEllipticPart + kKerrSkyTracePart + kGasPart + kDiscLightPart + kKerrSkyMainPart;
 }
 
 std::string kerrSkyShaderId() {

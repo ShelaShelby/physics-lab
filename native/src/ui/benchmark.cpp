@@ -1150,7 +1150,8 @@ std::vector<std::string> filmCompare(const PixelGrab& a, const PixelGrab& r) {
 
 // ---- 0.56.1, Part 2: the waits. Each is done app::kBenchResponseRepeats times: prepare (the state before), wait until its picture is finished, act, then time
 // until the lab's picture is finished again (benchLabFinished), at the end of the frame that draws it. ----
-struct WaitDef { const char* id; const char* name; const char* what; };
+struct WaitDef { const char* id; const char* name; const char* what; int tries = app::kBenchResponseRepeats; };   // (0.87.0: tries, per line)
+int waitTries(int w);
 const std::vector<WaitDef>& waitDefs() {
     static const std::vector<WaitDef> v = {
         {"response.lab_switch.orbit_atom", "From the Orbit Lab to the Atom Lab", "each lab at its defaults; the time to the new lab's first finished picture"},
@@ -1161,6 +1162,9 @@ const std::vector<WaitDef>& waitDefs() {
         {"response.atom_density", "Cloud density Normal to Ultra, every electron", "oganesson, Cloud 3D, every electron: Cloud density from Normal (60,000 dots) to Ultra (240,000); until the cloud is complete"},
         {"response.molecule_pick", "Another molecule in the Density style", "Density style, 100,000 dots, cloud and surface: water to benzene, benzene to methanol, methanol to ethylene; until its cloud and surface are made"},
         {"response.blackhole_spin", "A new spin and distance typed in", "a feeding hole, Real look: from spin 0.5 at 20 GM/c\xC2\xB2 to 0.8, 0.85, 0.9 at 15, 18, 21 GM/c\xC2\xB2; until the sharp picture"},
+        {"response.blackhole_return", "The returning light at a new spin", "a feeding hole, Real look, spin 0.9 at 20 GM/c\xC2\xB2: the spin typed in as 0.95 (0.87.0: the "
+                                                                     "light the disc sends back to itself is worked out once per spin, on the card's light paths or the processor, and "
+                                                                     "kept; so done once, a spin new to the run); until the picture with it", 1},
         {"response.blackhole_look", "Real to Film", "a feeding hole: the look changed from Real to Film; until the finished picture"},
         {"response.blackhole_look_back", "Film back to Real", "the look changed from Film back to Real (with the glare); until the finished picture"},
         {"response.blackhole_streaks", "The disc's streaks made", "a feeding hole, Real look, the streaks off: their field (gas.h, made once at start-up on a worker) made again from "
@@ -1218,6 +1222,7 @@ void waitPrepare(AppState& app, int w, int t) {
         app.blackhole = blackhole::settingsDefaults();
         blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
         if (id == "response.blackhole_spin") { blackhole::setSpin(app.blackhole, 0.5); blackhole::setDistance(app.blackhole, 20); }
+        if (id == "response.blackhole_return") { blackhole::setSpin(app.blackhole, 0.9); blackhole::setDistance(app.blackhole, 20); }
         if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Film);
         if (id == "response.blackhole_streaks") app.blackhole.gasPattern = false;
         if (id == "response.blackhole_dolly") { blackhole::setSpin(app.blackhole, 0.9); blackhole::setDistance(app.blackhole, 20); }
@@ -1237,6 +1242,7 @@ void waitPrepare(AppState& app, int w, int t) {
         app.paused = true;
     }
 }
+int waitTries(int w) { return waitDefs()[std::size_t(w)].tries; }
 void waitAct(AppState& app, int w, int t) {
     const std::string id = waitDefs()[std::size_t(w)].id;
     static const char* const mols[4] = {"H2O", "C6H6", "CH3OH", "C2H4"};
@@ -1248,6 +1254,7 @@ void waitAct(AppState& app, int w, int t) {
     else if (id == "response.atom_density") app.atom.setParam("cdens", std::string("Ultra"));
     else if (id == "response.molecule_pick") app.molecule.choose(moleculeIndex(mols[t + 1]));
     else if (id == "response.blackhole_spin") { blackhole::setSpin(app.blackhole, 0.8 + 0.05 * t); blackhole::setDistance(app.blackhole, 15 + 3 * t); }
+    else if (id == "response.blackhole_return") blackhole::setSpin(app.blackhole, 0.95);
     else if (id == "response.blackhole_look") blackhole::setLook(app.blackhole, blackhole::Look::Film);
     else if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Real);
     else if (id == "response.blackhole_streaks") { blackhole::streakFieldRemake(); app.blackhole.gasPattern = true; }
@@ -1582,7 +1589,7 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
                 b.wStage = 3; b.wStageS = 0;
             }
         } else if (b.wStage == 3 && b.wStageS >= 0.2) {             // a short pause, then the next try
-            if (++b.wTry >= app::kBenchResponseRepeats) { b.wTry = 0; b.wAt++; }
+            if (++b.wTry >= waitTries(b.waits[std::size_t(b.wAt)])) { b.wTry = 0; b.wAt++; }
             b.wStage = 0;
         }
     } else if (b.phase == 2 && b.rAt < int(b.rests.size())) {
@@ -1946,15 +1953,17 @@ void benchmarkWindow(AppState& app) {
                     ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
                 } else if (b.phase == 1 && b.wAt < int(b.waits.size())) {
                     ImGui::Text("Wait %d of %d: %s", b.wAt + 1, int(b.waits.size()), waitDefs()[std::size_t(b.waits[std::size_t(b.wAt)])].id);
-                    ImGui::Text("Try %d of %d", b.wTry + 1, app::kBenchResponseRepeats);
+                    ImGui::Text("Try %d of %d", b.wTry + 1, waitTries(b.waits[std::size_t(b.wAt)]));
                 } else if (b.phase == 2 && b.rAt < int(b.rests.size())) {
                     ImGui::Text("At rest %d of %d: %s", b.rAt + 1, int(b.rests.size()), restDefs()[std::size_t(b.rests[std::size_t(b.rAt)])].id);
                     ImGui::Text("%s", b.rStage == 2 ? "Counting" : "Waiting for the finished picture");
                 }
                 const double fps = app.stats.avgFrame() > 0 ? 1000.0 / app.stats.avgFrame() : 0;
                 ImGui::Text("Live: %.0f fps", fps);
-                {   const double total = r.totalS() + b.waits.size() * app::kBenchResponseRepeats * app::kBenchResponsePlanS + b.rests.size() * app::kBenchIdlePlanS;
-                    const double done = r.doneS() + (b.phase >= 1 ? (b.wAt * app::kBenchResponseRepeats + b.wTry) * app::kBenchResponsePlanS : 0) + (b.phase >= 2 ? b.rAt * app::kBenchIdlePlanS : 0);
+                {   int allTries = 0, doneTries = b.wTry;
+                    for (std::size_t q = 0; q < b.waits.size(); q++) { allTries += waitTries(b.waits[q]); if (int(q) < b.wAt) doneTries += waitTries(b.waits[q]); }
+                    const double total = r.totalS() + allTries * app::kBenchResponsePlanS + b.rests.size() * app::kBenchIdlePlanS;
+                    const double done = r.doneS() + (b.phase >= 1 ? doneTries * app::kBenchResponsePlanS : 0) + (b.phase >= 2 ? b.rAt * app::kBenchIdlePlanS : 0);
                     ImGui::ProgressBar(float(total > 0 ? std::min(1.0, done / total) : 1.0), ImVec2(24 * fs, 0)); }
                 ImGui::TextDisabled("Everything else is locked until the test ends.");
                 if (ImGui::Button("Cancel")) cancel = true;

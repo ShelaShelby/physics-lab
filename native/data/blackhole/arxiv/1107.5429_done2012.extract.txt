@@ -4,10 +4,10 @@
 # URL: https://arxiv.org/pdf/1107.5429
 # Date read: 2026-11-25
 # sha256 of the original: 1b7f9ac8d0181bda1c9822c9952887fee7214b1a9d1fbda6a41c266e113aae38
-# Place in the original: section 2, Equation (1) (p. 2), Equation (2) and the summary (p. 4)
+# Place in the original: section 2, Equation (1) (p. 2), Equation (1) at the peak temperatures 4 x 10^5 K and 3 x 10^5 K (p. 3), Equation (2), its use at each radius and the summary (p. 4)
 # Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
 # native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
-# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); tests/test_blackhole.cpp testColourCorrection087 (0.87.0: blackhole/disc.h colourCorrection)
 #--- begin Equation (1)
 cal mechanism transporting angular momentum: Balbus & Hawley             the colour temperature correction to a value
 1991) there is currently no straightforward way to parameterise the                             fcol ∼ (72/TkeV )1/9                       (1)
@@ -28,4 +28,17 @@ tures, so are not well described by a set of (colour temperature                
 corrected) blackbodies. Nonetheless, these spectra can be roughly             roughly described by a colour temperature corrected sum of black-
 modelled with Tscatt = 4 × 104 K and fcol = 2 and 1.8 for (M ,                body spectra, where the value of the colour temperature correction
 L/LEdd ) of (108 M⊙ , 0.2) and (2 × 108 M⊙ , 0.05), respectively              factor is approximately unity in the optical part of the spectrum, but
+#--- end
+#--- begin Equation (1) at 4 x 10^5 K
+                                                                                    for a 106 M⊙ Schwarzchild black hole accreting at L/LEdd = 1.
+are at much higher temperature than AGN discs as T ∝ M −1/4 ,
+                                                                                    The peak effective disc temperature of 4 × 105 K gives fcol = 2.34
+#--- end
+#--- begin Equation (1) at 3 x 10^5 K
+These disc parameters predict a peak disc temperature of 3×105 K,
+so Equation 1 gives fcol = 2.4, in excellent agreement with Ross                          The value of the colour temperature correction in the general
+#--- end
+#--- begin Equations 1 and 2 at each radius
+∝ M 2 L/LEdd i.e. is the same for both models. The full radia-                well matched to the full radiative transfer models by combining
+tive transfer spectra (red solid lines) again have strong edge fea-           Equations 1 and 2 to calculate fcol at each radius in the disc.
 #--- end

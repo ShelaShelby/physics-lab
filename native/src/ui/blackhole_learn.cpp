@@ -91,16 +91,31 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "keeps " + fmt::precision(100 * (1 - blackhole::glareShare()), 3) + " % of each point's light within 0.1° and spreads the rest. Not drawn: the structure "
           "within 0.1° (each eye's own), the eye's adaptation, afterimages, coloured rings and streaks, and the change of scatter with colour. A camera's lens would "
           "show a different veil.") +
-        p("<b>The model's limits.</b> Flat, thin, opaque, each face a perfect black body, steady. No turbulence, hot spots, jets or wind; no light from inside the inner "
-          "edge; no light of the disc falling back on itself; each face shines the same in every direction. The gas orbits with the hole's spin, in its plane. The disc lies in a plane the lab chose (parallel to the Earth's orbit, the gas going round as the planets do): its direction against the sky "
+        p("<b>The model's limits.</b> Flat, thin, opaque, steady. No turbulence, hot spots, jets or wind; no light from inside the inner "
+          "edge. Each face's light follows three rules from radiative transfer (below), each an approximation. The gas orbits with the hole's spin, in its plane. The disc lies in a plane the lab chose (parallel to the Earth's orbit, the gas going round as the planets do): its direction against the sky "
           "is not something measured. Sagittarius A* and M87* do not have such a disc; on them the lab labels it as a what-if.") +
-        // 0.77.0 (outside review item 6): two choices the model makes and did not say. Both papers are named in Li et al. 2005 (ApJS 157, 335, arXiv:astro-ph/0411583,
-        // saved: data/blackhole/li2005_arxiv0411583.pdf): its Appendix D (limb-darkened emission, citing Chandrasekhar 1950) and Sec. 2 (f_col = T_col / T_eff, after
-        // Shimura & Takahara 1995, ApJ 445, 780). The disc is not changed (ROADMAP).
-        p("<b>Two simplifications in the light.</b> Each face shines as a perfect black body at its own temperature, equally in every direction. A real hot disc "
-          "has an atmosphere where electrons scatter the light. That darkens its face towards the edge, seen at a slant (the law for an atmosphere that scatters off "
-          "electrons is Chandrasekhar's, in his book Radiative Transfer, 1950). It also makes the light come out harder, bluer than a black body at the same "
-          "temperature (a colour-correction factor, Shimura and Takahara 1995). The lab draws neither.") +
+        // 0.87.0 (native/PLAN_REVIEW.md R9-R11; blackhole/disc.h THE DISC'S REAL LIGHT, returning.h): the three rules drawn, each with its limits as the plan
+        // states them. (0.77.0 to 0.86.0: "The lab draws neither" of the first two.)
+        p("<b>The disc's real light</b> (Real). A real hot disc has an atmosphere where electrons scatter the light, and gravity bends some of its light back "
+          "onto it. The lab draws three effects of that, each from a paper and each an approximation:") +
+        p("<b>Bluer and dimmer: the colour correction.</b> Scattering makes the light come out harder than a black body at the gas's temperature: each ring sends "
+          "the light of a black body f times hotter, dimmed f⁴ times, so its total light is unchanged (Done et al. 2012, their equations 1 and 2, used at each "
+          "radius). f is 1 below 30,000 K, about 2.7 at 100,000 K and about 1.6 near 10 million K. So a small, hot disc looks a little bluer and dimmer in visible "
+          "light; a cool disc does not change. For stellar-mass discs Shimura and Takahara 1995 found f near 1.7 at a tenth of the Eddington rate. Limits: an "
+          "approximate rule fitted to radiative-transfer models of discs round holes that do not spin; the card gives f at the hottest ring.") +
+        p("<b>Darker towards the edge: limb darkening.</b> The face of an atmosphere that only scatters off electrons is about three times brighter seen "
+          "straight on than seen at a grazing angle (Chandrasekhar 1946, Table 2: 1.2628 against 0.4151). Each ray's angle to the disc's face is taken in the "
+          "moving gas's own frame. The law is scaled so that each face still sends the thin disc's flux. Limits: grey, pure electron scattering, deep and "
+          "plane-parallel; no absorption and not the disc's real layers; the table is the paper's third approximation (it sends 0.991 of the flux, so the lab "
+          "scales it up); between its 11 points a cubic (a choice); the polarisation it gives is not drawn; on the thick disc (no spin) the angle is to the plane, "
+          "not to the tilted surface.") +
+        p("<b>Light that comes back: returning radiation.</b> Gravity bends some of the disc's light back onto the disc, which takes it in and sends it out "
+          "again, so the disc is hotter than its own heat makes it (Cunningham 1976, equations 7a and 8a). The lab follows the light paths from 32 rings, "
+          "32,768 paths each, once per spin (on the graphics card when its light paths are on), and checks them against Cunningham's Tables 1 and 2 at spins 0.9 "
+          "and 0.99. Without spin the returned light is about 2 % of the disc's own (about 0.5 % in temperature: nothing to see); at spin 0.99 it is about 15 % "
+          "(about 4 % in temperature), at every radius. Limits: a thin, steady disc; the returned light taken in and sent out again (Cunningham's assumption); "
+          "its push on the gas (his equation 8b) left out; the falling gas inside the innermost orbit dark; the light sent equally in every direction for this "
+          "sum (Cunningham: limb darkening changes it by a few percent). Until a new spin's sum is made the disc is drawn without it.") +
         p("<b>Drawn: your own place.</b> Held still near the hole, you see all the light that falls in towards you bluer and brighter, the disc and the stars alike: "
           "each colour temperature times the card's factor, the light by its fourth power (Riazuelo 2019, eqs. 52, 53). Without spin it is one factor for the whole "
           "picture; round a spinning hole each ray has its own. Exact for a camera held still (not falling, not orbiting). The faint sky map is not shifted: it has no "
@@ -144,7 +159,7 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "appendix B, one zone in height). At a tenth of the Eddington limit it is at most about 1.5 % of its radius thick, near 20 GM/c²: the bright disc of a feeding "
           "hole really is nearly flat, which is why it shows only as a slightly fuller inner rim. It thins to nothing at the innermost stable orbit, where the gas "
           "stops making heat, instead of ending at a sharp line. Limits: one zone in height; the surface drawn opaque at h; the gas at the surface moving as in the "
-          "plane; no darkening towards the disc's edge; no light from inside the innermost orbit (simulations put about 4 % of the light there). Round a spinning "
+          "plane; its darkening towards the edge taken against the plane, not the tilted surface; no light from inside the innermost orbit (simulations put about 4 % of the light there). Round a spinning "
           "hole the thickness is calculated with the spin's own term in the hole's pull (Abramowicz and Fragile 2013, eq. 92, the form that gives their vertical "
           "frequency, eq. 40) and shown in numbers, but the disc is drawn in its plane: the lab's light paths round a spinning hole find only where they cross "
           "the plane, not a surface above it.") +

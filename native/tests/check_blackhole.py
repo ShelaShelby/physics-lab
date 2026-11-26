@@ -192,7 +192,7 @@ def precision_card(binary, work):
     # table's tolerance is 1e-10; blackhole_physics asks 1e-9 at 1e-11), no worse than 10 x the processor's own same rays.
     r = run_app(binary, work, "bh_precision_card", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="card"), frames=3, timeout=3000)
     for ln in r.out.splitlines():
-        if ln.startswith("PLBHCARD"): print(ln)
+        if ln.startswith("PLBHCARD") or ln.startswith("PLBHRET"): print(ln)
     m = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDMATH ")]
     check(len(m) == 1, "the card's double functions were compared")
     if m:
@@ -201,6 +201,10 @@ def precision_card(binary, work):
               f"the shader's double functions = the C++ library's ({' '.join(k + '=' + x[k] for k in ('sin', 'cos', 'exp', 'log', 'atan2', 'acos', 'cbrt', 'pow'))})")
     c = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDCHECK ")]
     check(len(c) == 1 and c[0]["ok"] == "1", f"the start-up check passes on this renderer ({c[0] if c else None})")
+    # 0.87.0 (PLAN_REVIEW R11): the returning light's table made on the card against the processor's, the same rays (blackhole_view.cpp): the flux sent,
+    # F + F_o, within 1 % at every radius (test_blackhole.cpp R11 (c)'s limit: below 8 levels of 255), every ray answered, at spin 0 and the top spin
+    rt = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHRET ")]
+    check(len(rt) == 2 and all(float(x["rel"]) < 0.01 and x["unanswered"] == "0" for x in rt), f"the returning light on the card = the processor's ({[(x['a'], x['rel'], x['unanswered']) for x in rt]})")
     t = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDT ")]
     check(len(t) == 3 and {x["case"] for x in t} == {"benchmark", "film", "top"}, f"three tables compared ({len(t)})")
     for x in t:
@@ -292,7 +296,9 @@ def precision_sky(binary, work):
     # 0.79.0: case "streaks", the feeding preset's surface, streaks and clump at 10^6 M of running against the processor's (blackhole_view.cpp toneCompare)
     # 0.84.0: the held camera's own shift drawn: "close" (spin 0, 2.2 GM/c^2, the whole sky round: the shadow fills a narrower view), "closespin" (spin 0.99,
     # 2.2), "pole" (0.99, 2.2, 8 degrees from the axis) and "closetable" (as closespin on the table's pass kKerrFS, the processor's exposure): the same limit
-    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks", "close", "closespin", "pole", "closetable"}, f"the curve's picture compared at spin 0 near and far, at 0.9, with the streaks, and at the closest distance with no spin, the top spin, over the pole and on the table's pass ({len(tc)})")
+    # 0.87.0 (the disc's real light, PLAN_REVIEW R9, R10): "hot" (10 solar masses: the colour correction well above 1), "edgesky" and "edgetable" (spin 0.99,
+    # 85 degrees from the pole: the limb darkening's grazing rays, on the sky pass and the table pass): the same limit. Every case draws the real light.
+    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks", "close", "closespin", "pole", "closetable", "hot", "edgesky", "edgetable"}, f"the curve's picture compared at spin 0 near and far, at 0.9, with the streaks, at the closest distance with no spin, the top spin, over the pole, on the table's pass, a hot disc and nearly edge on ({len(tc)})")
     for x in tc:
         floor = 2000 if x["case"] == "close" else 50000                   # (0.84.0: from 2.2 GM/c^2 with no spin the disc covers about 5,100 inner pixels of the whole sky round)
         check(x["ok"] == "1" and int(x["pixels"]) > floor and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")

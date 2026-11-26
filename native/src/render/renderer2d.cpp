@@ -71,7 +71,8 @@ bool Renderer2D::lensSameView(const LensSky& P, const LensSky& L, bool ksky, boo
     return P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && std::equal(L.fido, L.fido + 2, P.fido) && P.bright == L.bright && P.bend == L.bend &&
                       P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width == lastPtW &&
                       P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
-                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
+                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white &&
+                      std::equal(L.discLight, L.discLight + 4, P.discLight) && P.retVersion == L.retVersion)) &&
                       P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
                       P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) &&
                       P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil &&

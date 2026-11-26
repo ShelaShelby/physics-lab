@@ -1,5 +1,6 @@
 #include "app/frame_cost.h"
 #include "blackhole/blackhole_view.h"
+#include "blackhole/returning.h"
 #include "blackhole/sky_card.h"
 
 #include <algorithm>
@@ -116,7 +117,7 @@ void BlackHoleView::trueNumbers(const Settings& s, const HoleView& v) {
 bool BlackHoleView::Key::operator==(const Key& o) const {
     return W == o.W && H == o.H && cx == o.cx && cy == o.cy && dist == o.dist && fov == o.fov && yaw == o.yaw && pitch == o.pitch && bend == o.bend && sky == o.sky &&
            disc == o.disc && outer == o.outer && feed == o.feed && mass == o.mass && exp == o.exp && expAuto == o.expAuto && spin == o.spin && spinVer == o.spinVer && look == o.look &&
-           trueSky == o.trueSky && glare == o.glare && allLight == o.allLight;
+           trueSky == o.trueSky && glare == o.glare && allLight == o.allLight && ret == o.ret;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -146,6 +147,69 @@ BlackHoleView::BlackHoleView() {
 BlackHoleView::~BlackHoleView() {
     stopWork();
     stopSpinWorker();
+    if (retThread_.joinable()) retThread_.join();                          // 0.87.0
+}
+
+// 0.87.0 R11 (blackhole_view.h, returning.h): the returning light's table for the spin shown. On the card: each node's rays in pieces of 8,192 (render/
+// kerr_compute.h queueRays: the light paths' own double-precision integrator, the same as the table's; spin_card.h cardParams for a camera at rest in the
+// FIDO's frame on the equator at the node), read back a frame later; the hits as returnHitOf, the solve on the processor (returnSolve). Off the card: one
+// thread of the processor (returnFluxCpu, spinRayClosed). Either way the table goes to returning.h's store; the picture's key changes with it.
+struct BlackHoleView::ReturnJob {
+    double a = 0;
+    int node = 0;
+    std::size_t at = 0;
+    bool queued = false;
+    std::vector<double> pc, par;
+    std::vector<std::vector<ReturnHit>> hits;
+    std::vector<std::vector<double>> w;
+};
+bool BlackHoleView::retQueued() const { return retJob_ && retJob_->queued; }
+void BlackHoleView::pumpReturn(render::Renderer2D& R, const Settings& s, bool card) {
+    const bool want = s.disc && s.look == Look::Real && discLightRules().returning && !returnFluxFor(s.spin);
+    if (retJob_) {                                                          // a job on the card: on to its end (its table is kept for its spin)
+        render::IKerrCompute* K = R.kerrCompute();
+        ReturnJob& J = *retJob_;
+        if (!K) { retJob_.reset(); return; }
+        if (J.queued) {
+            if (!K->done(false)) return;
+            std::vector<double> raw;
+            K->readRays(raw);
+            const double rO = returnNode(J.a, J.node, kReturnNodes);
+            for (std::size_t k = 0; 16 * k + 16 <= raw.size() && J.at + k < J.hits[std::size_t(J.node)].size(); k++)
+                J.hits[std::size_t(J.node)][J.at + k] = returnHitOf(J.a, rO, raw[16 * k + 3], &raw[16 * k + 4], kSpinCross);
+            J.at += raw.size() / 16;
+            J.queued = false;
+            if (J.at >= J.hits[std::size_t(J.node)].size()) { J.node++; J.at = 0; J.pc.clear(); }
+        }
+        if (J.node >= kReturnNodes) {
+            returnFluxStore(returnSolve(J.a, J.hits, J.w));
+            retJob_.reset();
+            return;
+        }
+        if (!card || !cardFill_ || !cardFill_->idle()) return;              // (the card's own table fill first)
+        if (J.pc.empty()) {
+            const double rO = returnNode(J.a, J.node, kReturnNodes), sh = returnShare(J.a, rO);
+            J.pc = returnPsiChi(J.a, rO, returnLooks(kReturnMu, kReturnPsi, sh));
+            J.par = cardParams(J.a, rO, kPi / 2);
+            J.hits[std::size_t(J.node)].assign(J.pc.size() / 2, ReturnHit{});
+            J.w[std::size_t(J.node)] = returnWeights(kReturnMu, kReturnPsi, sh);
+        }
+        const std::size_t n = std::min<std::size_t>(render::IKerrCompute::kPiece, J.pc.size() / 2 - J.at);
+        K->queueRays(J.par, std::vector<double>(J.pc.begin() + std::ptrdiff_t(2 * J.at), J.pc.begin() + std::ptrdiff_t(2 * (J.at + n))));
+        J.queued = true;
+        return;
+    }
+    if (!want || retThreadBusy_) return;
+    if (card && R.kerrCompute()) {
+        retJob_ = std::make_unique<ReturnJob>();
+        retJob_->a = s.spin;
+        retJob_->hits.resize(kReturnNodes);
+        retJob_->w.resize(kReturnNodes);
+        return;
+    }
+    if (retThread_.joinable()) retThread_.join();
+    retThreadBusy_ = true;
+    retThread_ = std::thread([this, a = s.spin] { returnFluxStore(returnFluxCpu(a)); retThreadBusy_ = false; });
 }
 
 void BlackHoleView::stopWork() {
@@ -165,13 +229,18 @@ void BlackHoleView::stopSpinWorker() {
     spinReady_.reset();
 }
 
+// 0.87.0 R11: the flux the disc sends, F + F_o (returning.h), for the GPU's temperature table (null: F alone)
+static const ReturnFlux* retFor(double spin) { return discLightRules().returning ? returnFluxFor(spin) : nullptr; }
+static double fluxSent(double r, double spin, const ReturnFlux* ret) { return discFlux(r, spin) + (ret ? ret->fluxAt(r) : 0.0); }
 void BlackHoleView::ensureDiscF(double spin) {
-    if (discFSpin_ == spin && discF_ && !discF_->empty()) return;
+    const ReturnFlux* ret = retFor(spin);
+    if (discFSpin_ == spin && discF_ && !discF_->empty() && discFRet_ == ret) return;
+    discFRet_ = ret;
     // 0.57's grid kept point for point (1024 values from r_ms to 1000 M; the eye's picture bit for bit), continued with the same step past kOuterMax (0.58.0: 2000)
     const double r0 = discInner(spin), l0 = std::log(r0), dl = (std::log(1000.0) - l0) / (1024 - 1);
     const int n = 1024 + static_cast<int>(std::ceil((std::log(kOuterMax) - std::log(1000.0)) / dl)) + 1;
     auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
+    for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, fluxSent(std::exp(l0 + i * dl), spin, ret)), 0.25));
     discF_ = std::move(f);
     discFSpin_ = spin; discFLog0_ = l0; discFDl_ = dl;
     discFVer_ = nextVersion();
@@ -267,7 +336,7 @@ DiscPixel BlackHoleView::spinPixel(const Settings& s, const HoleView& v, double 
     const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
     o.hit.order = sd.order; o.hit.r = sd.r; o.hit.g = sd.g; o.hit.b = h.b; o.hit.Lz = h.b;
     if (sd.order < 0 || !light) return o;
-    discLightSeen(s, sd.r, sd.g, h.b, o);                                    // 0.55.3: by the look's rule (lab.h); 0.84.0: the camera's own shift for this ray's b
+    discLightSeen(s, sd.r, sd.g, h.b, spinEmissionCos(s, th, chi, sd.g, sd.r), o);   // 0.55.3: by the look's rule (lab.h); 0.84.0: the camera's own shift for this ray's b
     return o;
 }
 
@@ -369,6 +438,18 @@ void gasFields(render::Renderer2D::LensSky& L, const Settings& s, double T) {
 }
 }  // namespace
 
+// 0.87.0 (disc.h, THE DISC'S REAL LIGHT): the shaders' uDL for these settings (render/renderer2d.h LensSky::discLight); tFix: the gas's own temperature over
+// tScale F^(1/4) (spin 0: 1 / the camera's own shift folded into tScale; else 1)
+static void discLightFields(render::Renderer2D::LensSky& L, const Settings& s, double tFix) {
+    const bool real = lookRule(s.look).shifts;
+    const DiscLightRules& R = discLightRules();
+    L.discLight[0] = real && R.fcol ? static_cast<float>(kFcolLow) : 1e30f;
+    L.discLight[1] = 0.0f;
+    L.discLight[2] = static_cast<float>(tFix);
+    L.discLight[3] = 0.0f;
+    const std::array<double, kLimbFineN> fine = limbFine();
+    for (int k = 0; k < kLimbFineN; k++) L.limb[k] = real && R.limb ? static_cast<float>(fine[static_cast<std::size_t>(k)]) : 1.0f;
+}
 render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const HoleView& v) const {
     render::Renderer2D::LensSky L;
     L.cx = v.cx; L.cy = v.cy; L.kRad = v.K;
@@ -424,6 +505,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             L.rIn = g.rIn; L.rOut = g.rOut;
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
             L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
+            discLightFields(L, s, 1);                                       // 0.87.0
             L.whiteMode = 1;                                                // (0.70.0: your choice too: stops from the card's automatic)
             toneFields(L, s);
             L.expStep = 4;
@@ -473,6 +555,8 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             L.rIn = g.rIn; L.rOut = g.rOut;
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
             L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
+            discLightFields(L, s, 1);                                       // 0.87.0
+            skyCamera(L, s.spin, s.dist, s.pitch);                          // 0.87.0 R10: the camera's numbers for each ray's Carter constant (kKerrFS uCam, uMet)
             toneFields(L, s);
             if (!lookRule(s.look).shifts) {                                 // 0.55.3, Film: one colour all over the disc (lab.h discLight), over the screen's white as discColour does
                 DiscPixel q;
@@ -505,10 +589,21 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.tScale = std::pow(p.fluxScale() / stefanBoltzmann(), 0.25);       // T = tScale F(r)^(1/4), F for Mdot = M = 1 (disc.h)
         L.tScale *= heldCameraShift(s, 0);                                  // 0.84.0: spin 0: the camera's own shift is one factor for every ray (lab.h)
         L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
+        discLightFields(L, s, 1 / heldCameraShift(s, 0));                  // 0.87.0
         toneFields(L, s);
         if (lookUse_) { L.whiteMode = 1; L.expStep = 4; }                   // 0.56.0: the card finds the exposure (spin 0 too; 0.70.0: your choice too)
         gasFields(L, s, gasT);                                              // 0.72.0: the moving gas: the travel times, the sky frame's x and y on the view
         L.discTime = &disc_->tValues();
+        if (const ReturnFlux* ret = discReturn(s)) {                        // 0.87.0 R11: spin 0's returning flux (kLensFS uRet), ensureDiscF's grid
+            if (retFOf_ != ret || !retF_) {
+                const double r0 = discInner(0), l0 = std::log(r0), dl = (std::log(1000.0) - l0) / (1024 - 1);
+                const int n = 1024 + static_cast<int>(std::ceil((std::log(kOuterMax) - std::log(1000.0)) / dl)) + 1;
+                auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
+                for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(ret->fluxAt(std::exp(l0 + i * dl)));
+                retF_ = std::move(f); retFOf_ = ret; retFLog0_ = l0; retFDl_ = dl; retFVer_ = nextVersion();
+            }
+            L.retF = retF_.get(); L.retN = static_cast<int>(retF_->size()); L.retLog0 = retFLog0_; L.retDl = retFDl_; L.retVersion = retFVer_;
+        }
         if (const HeightTable* ht = g_hgtHookOff ? nullptr : g.height) {    // 0.79.0: the disc's true thickness (lab.h discHeight, discThickDrawn)
             L.hgt = &ht->h;
             L.hgtR[0] = static_cast<float>(ht->ln0); L.hgtR[1] = static_cast<float>(ht->dln); L.hgtR[2] = static_cast<float>(ht->h.size()); L.hgtR[3] = 1;
@@ -534,7 +629,7 @@ BlackHoleView::Key BlackHoleView::keyOf(const Settings& s, double W, double H, d
     const bool spinning = s.spin > 0 && s.bend;
     const bool disc = spinning ? s.disc : s.disc && s.bend;
     return Key{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expEV, s.expAuto, spinning ? s.spin : 0.0, 0,
-               static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s)};
+               static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s), disc ? discReturn(s) : nullptr};
 }
 
 // 0.55.5: the processor's part of a picture (until 0.55.4 the first half of draw): the tables, the exposure and the stars' images, only when the view changed
@@ -548,7 +643,8 @@ bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, do
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }   // Sky: Black and no disc: nothing is lit, the picture is black
     lit_ = true;
     if (disc) ensureDisc(s.dist, movingEngine_);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expEV, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s)};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expEV, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s),
+                disc ? discReturn(s) : nullptr};
     const bool changed = !(k == key_) || (exact_ && !keyExact_);
     DiscLook cardLook = skyLook_;                                           // 0.70.0: the card's last exposure, at these settings' look and stops
     const bool cardOk = cardLook.any && finishLook(cardLook, s);
@@ -634,7 +730,8 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }
     lit_ = true;
     if (disc) ensureDiscF(s.spin);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expEV, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s)};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expEV, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s),
+                disc ? discReturn(s) : nullptr};
     const bool changed = !(k == key_) || (exact_ && !keyExact_);
     if (changed) {
         made_[0] = s.yaw; made_[1] = s.pitch; made_[2] = s.dist; made_[3] = s.spin;
@@ -766,6 +863,7 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
     if (async) drawAsync(R, s, W, H, cx, cy);
     else {
         exact_ = true;
+        if (s.disc && s.look == Look::Real && discLightRules().returning) returnFluxNow(s.spin);   // 0.87.0: the exact picture with its returning light
         prepare(s, W, H, cx, cy, nullptr);
         shownS_ = s; shownExact_ = true; hasShown_ = true;
         st_.behind = false; st_.behindMs = 0; st_.lagMs = 0;
@@ -999,6 +1097,7 @@ void BlackHoleView::pollFine(const Settings& s) {
 bool BlackHoleView::settled() {
     if (!async) return true;
     if (st_.behind || spinWorker_.joinable() || (fineA_ > 0 && !st_.spinFine && !st_.spinCard) || (cardFill_ && !cardFill_->idle()) || cardState_ == 2) return false;
+    if (retJob_ || retThreadBusy_ || (hasShown_ && shownS_.disc && shownS_.look == Look::Real && discLightRules().returning && !returnFluxFor(shownS_.spin))) return false;   // 0.87.0
     std::lock_guard<std::mutex> g(workMx_);
     return !workBusy_ && !req_ && !done_;
 }
@@ -1093,7 +1192,7 @@ void BlackHoleView::pumpCard(const Settings& s, double W, double H, double cx, d
             workCv_.notify_one();
             continue;
         }
-        if (!cardFill_->idle() || !start) break;
+        if (!cardFill_->idle() || !start || retQueued()) break;            // (0.87.0: not while a piece of the returning light is on the card)
         const bool have = cardFine_ && cardFine_->spin() == s.spin && cardFine_->rC() == s.dist && cardFine_->thC() == s.pitch;
         const bool withWorker = cardPostedKey_[0] == s.spin && cardPostedKey_[1] == s.dist && cardPostedKey_[2] == s.pitch &&
                                 (!cardPosted_.expired() || (cardPostedUsed_ && cardPostedUsed_->load()));
@@ -1147,6 +1246,7 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
             cardOff(b);
         }
     }
+    pumpReturn(R, s, cardState_ == 1 && cardFill_ != nullptr);              // 0.87.0 R11: the returning light's table (card or processor)
     const bool current = hasShown_ && shownKey_ == want;
     const bool movingNow = now - wantSince_ < kGlareRest;
     const bool cardLook = sky || (!spinning && gpuSky && s.disc && s.bend);   // 0.56.0: the exposure on the card (also at spin 0)
@@ -1306,12 +1406,14 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
 }
 
 void BlackHoleView::ensureSkyF(double spin) {
-    if (skyFSpin_ == spin && skyF_) return;
+    const ReturnFlux* ret = retFor(spin);
+    if (skyFSpin_ == spin && skyF_ && skyFRet_ == ret) return;
+    skyFRet_ = ret;
     // 0.57's grid kept point for point (1024 values from r_ms to 1000 M; the eye's picture bit for bit), continued with the same step past kOuterMax (0.58.0: 2000)
     const double r0 = discInner(spin), l0 = std::log(r0), dl = (std::log(1000.0) - l0) / (1024 - 1);
     const int n = 1024 + static_cast<int>(std::ceil((std::log(kOuterMax) - std::log(1000.0)) / dl)) + 1;
     auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
+    for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, fluxSent(std::exp(l0 + i * dl), spin, ret)), 0.25));
     skyF_ = std::move(f);
     skyFSpin_ = spin; skyFLog0_ = l0; skyFDl_ = dl;
     skyFVer_ = nextVersion();
@@ -1391,6 +1493,21 @@ void cardCompare(render::Renderer2D& R) {
     }
     {   const CardCheck c = cardSelfCheck(*K);
         std::printf("PLBHCARDCHECK ok=%d edges=%d rays=%d ends=%d edge=%.2e dir=%.2e b=%.2e u=%.2e ms=%.1f\n", c.ok ? 1 : 0, c.edges, c.rays, c.endsDiffer, c.edge, c.dir, c.b, c.u, c.ms);
+    }
+    // 0.87.0 R11: the returning light's table made on the card against the processor's, the same rays (a smaller grid than the lab's, 8 nodes x 16 x 256
+    // rays, for the software renderer's time): the flux sent, F + F_o, at 400 radii from r_ms to 2000 M (the limit, 1 %, as test_blackhole.cpp R11 (c))
+    for (const double a : {0.0, kSpinTop}) {
+        const auto t0 = std::chrono::steady_clock::now();
+        int bad = 0;
+        const ReturnFlux G = cardReturnFlux(*K, a, 8, 16, 256, &bad);
+        const double gms = msSince(t0);
+        const ReturnFlux C = returnFluxCpu(a, 8, 16, 256);
+        double w = 0;
+        for (int k = 0; k <= 400; k++) {
+            const double r = discInner(a) * std::exp(std::log(kOuterMax / discInner(a)) * k / 400) * (k == 0 ? 1.0001 : 1.0), fg = discFlux(r, a);
+            w = std::max(w, std::fabs((fg + G.fluxAt(r)) / (fg + C.fluxAt(r)) - 1));
+        }
+        std::printf("PLBHRET a=%g rel=%.3e unanswered=%d fo_card=%.5f fo_cpu=%.5f cardms=%.0f\n", a, w, bad, G.fo.front(), C.fo.front(), gms);
     }
     const FilmChoices film;
     struct Case { const char* name; double a, r, th; };
@@ -1473,13 +1590,16 @@ void toneCompare(render::Renderer2D& R) {
     // 0.79.0, case "streaks": the feeding preset at the lab's starting view with its surface, the streaks and the clump at 10^6 M of running (kSkyGasT), read
     // with no footprint (kLensFS uGasFoot 0); the processor's reference: discPixel's surface hit, phi and t at its swept angle (DiscTable::lookupT), gas.h's
     // factor and clump, T x (S (1 + A n))^(1/4) seen at g T. The same limit.
-    struct Tc { const char* name; double spin, dist, fov, tiltDeg; };
+    struct Tc { const char* name; double spin, dist, fov, tiltDeg, mass = 0; };   // (0.87.0: mass, M_sun; 0: the preset's)
     // 0.84.0: the held camera's own shift (lab.h heldCameraShift) at the closest distance (kDistMin) with no spin and the top spin (kSpinTop), and from over
     // the pole (8 degrees from the axis, the top spin): the same limit
     for (const Tc& c : {Tc{"near", 0, 20, 90, 0}, Tc{"far", 0, 50, 45, 85}, Tc{"spin", 0.9, 30, 60, 80}, Tc{"streaks", 0, 50, 45, 0},
                         Tc{"close", 0, kDistMin, kFovMax, 0}, Tc{"closespin", kSpinTop, kDistMin, 150, 0}, Tc{"pole", kSpinTop, kDistMin, 150, 8},
-                        Tc{"closetable", kSpinTop, kDistMin, 150, 0}}) {
-        const bool table = std::strcmp(c.name, "closetable") == 0;      // 0.84.0: the table's pass (kKerrFS, the fallback without the sky pass), at the processor's exposure
+                        Tc{"closetable", kSpinTop, kDistMin, 150, 0},
+                        // 0.87.0 (disc.h, THE DISC'S REAL LIGHT): a stellar-mass disc (the colour correction well above 1: R9), and the top spin seen 85 degrees
+                        // from the pole through the sky pass and the table pass (the limb darkening's grazing rays: R10)
+                        Tc{"hot", 0, 30, 60, 60, 10}, Tc{"edgesky", kSpinTop, 30, 60, 85}, Tc{"edgetable", kSpinTop, 30, 60, 85}}) {
+        const bool table = std::strcmp(c.name, "closetable") == 0 || std::strcmp(c.name, "edgetable") == 0;   // 0.84.0: the table's pass (kKerrFS, the fallback without the sky pass), at the processor's exposure
         const bool streaks = std::strcmp(c.name, "streaks") == 0;
         BlackHoleView view;
         Settings u = settingsDefaults();
@@ -1488,7 +1608,9 @@ void toneCompare(render::Renderer2D& R) {
         setDistance(u, c.dist); setFov(u, c.fov);
         if (c.tiltDeg > 0) u.pitch = c.tiltDeg * kPi / 180;
         setSpin(u, c.spin);
+        if (c.mass > 0) setMass(u, c.mass);
         const Settings s = shown(u);
+        returnFluxNow(s.spin);                                          // 0.87.0: every case with its returning light (R11), the card's and the processor's alike
         view.exact_ = true;
         if (s.spin > 0) view.ensureSpin(s, true);
         view.prepare(s, W, H, W / 2.0, H / 2.0, nullptr);
@@ -1507,7 +1629,10 @@ void toneCompare(render::Renderer2D& R) {
         const bool ok = table ? cl.any && L.kerr && !L.kerrSky : cl.any && finishLook(cl, s);
         ToneExposure e; e.k = cl.k; e.lw = cl.lw; e.ok = ok;
         std::vector<int> ord(static_cast<std::size_t>(W) * H, -1);
+        std::vector<double> rad(static_cast<std::size_t>(W) * H, 0);       // (0.87.0: each disc pixel's radius, for the shader's coverage below)
         std::vector<std::array<double, 3>> ref(static_cast<std::size_t>(W) * H);
+        static const bool dbgPx = std::getenv("PL_BH_TONEDBG") != nullptr;
+        std::vector<DiscPixel> refPx(dbgPx ? static_cast<std::size_t>(W) * H : 0);   // (PL_BH_TONEDBG: the pixels over 8 levels, with the processor's numbers)
         Clump clp;
         clp.a = 0; clp.rc = gasClumpRadius(s); clp.init();
         Vec3 rows[3];
@@ -1518,6 +1643,7 @@ void toneCompare(render::Renderer2D& R) {
                 DiscPixel q = s.spin > 0 ? view.spinPixel(s, v, X, Y) : discPixel(*view.discTable(), s, v, X, Y);
                 const std::size_t at = static_cast<std::size_t>(j) * W + i;
                 ord[at] = q.hit.order;
+                rad[at] = q.hit.r;
                 if (q.hit.order >= 0 && streaks) {                          // 0.79.0: the moving gas's light on the reference
                     const double dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), nx = dx / d, ny = dy / d, psi = q.hit.psi;
                     const Vec3 pos{std::sin(psi) * nx, std::sin(psi) * ny, std::cos(psi)};
@@ -1525,10 +1651,15 @@ void toneCompare(render::Renderer2D& R) {
                     double tl = 0;
                     if (!view.discTable()->lookupT(d / v.K - view.discTable()->alphaSh(), psi, tl)) { ord[at] = -2; continue; }
                     const double te = kSkyGasT - tl, gf = streakField().factor(q.hit.r, phi, te, 0) * (1 + clp.A * clp.density(q.hit.r, phi, te));
-                    q.rgb = blackBodyLinearFast(q.hit.g * heldCameraShift(s, q.hit.b) * discPhys(s).temperature(q.hit.r) * std::pow(gf, 0.25));   // (0.84.0: the camera's own shift)
+                    DiscPixel z;                                            // (0.84.0: the camera's own shift; 0.87.0: the real light at T x gf^(1/4))
+                    discLightT(s, discPhys(s).temperature(q.hit.r) * std::pow(gf, 0.25), q.hit.g * heldCameraShift(s, q.hit.b), q.mu, z);
+                    q.rgb = z.rgb;
                 }
                 if (q.hit.order >= 0) ref[at] = toneRGB(q.rgb, e);
+                if (dbgPx) refPx[at] = q;
             }
+        std::vector<float> gpuProbe;
+        if (dbgPx) { render::Renderer2D::LensSky Ld = L; Ld.debugDisc = true; R.lensFloat(Ld, W, H, gpuProbe); gpuProbe.resize(static_cast<std::size_t>(W) * H * 4); }
         long n = 0, over = 0; int maxd = 0;
         const auto enc = [](double l) { l = std::clamp(l, 0.0, 1.0); return l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055; };
         for (int j = 1; j + 1 < H; j++)
@@ -1538,11 +1669,23 @@ void toneCompare(render::Renderer2D& R) {
                 bool inner = true;
                 for (int dj = -1; dj <= 1; dj++) for (int di = -1; di <= 1; di++) inner = inner && ord[static_cast<std::size_t>(j + dj) * W + i + di] == ord[at];
                 if (!inner || f.px.size() < at * 4 + 3) continue;
+                // 0.87.0: also left out, as the test means to ("their coverage is the shader's own"): a pixel whose radius range reaches past the disc's edges.
+                // The shader covers the part of r +- fwidth(r)/2 on [rIn, rOut]; here w = |dr/dx| + |dr/dy| from the neighbours, and the range r +- w (twice the
+                // shader's, for the neighbours' own spread). Grazing rays (case close's corners at 2.2 GM/c^2) move r by over 13 M a pixel.
+                const double w = 0.5 * (std::fabs(rad[at + 1] - rad[at - 1]) + std::fabs(rad[at + W] - rad[at - W]));
+                const DiscGeom dg = discGeom(s);
+                if (rad[at] - w < dg.rIn || rad[at] + w > dg.rOut) continue;
                 n++;
                 int d = 0;
                 for (int k = 0; k < 3; k++) d = std::max(d, std::abs(int(f.px[at * 4 + k]) - int(std::lround(255 * enc(ref[at][static_cast<std::size_t>(k)])))));
                 maxd = std::max(maxd, d);
                 if (d > 8) over++;
+                if (d > 8 && dbgPx && over <= 25) {
+                    const DiscPixel& q = refPx[at];
+                    std::printf("TONEDBG over case=%s px=%d,%d d=%d order=%d r=%.4f g=%.4f mu=%.4f T=%.1f fcol=%.4f card=%d,%d,%d ref=%.1f,%.1f,%.1f gpu=%g,%.4f,%.4f\n", c.name, i, j, d, q.hit.order, q.hit.r,
+                                q.hit.g, q.mu, q.T, q.fcol, f.px[at * 4], f.px[at * 4 + 1], f.px[at * 4 + 2], 255 * enc(ref[at][0]), 255 * enc(ref[at][1]), 255 * enc(ref[at][2]),
+                                gpuProbe[at * 4], gpuProbe[at * 4 + 1], gpuProbe[at * 4 + 2]);
+                }
             }
         if (std::getenv("PL_BH_TONEDBG")) {
             const render::Renderer2D::SkyStats& ks = R.skyStats();
@@ -1618,7 +1761,8 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                             const double r = ce.u[k] > 0 ? 1 / ce.u[k] : 0;
                             if (!(r >= g.rIn && r <= g.rOut)) continue;
                             DiscPixel q;
-                            discLightSeen(s, r, discShiftKerr(r, ce.b, s.spin), ce.b, q);   // (0.84.0: with the camera's own shift)
+                            const double ge = discShiftKerr(r, ce.b, s.spin);
+                            discLightSeen(s, r, ge, ce.b, emissionCos(ge, ce.q, r), q);   // (0.84.0: with the camera's own shift; 0.87.0: the emission angle)
                             ys.push_back(q.Y); ym = std::max(ym, q.Y);
                             break;
                         }

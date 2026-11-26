@@ -1214,8 +1214,9 @@ static void testBenchSceneNumbers() {
     // 0.83.0 (on purpose, the owner's decision of 24 Nov 2026): the limit is fixed at 4.5 minutes; 26 scenes and 42 waits (response.blackhole_dolly): 260.2 s
     // 0.84.0 (on purpose): 27 scenes (blackhole.close_spin) and 42 waits: 266.7 s, under the same 4.5 minutes
     // 0.85.0 (on purpose, the owner's decision of 25 Nov 2026): 30 scenes and 45 waits (response.sunspot_table): 291.0 s; the limit raised once to 4.9 minutes
+    // 0.87.0 (on purpose): 46 waits (response.blackhole_return, done once): 292.6 s, under the same 4.9 minutes
     checkTrue("benchmark run: planned within the owner's 4.9 minutes (0.85.0, raised once from 4.5; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 4.9 * 60 && near(app::kBenchLimitS, 294) &&
-              app::kBenchResponseActions == 45);
+              app::kBenchResponseActions == 46);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {

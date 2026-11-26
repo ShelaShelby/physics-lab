@@ -136,7 +136,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
              "new pictures a second.\n";
     }
     if (!responses.empty()) {
-        t += "\nWAITS (each done " + std::to_string(kBenchResponseRepeats) + " times: the middle and the worst, until the finished picture)\n";
+        t += "\nWAITS (each done " + std::to_string(kBenchResponseRepeats) + " times unless its line below says once: the middle and the worst, until the finished picture)\n";
         std::size_t w = 10;
         for (const BenchResponse& r : responses) w = std::max(w, r.id.size());
         t += pad("id", w) + "  " + pad("middle", 10) + "  " + pad("worst", 10) + "  " + pad("worst frame", 11) + "  name\n";

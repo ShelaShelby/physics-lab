@@ -19,6 +19,16 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.87.0", "The disc's real light: bluer, darker towards its edge, and the light it gets back",
+     "Black Hole Lab, Real look: the gas disc's light now follows three rules from radiative transfer, each from a paper and each said in the guide with its "
+     "limits. A hot disc's atmosphere scatters light off electrons, so each ring shines like a black body a factor f hotter but f⁴ dimmer: the same total "
+     "light, bluer (Done et al. 2012). A small, hot disc round a star-sized hole looks bluer and a little dimmer; a cool disc does not change. The disc's face "
+     "is about three times darker seen at a grazing angle than straight on (Chandrasekhar 1946), so a disc seen nearly edge on is fainter than one seen from "
+     "above. And gravity bends some of the disc's light back onto it, which warms it (Cunningham 1976): about 2 % of its own light without spin, about 15 % at "
+     "spin 0.99. The lab works that out once for each spin, on the graphics card where its light paths run, and checks its light paths against Cunningham's "
+     "own tables. The card gives the factor f and the light returned at the hottest ring. "
+     "Also: the picture check near the hole (2.2 GM/c², no spin) now leaves out the pixels where the light paths sweep past the disc's edge within one pixel, as it was "
+     "meant to; that is likely why it failed on some graphics cards."},
     {"0.86.0", "Honest pictures: the words match what is drawn, and the stars on the camera's exposure",
      "Orbit Lab: with Lighting: True sunlight the stars now share the planets' camera exposure. Each star is drawn by its true light, from its measured "
      "brightness against the Sun's, and only when it reaches the faintest step the screen can show. A camera exposed for a sunlit planet near the Sun "

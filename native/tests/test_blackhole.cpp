@@ -15,6 +15,9 @@
 //    and every block of the extract found in it); the Film disc's colour = the CIE black body at the paper's temperature through the paper's white balance;
 //    no shift: the same light from the approaching and the receding side (and Real not); the glow's reference adds light only and spreads it without loss.
 #include <algorithm>
+#include <cstdint>
+#include <thread>
+#include <atomic>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -39,6 +42,7 @@
 #include "blackhole/schwarzschild.h"
 #include "blackhole/spin.h"
 #include "blackhole/spin_sky.h"
+#include "blackhole/returning.h"
 #include "orbit/far_masses.h"
 #include "blackhole/lab.h"
 #include "blackhole/looks.h"
@@ -66,6 +70,12 @@ static void check(bool ok, const std::string& what) {
     else if (std::getenv("PL_BH_VERBOSE")) std::printf("ok: %s\n", what.c_str());
 }
 static std::string f(double v) { char b[64]; std::snprintf(b, sizeof b, "%.10g", v); return b; }
+// 0.87.0: the disc's real light (disc.h DiscLightRules) switched off for a block that checks an older rule bit for bit; back as it was at the block's end
+struct RealLightOff {
+    blackhole::DiscLightRules keep;
+    RealLightOff() : keep(blackhole::discLightRules()) { blackhole::discLightRules() = blackhole::DiscLightRules{false, false, false}; }
+    ~RealLightOff() { blackhole::discLightRules() = keep; }
+};
 static const double kPi = 3.14159265358979323846;
 
 static std::string readBytes(const std::string& path) {
@@ -380,6 +390,7 @@ static void testCameraShift() {
         check(heldCameraShift(shown(fm), 4) == 1 && heldCameraShift(shown(fm), 0) == 1, "Film: no camera shift (J15 draws no colour or brightness shifts)"); }
     // the disc's light: colour temperature g (against far away) x f_c/f' x T; all light (bolometric) by f^4; the eye's light by the black body at that temperature
     {   Settings q = s; setSpin(q, 0.9); setDistance(q, 5); q.pitch = 1.2;
+        const RealLightOff off;                                            // (0.87.0: the camera's rule of 0.84.0, the real light off)
         for (double b : {-3.0, 0.0, 5.0}) {
             DiscPixel e, o;
             discLightSeen(q, 8, 1.1, b, e);
@@ -401,7 +412,7 @@ static void testCameraShift() {
                 const DiscPixel p = discPixel(T, q, v, i + 0.5, j + 0.5);
                 if (p.hit.order < 0) continue;
                 n++;
-                w = std::max(w, std::fabs(p.Tobs / (p.hit.g * fc * discPhys(q).temperature(p.hit.r)) - 1));
+                w = std::max(w, std::fabs(p.Tobs / (p.hit.g * fc * p.fcol * discPhys(q).temperature(p.hit.r)) - 1));   // (0.87.0: times f_col, R9)
             }
         check(n > 20 && w < 1e-13, "the reference picture at " + f(r) + " M: each of " + std::to_string(n) + " disc pixels at g f T (" + f(w) + ")");
     }
@@ -418,7 +429,7 @@ static void testCameraShift() {
                 const DiscPixel p = discPixel(T, q, v, i + 0.5, j + 0.5);
                 if (p.hit.order < 0) continue;
                 DiscPixel old;
-                discLight(q, p.hit.r, p.hit.g, old);
+                discLight(q, p.hit.r, p.hit.g, p.mu, old);                      // (0.87.0: at the pixel's own emission angle, as the pixel)
                 n++;
                 for (int k = 0; k < 3; k++) if (old.rgb[std::size_t(k)] > 0) w = std::max(w, std::fabs(p.rgb[std::size_t(k)] / old.rgb[std::size_t(k)] - 1));
             }
@@ -2268,7 +2279,9 @@ static void testLooks() {
     check(a1.rgb == a2.rgb && a1.Y == a2.Y && a1.rgb == a3.rgb && a1.T == c.discT && a1.Tobs == c.discT && a1.rgb == d && a1.Y == filmDiscY(), "Film: the same light on the approaching and the receding side and at every radius");
     discLight(s, 10, c.approachShift, r1); discLight(s, 10, c.recedeShift, r2);
     check(r1.Y > 2 * r2.Y && r1.rgb[2] / r1.rgb[0] > r2.rgb[2] / r2.rgb[0], "Real: the approaching side brighter and bluer (" + f(r1.Y / r2.Y) + " x)");
-    {   const DiscPhys P = discPhys(s);                                    // Real's rule is 0.55.2's, to the bit
+    {   const RealLightOff off;                                            // (0.87.0: with the real light off)
+        DiscPixel r0; discLight(s, 10, c.approachShift, r0); r1 = r0;
+        const DiscPhys P = discPhys(s);                                    // Real's rule is 0.55.2's, to the bit
         const double T = P.temperature(10);
         check(r1.T == T && r1.Tobs == c.approachShift * T && r1.rgb == blackBodyLinearFast(c.approachShift * T) && r1.Y == visibleVsSunFast(c.approachShift * T), "Real: the light of 0.55.2 (T(r), g T, the fast table)"); }
     // the settings: shown(), the locked spin and disc, the paper's view, the file
@@ -2997,12 +3010,399 @@ static void testAllLight() {
     // NOT reproduced (REPORT 0.58.0): L79's 2.62 at 10 degrees; this app gives the number printed here. Its own Fig. 10 draws no 2.40 curve inside 2.10, which a
     // largest value of 2.62 (steps of 0.30) would need too; so the paper's figure and its sentence do not agree with each other either.
     std::printf("info: L79 Fig. 10 prints 2.62 as the largest F0 / F_S max at 10 degrees; here %.4f at r = %.3f (and %.4f at 30 degrees, r = %.3f)\n", m10, r10, m30, r30);
-    // (d) the eye's picture: discLight is 0.57's rule bit for bit
+    // (d) the eye's picture: discLight is 0.57's rule bit for bit (0.87.0: with the real light off)
+    const RealLightOff off;
     for (double r : {6.5, 9.55, 30.0, 1500.0}) for (double g : {0.6, 1.0, 1.4}) {
         DiscPixel e; discLight(s, r, g, e);
         const double T = discPhys(s).temperature(r) * g;
         const auto c = blackBodyLinearFast(T);
         check(e.Tobs == T && e.rgb == c && e.Y == visibleVsSunFast(T), "What an eye sees: unchanged at r " + f(r) + ", g " + f(g));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.87.0 (PLAN_REVIEW R9): the disc's colour-correction factor, Done, Davis, Jin, Blaes & Ward 2012 (arXiv:1107.5429; the extract). Written before the code.
+// (a) conservation: Int f^-4 B_nu(f T) dnu = sigma T^4 / pi for f = 1.0, 1.7, 2.7 (the code's dilutedPlanck, integrated here in x = h nu / k T).
+// (b) the rule: f = 1 at and below 3e4 K; at 1e5 K Equations (1) and (2) within 2 % of each other and each within half a printed digit of the paper's "2.7";
+//     Equation (1) at the paper's own peak temperatures against its printed 2.34 (4e5 K) and 2.4 (3e5 K), both read from the extract.
+// (c) the disc's colour (lab.h discLight, Real): f^-4 of a black body at g f T; with All light the luminance is g^4 sigma T^4 / pi, the same with and without f.
+static double numberAfter(const std::string& text, const std::string& key) {
+    const std::size_t p = text.find(key);
+    return p == std::string::npos ? -1 : std::atof(text.c_str() + p + key.size());
+}
+static void testColourCorrection087() {
+    const std::string ex = readExtract("blackhole/arxiv/1107.5429_done2012.extract.txt");
+    // (a)
+    for (double T : {2e4, 1e5, 1e7})
+        for (double fc : {1.0, 1.7, 2.7}) {
+            const double kT = 1.380649e-23 * T, h = 6.62607015e-34;
+            double sum = 0;                                                     // Simpson in x from 1e-6 to 60 (the tail beyond: below 1e-20 of the whole)
+            const int n = 200000;
+            const double x0 = 1e-6, x1 = 60, dx = (x1 - x0) / n;
+            for (int i = 0; i <= n; i++) {
+                const double x = x0 + i * dx, w = (i == 0 || i == n) ? 1 : (i % 2 ? 4 : 2);
+                sum += w * dilutedPlanck(x * kT / h, T, fc);
+            }
+            const double I = sum * dx / 3 * kT / h;                             // W m^-2 sr^-1
+            const double want = stefanBoltzmann() * T * T * T * T / kPi;
+            check(std::fabs(I / want - 1) < 1e-6, "R9 (a): Int f^-4 B_nu(f T) dnu = sigma T^4 / pi at T " + f(T) + ", f " + f(fc) + " (got " + f(I / want) + ")");
+        }
+    // (b)
+    check(colourCorrection(2e4) == 1 && colourCorrection(3e4) == 1 && colourCorrection(5000) == 1, "R9 (b): f = 1 at and below 3e4 K");
+    const double e1 = fcolDoneEq1(1e5), e2 = fcolDoneEq2(1e5);
+    check(std::fabs(e1 / e2 - 1) < 0.02, "R9 (b): Equations (1) and (2) within 2 % at 1e5 K (" + f(e1) + ", " + f(e2) + ")");
+    const double p27 = numberAfter(ex, "from unity to ");
+    check(p27 == 2.7 && std::fabs(e1 - p27) <= 0.05 && std::fabs(e2 - p27) <= 0.05, "R9 (b): both are the paper's " + f(p27) + " to its printed digit");
+    const double p234 = numberAfter(ex, "4 × 105 K gives fcol = "), p24 = numberAfter(ex, "so Equation 1 gives fcol = ");
+    check(p234 == 2.34 && std::fabs(fcolDoneEq1(4e5) - p234) <= 0.005, "R9 (b): Equation (1) at 4e5 K = " + f(fcolDoneEq1(4e5)) + ", printed " + f(p234));
+    check(p24 == 2.4 && std::fabs(fcolDoneEq1(3e5) - p24) <= 0.05, "R9 (b): Equation (1) at 3e5 K = " + f(fcolDoneEq1(3e5)) + ", printed " + f(p24));
+    check(colourCorrection(5e4) == fcolDoneEq2(5e4) && colourCorrection(1e5) == fcolDoneEq1(1e5) && colourCorrection(1e7) == fcolDoneEq1(1e7),
+          "R9 (b): Equation (2) from 3e4 K to 1e5 K, Equation (1) from 1e5 K up");
+    // (c)
+    Settings s = settingsDefaults(); applyPreset(s, kFeedingKey);
+    s.massSun = 10;                                                             // a hot disc (stellar mass): f well above 1
+    const DiscPhys P = discPhys(s);
+    const DiscLightRules keep = discLightRules();
+    discLightRules().limb = false; discLightRules().returning = false;         // (this test: the colour correction alone)
+    double worstC = 0, worstAll = 0, fMax = 0;
+    for (double r : {6.5, 9.55, 30.0, 400.0})
+        for (double g : {0.6, 1.0, 1.4}) {
+            const double T = P.temperature(r), fc = colourCorrection(T);
+            fMax = std::max(fMax, fc);
+            DiscPixel e; discLight(s, r, g, 1.0, e);
+            const auto c = blackBodyLinearFast(g * fc * T);
+            for (int k = 0; k < 3; k++) worstC = std::max(worstC, std::fabs(e.rgb[std::size_t(k)] - c[std::size_t(k)] / std::pow(fc, 4)) / (c[std::size_t(k)] / std::pow(fc, 4) + 1e-300));
+            Settings sa = s; sa.allLight = true;
+            DiscPixel a1, a0;
+            discLight(sa, r, g, 1.0, a1);
+            discLightRules().fcol = false; discLight(sa, r, g, 1.0, a0); discLightRules().fcol = true;
+            worstAll = std::max(worstAll, std::fabs(a1.Y / a0.Y - 1));
+        }
+    check(fMax > 1.5, "R9 (c): the stellar-mass disc's inner part has f > 1.5 (" + f(fMax) + ")");
+    check(worstC < 1e-12, "R9 (c): the disc's colour is f^-4 of a black body at g f T (worst " + f(worstC) + ")");
+    check(worstAll < 1e-9, "R9 (c): All light keeps sigma T^4 (worst " + f(worstAll) + ")");
+    discLightRules() = keep;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.87.0 (PLAN_REVIEW R10): the disc's limb darkening, Chandrasekhar 1946 Table 2 (the extract's column [Il(0,mu)+Ir(0,mu)]/F). Written before the code.
+// (a) the code's 11 values are the extract's, and the table's own sums hold (Il/F + Ir/F = the column, to 1 unit of the last digit).
+// (b) the flux normalisation: 2 Int_0^1 limbDarkening(mu) mu dmu = 1 (Gauss-Legendre, exact for the piecewise cubic).
+// (c) face-on (mu = 1) and grazing (mu = 0) over each other: the table's 1.2628 / 0.4151; every node is the table's value over the one normalisation.
+// (d) the emission angle (disc.h emissionCos: mu = g q^(1/2) / r on the equator): against the gas's 4-velocity written from the metric (u^t from
+//     g_tt + 2 g_tphi Omega + g_phiphi Omega^2, E = -p.u) and p_theta / r of rays followed by KerrBL to the plane, at spins 0, 0.6 and 0.99.
+// (e) discLight's light at mu is limbDarkening(mu) times its light with the rule off; a disc seen nearly edge on is fainter than seen face on.
+static void testLimb087() {
+    const std::string ex = readExtract("blackhole/scans/chandrasekhar_1946_ApJ103_351.extract.txt");
+    std::istringstream in(ex.substr(ex.find("I(0,mu)/F-for-Rayleigh's-phase-function")));
+    std::string line;
+    std::getline(in, line);
+    int rows = 0; double worstSum = 0;
+    while (std::getline(in, line) && rows < kLimbN) {
+        std::istringstream ls(line);
+        double v[9];
+        for (double& x : v) { std::string w; ls >> w; x = std::atof(w.c_str()); }
+        check(std::fabs(v[0] - 0.1 * rows) < 1e-12 && v[7] == kLimbTable[rows], "R10 (a): row " + std::to_string(rows) + ": mu " + f(v[0]) + ", [Il+Ir]/F " + f(v[7]) + " in the code");
+        worstSum = std::max(worstSum, std::fabs(v[1] + v[2] - v[7]));
+        rows++;
+    }
+    check(rows == kLimbN && worstSum <= 1.0001e-4, "R10 (a): 11 rows; Il/F + Ir/F = the column within 1 unit of the last digit (" + f(worstSum) + ")");
+    // (b)
+    const double gx[3] = {-std::sqrt(0.6), 0, std::sqrt(0.6)}, gw[3] = {5.0 / 9, 8.0 / 9, 5.0 / 9};
+    double I = 0;
+    for (int k = 0; k < 10; k++)
+        for (int j = 0; j < 3; j++) { const double mu = 0.1 * k + 0.05 * (1 + gx[j]); I += 0.05 * gw[j] * limbDarkening(mu) * mu; }
+    check(std::fabs(2 * I - 1) < 1e-13, "R10 (b): 2 Int limbDarkening(mu) mu dmu = 1 (" + f(2 * I) + ")");
+    check(std::fabs(limbNormRaw() - 0.991) < 0.005, "R10 (b): the table's own 2 Int [I/F] mu dmu = " + f(limbNormRaw()) + " (PLAN_REVIEW: 0.991 from a 4th-order fit)");
+    // (c)
+    check(std::fabs(limbDarkening(1) / limbDarkening(0) - 1.2628 / 0.4151) < 1e-14, "R10 (c): face-on over grazing = 1.2628 / 0.4151 = " + f(limbDarkening(1) / limbDarkening(0)));
+    double worstNode = 0;
+    for (int k = 0; k < kLimbN; k++) worstNode = std::max(worstNode, std::fabs(limbDarkening(0.1 * k) * limbNormRaw() / kLimbTable[k] - 1));
+    check(worstNode < 1e-14, "R10 (c): the nodes are the table's values over one normalisation (" + f(worstNode) + ")");
+    check(limbDarkening(-0.5) == limbDarkening(0) && limbDarkening(1.5) == limbDarkening(1), "R10 (c): mu held to [0, 1]");
+    {   // the shaders' fine table, linear between its nodes, against the cubic: within h^2 / 8 max |L''| (the bound of linear interpolation), h = 1/40
+        const auto fine = limbFine();
+        double d2 = 0, worst = 0;
+        for (int k = 1; k < 4000; k++) {
+            const double mu = k / 4000.0, e = 1e-4;
+            if (mu > e && mu < 1 - e) d2 = std::max(d2, std::fabs(limbDarkening(mu + e) - 2 * limbDarkening(mu) + limbDarkening(mu - e)) / (e * e));
+            const double q = mu * (kLimbFineN - 1);
+            const int i = std::min(static_cast<int>(q), kLimbFineN - 2);
+            const double lin = fine[std::size_t(i)] + (q - i) * (fine[std::size_t(i + 1)] - fine[std::size_t(i)]);
+            worst = std::max(worst, std::fabs(lin - limbDarkening(mu)));
+        }
+        const double h = 1.0 / (kLimbFineN - 1), bound = h * h / 8 * d2;
+        check(worst <= bound * 1.01, "R10 (c): the shaders' table, linear, within " + f(worst) + " of the cubic (bound h^2/8 max|L''| = " + f(bound) + ")");
+    }
+    // (d)
+    double worstMu = 0; int nMu = 0;
+    for (double a : {0.0, 0.6, 0.99}) {
+        const KerrBL ch(a);
+        const Camera cam{30, 75 * kPi / 180, 0};
+        for (double psi : {0.12, 0.2, 0.3, 0.45})
+            for (double chi : {0.0, 1.0, 2.5, 4.0, 5.5}) {
+                const Vec3 look = lookAt(psi, chi);
+                Ray r0;
+                if (!ch.launch(cam, look, r0)) continue;
+                std::vector<double> cr;
+                TraceOptions o; o.rtol = 1e-11; o.atol = 1e-12; o.maxCross = 1; o.cross = &cr;
+                trace(ch, cam, look, o);
+                if (cr.size() < 5 || !(cr[0] > discInner(a))) continue;
+                const double r = cr[0], b = r0.c[0], q = r0.c[1];
+                const KerrMetric m = kerrMetric(a, r, kPi / 2);
+                const double gtt = -(m.alpha * m.alpha) + m.varpi * m.varpi * m.omega * m.omega, gtp = -m.varpi * m.varpi * m.omega, gpp = m.varpi * m.varpi;
+                const double Om = 1 / (r * std::sqrt(r) + a), ut = 1 / std::sqrt(-(gtt + 2 * gtp * Om + gpp * Om * Om));
+                const double E = ut * (1 - Om * b);                         // -p.u with p_t = -1, p_phi = b
+                const double want = std::fabs(cr[4]) / std::sqrt(m.rho2) / E;   // p^(theta) = p_theta / rho over the gas's energy
+                worstMu = std::max(worstMu, std::fabs(emissionCos(discShiftKerr(r, b, a), q, r) - want));
+                nMu++;
+            }
+    }
+    check(nMu > 30 && worstMu < 1e-8, "R10 (d): mu = g q^(1/2) / r against the gas's frame on " + std::to_string(nMu) + " KerrBL rays (worst " + f(worstMu) + ")");
+    // (e)
+    Settings s = settingsDefaults(); applyPreset(s, kFeedingKey);
+    const DiscLightRules keep = discLightRules();
+    discLightRules().returning = false;
+    double worstL = 0;
+    for (double mu : {0.0, 0.05, 0.33, 0.7, 1.0}) {
+        DiscPixel e, e0;
+        discLight(s, 9, 1.1, mu, e);
+        discLightRules().limb = false; discLight(s, 9, 1.1, mu, e0); discLightRules().limb = true;
+        worstL = std::max(worstL, std::fabs(e.Y / (e0.Y * limbDarkening(mu)) - 1));
+        DiscPixel n; discLight(s, 9, 1.1, -1.0, n);
+        check(n.Y == e0.Y, "R10 (e): no direction (mu < 0): no factor");
+    }
+    check(worstL < 1e-14, "R10 (e): discLight's light at mu = limbDarkening(mu) x its light without (" + f(worstL) + ")");
+    discLightRules() = keep;
+    {   // the CPU picture: the mean mu of the disc's pixels seen face on (from 5 degrees off the axis) and nearly edge on (85 degrees), at 50 M
+        double m[2] = {0, 0}; long n[2] = {0, 0};
+        for (int c = 0; c < 2; c++) {
+            Settings q = s; setDistance(q, 50); setFov(q, 45); q.pitch = (c == 0 ? 5 : 85) * kPi / 180;
+            const DiscTable T(q.dist);
+            const HoleView v = holeView(q, 320, 200, 160, 100);
+            for (int j = 0; j < 200; j += 3)
+                for (int i = 0; i < 320; i += 3) {
+                    const DiscPixel p = discPixel(T, q, v, i + 0.5, j + 0.5);
+                    if (p.hit.order != 0) continue;
+                    m[c] += p.mu; n[c]++;
+                }
+        }
+        check(n[0] > 100 && n[1] > 100 && m[0] / n[0] > 0.9 && m[1] / n[1] < 0.35, "R10 (e): the pixels' mean mu face on " + f(m[0] / n[0]) + ", edge on " + f(m[1] / n[1]));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.87.0 (PLAN_REVIEW R11): returning radiation (returning.h), Cunningham 1976 Tables 1 and 2 (the extract: typed from the page image, each value read twice).
+// (a) T_f(y_o, y_e) at the tables' grid. The estimate per cell: the rays' mean of r_o^3 g^4 r_e^-3 over a y_e bin of half-width h, over 2h; h = 0.03 and
+//     0.015 joined by Richardson's rule (4 e(h/2) - e(h)) / 3 (the bin's own O(h^2) error taken out; no bin crosses y_ms, where the density jumps). Its
+//     standard error sigma from the rays' scatter (taken conservatively: (4 s(h/2) + s(h)) / 3). Bound per cell: half a unit of the printed last digit (0.0005)
+//     + 3 sigma. Two ways: the lab's own rays (returnPsiChi, spinRayClosed, returnHitOf) on the cells with r_o and r_e at or outside r_ms (the lab's disc), and
+//     all 100 cells by KerrBL rays from a camera moving with the gas, inside r_ms the gas falling with r_ms's energy and angular momentum as Cunningham's
+//     (p. 536: "inward spiraling geodesics which were circular at r_ms"; -p.u with the ray's p_r at the crossing). Isotropic emission (the tables').
+//     DOUBTFUL PRINTED VALUES: two T_f cells were seen out of line with their column while typing (the extract's note, before any of this was computed):
+//     Table 1 (y_o 0.65, y_e 0.55) 0.195 and Table 2 (0.85, 0.75) 0.234. Such a cell may miss its printed value only if the value computed here lies between
+//     its neighbours above and below in the column (within its bound): it is then printed as doubtful and REPORT 0.87.0 names it. Every other cell must meet
+//     its bound.
+// (b) f_o at the innermost node (r_ms) grows with the spin, from 0 to 0.99 (the abstract: unimportant without spin, significant for a/M ~ 1).
+// (c) the lab's grid (32 nodes, 32 x 1024 rays) against a finer one (48 nodes, 64 x 2048): F_g + F_o within 1 % everywhere on the disc from r_ms to 2000 M.
+//     Derived: a flux off by e moves T by e/4 and the visible light by x e/4, x = d ln I / d ln T, about h c / (lambda k T) on the Wien side; 1 % keeps the light
+//     within 3.76 % (8 levels of 255, REPORT 0.84.0's derivation) for x up to 15, i.e. T above about 2,100 K at 450 nm (cooler: next to no visible light).
+// (d) the disc: DiscPhys::temperature is ((F + F_o) / sigma)^(1/4) with the spin's table; the returning flux is less than the flux the disc sends out.
+namespace {
+struct GasV { double gam, vr, vphi; };
+GasV gasVel(double a, double r, double rms) {                                    // the gas's speed on the FIDO's axes at r on the equator
+    const KerrMetric m = kerrMetric(a, r, kPi / 2);
+    GasV g{};
+    if (r >= rms) { const double Om = 1 / (r * std::sqrt(r) + a), V = (Om - m.omega) * m.varpi / m.alpha; g.vphi = V; g.gam = 1 / std::sqrt(1 - V * V); return g; }
+    const double E = orbitEnergy(rms, a), L = orbitAngMom(rms, a), gam = (E - m.omega * L) / m.alpha, vphi = L / (m.varpi * gam);
+    g.gam = gam; g.vphi = vphi; g.vr = -std::sqrt(std::max(1 - 1 / (gam * gam) - vphi * vphi, 0.0));
+    return g;
+}
+double gasEnergy(double a, const GasV& G, const double* y, double b) {        // -p.u for the KerrBL state y = (r, theta, phi, p_r, p_theta), p_t = -1
+    const KerrMetric m = kerrMetric(a, y[0], y[1]);
+    const double EZ = (1 - m.omega * b) / m.alpha, pr = std::sqrt(m.Delta / m.rho2) * y[3], pph = b / m.varpi;
+    return G.gam * (EZ - G.vr * pr - G.vphi * pph);
+}
+// jittered stratified directions (cosine-weighted: mu^2 = (i + u) / nMu, psi = 2 pi (j + v) / nPsi; u, v from a fixed 64-bit generator, the same on every
+// build): the mean is then unbiased and the scatter's sigma is an upper bound of its error (stratification only lowers the variance)
+Vec3 jitterLook(std::size_t q, int nMu, int nPsi, std::uint64_t& s) {
+    const auto u01 = [&s] { s += 0x9E3779B97F4A7C15ULL; std::uint64_t z = s; z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                            return double((z ^ (z >> 31)) >> 11) * 0x1.0p-53; };   // (splitmix64)
+    const int im = static_cast<int>(q / std::size_t(nPsi)), jp = static_cast<int>(q % std::size_t(nPsi));
+    const double mu = std::sqrt((im + u01()) / nMu), sn = std::sqrt(1 - mu * mu), ps = 2 * kPi * (jp + u01()) / nPsi;
+    return Vec3{sn * std::cos(ps), -mu, sn * std::sin(ps)};
+}
+// one row of cells: samples (y_e, x = r_o^3 g^4 r_e^-3) per ray, N rays; the Richardson estimate and its sigma at each y_c
+struct Cell { double est = 0, sig = 0; };
+Cell cellOf(const std::vector<std::pair<double, double>>& s, std::size_t N, double yc) {
+    const auto e = [&](double h, double& sg) {
+        double m1 = 0, m2 = 0;
+        for (const auto& p : s) if (std::fabs(p.first - yc) < h) { const double x = p.second / (2 * h); m1 += x; m2 += x * x; }
+        m1 /= N; m2 /= N;
+        sg = std::sqrt(std::max(m2 - m1 * m1, 0.0) / N);
+        return m1;
+    };
+    double s1, s2;
+    const double e1 = e(0.03, s1), e2 = e(0.015, s2);
+    return Cell{(4 * e2 - e1) / 3, (4 * s2 + s1) / 3};
+}
+}  // namespace
+static void testReturning087() {
+    const std::string ex = readExtract("blackhole/scans/cunningham_1976_ApJ208_534.extract.txt");
+    for (int tb = 1; tb <= 2; tb++) {
+        const double a = tb == 1 ? 0.9 : 0.99, rp = horizon(a), rms = innermostStable(a, true), yms = returnY(a, rms);
+        // the table from the extract
+        double T[10][10]; int rowsRead = 0;
+        {   std::istringstream in(ex);
+            std::string line;
+            const std::string key = std::string("T") + char('0' + tb) + "F ";
+            while (std::getline(in, line)) {
+                if (line.compare(0, key.size(), key) != 0) continue;
+                std::istringstream ls(line.substr(key.size()));
+                double yo, ro; ls >> yo >> ro;
+                const int i = static_cast<int>(std::lround((yo - 0.05) / 0.1));
+                check(std::fabs(ro - rp / std::sqrt(yo)) < 0.0051, "R11 (a): Table " + std::to_string(tb) + " r_o/M " + f(ro) + " = r+ y^-1/2 to its printed digit");
+                for (int j = 0; j < 10; j++) ls >> T[i][j];
+                rowsRead++;
+            }
+        }
+        check(rowsRead == 10, "R11 (a): Table " + std::to_string(tb) + ": 10 rows of T_f in the extract");
+        int labCells = 0, labOver = 0, allCells = 0, allOver = 0, doubt = 0; double labWorst = 0, allWorst = 0;
+        const auto doubtful = [tb](int i, int j) { return (tb == 1 && i == 6 && j == 5) || (tb == 2 && i == 8 && j == 7); };
+        std::string overList;
+        const KerrBL ch(a);
+        for (int i = 0; i < 10; i++) {
+            const double yo = 0.05 + 0.1 * i, ro = rp / std::sqrt(yo);
+            // the lab's rays (r_o >= r_ms)
+            if (ro >= rms) {
+                const int nMu = 200, nPsi = 4000;
+                std::vector<Vec3> looks(static_cast<std::size_t>(nMu) * nPsi);
+                std::uint64_t seed = 0x5eed0087ULL + static_cast<std::uint64_t>(100 * tb + i);
+                for (std::size_t q = 0; q < looks.size(); q++) looks[q] = jitterLook(q, nMu, nPsi, seed);
+                const std::vector<double> pc = returnPsiChi(a, ro, looks);
+                const Camera cam{ro, kPi / 2, 0};
+                std::vector<std::pair<double, double>> smp(pc.size() / 2, {-1.0, 0.0});
+                std::atomic<std::size_t> next{0};
+                const auto work = [&] {
+                    for (std::size_t k; (k = next.fetch_add(256)) < smp.size();)
+                        for (std::size_t q = k; q < std::min(smp.size(), k + 256); q++) {
+                            const SpinHit h = spinRayClosed(a, cam, pc[2 * q], pc[2 * q + 1], 1e-10);
+                            const ReturnHit rh = returnHitOf(a, ro, h.b, h.u, kSpinCross);
+                            if (rh.rE > 0) smp[q] = {returnY(a, rh.rE), ro * ro * ro * rh.g4 / (rh.rE * rh.rE * rh.rE)};
+                        }
+                };
+                std::vector<std::thread> th;
+                for (unsigned t = 1; t < std::max(1u, std::thread::hardware_concurrency()); t++) th.emplace_back(work);
+                work();
+                for (auto& t : th) t.join();
+                for (int j = 0; j < 10; j++) {
+                    const double yc = 0.05 + 0.1 * j;
+                    if (yc + 0.03 >= yms) continue;
+                    const Cell c = cellOf(smp, smp.size(), yc);
+                    const double d = std::fabs(c.est - T[i][j]), bound = 0.0005 + 3 * c.sig;
+                    labCells++; labWorst = std::max(labWorst, d / bound);
+                    if (d > bound && doubtful(i, j) && c.est > std::min(T[i - 1][j], T[i + 1][j]) - bound && c.est < std::max(T[i - 1][j], T[i + 1][j]) + bound) {
+                        doubt++; std::printf("R11 doubtful printed value: Table %d (y_o %.2f, y_e %.2f) printed %.3f, computed %.4f +- %.4f (the lab's rays), between its neighbours %.3f and %.3f\n",
+                                             tb, yo, yc, T[i][j], c.est, bound, T[i - 1][j], T[i + 1][j]);
+                    } else if (d > bound) { labOver++; overList += " lab(" + f(yo) + "," + f(yc) + "): " + f(c.est) + " vs " + f(T[i][j]) + " +- " + f(bound) + ";"; }
+                }
+            }
+            // every cell: KerrBL rays from the gas's frame, plunging gas inside r_ms
+            {   const int nMu = 150, nPsi = 1200;
+                std::vector<Vec3> looks(static_cast<std::size_t>(nMu) * nPsi);
+                std::uint64_t seed = 0xa11ce087ULL + static_cast<std::uint64_t>(100 * tb + i);
+                for (std::size_t q = 0; q < looks.size(); q++) looks[q] = jitterLook(q, nMu, nPsi, seed);
+                const GasV Go = gasVel(a, ro, rms);
+                const double v = std::hypot(Go.vr, Go.vphi);
+                Camera cam; cam.r = ro; cam.theta = kPi / 2; cam.beta = v; cam.B = Vec3{Go.vr / v, 0, Go.vphi / v};
+                std::vector<std::pair<double, double>> smp(static_cast<std::size_t>(nMu) * nPsi, {-1.0, 0.0});
+                std::atomic<std::size_t> next{0};
+                const auto work = [&] {
+                    for (std::size_t k; (k = next.fetch_add(64)) < smp.size();)
+                        for (std::size_t q = k; q < std::min(smp.size(), k + 64); q++) {
+                            const Vec3 look = looks[q];
+                            Ray r0;
+                            if (!ch.launch(cam, look, r0)) continue;
+                            const double b = r0.c[0], eo = gasEnergy(a, Go, r0.y, b);
+                            std::vector<double> cr;
+                            TraceOptions o; o.rtol = 1e-8; o.atol = 1e-9; o.maxCross = 2; o.cross = &cr;
+                            trace(ch, cam, look, o);
+                            for (std::size_t k2 = 0; k2 + 5 <= cr.size(); k2 += 5) {
+                                const double re = cr[k2];
+                                if (k2 == 0 && std::fabs(re - ro) < 1e-6 * ro) continue;   // (the start, where reported)
+                                const double ge = eo / gasEnergy(a, gasVel(a, re, rms), &cr[k2], b);
+                                smp[q] = {returnY(a, re), ro * ro * ro * ge * ge * ge * ge / (re * re * re)};
+                                break;
+                            }
+                        }
+                };
+                std::vector<std::thread> th;
+                for (unsigned t = 1; t < std::max(1u, std::thread::hardware_concurrency()); t++) th.emplace_back(work);
+                work();
+                for (auto& t : th) t.join();
+                for (int j = 0; j < 10; j++) {
+                    const double yc = 0.05 + 0.1 * j;
+                    const Cell c = cellOf(smp, smp.size(), yc);
+                    const double d = std::fabs(c.est - T[i][j]), bound = 0.0005 + 3 * c.sig;
+                    allCells++; allWorst = std::max(allWorst, d / bound);
+                    if (std::getenv("PL_BH_TFDUMP")) std::printf("TF a=%g yo=%.2f ye=%.2f lab=%.4f tab=%.3f sig=%.4f\n", a, yo, yc, c.est, T[i][j], c.sig);
+                    if (d > bound && doubtful(i, j) && c.est > std::min(T[i - 1][j], T[i + 1][j]) - bound && c.est < std::max(T[i - 1][j], T[i + 1][j]) + bound) {
+                        doubt++; std::printf("R11 doubtful printed value: Table %d (y_o %.2f, y_e %.2f) printed %.3f, computed %.4f +- %.4f (every cell's rays), between its neighbours %.3f and %.3f\n",
+                                             tb, yo, yc, T[i][j], c.est, bound, T[i - 1][j], T[i + 1][j]);
+                    } else if (d > bound) { allOver++; overList += " all(" + f(yo) + "," + f(yc) + "): " + f(c.est) + " vs " + f(T[i][j]) + " +- " + f(bound) + ";"; }
+                }
+            }
+        }
+        check(labCells > 10 && labOver == 0, "R11 (a): Table " + std::to_string(tb) + " (a/M = " + f(a) + "), the lab's rays: " + std::to_string(labCells) + " cells, " +
+              std::to_string(labOver) + " over the bound (worst " + f(labWorst) + " of it)" + overList);
+        check(allCells == 100 && allOver == 0, "R11 (a): Table " + std::to_string(tb) + " (a/M = " + f(a) + "), every cell: " + std::to_string(allOver) + " of 100 over the bound (worst " +
+              f(allWorst) + " of it; doubtful printed values between their neighbours: " + std::to_string(doubt) + ")");
+    }
+    // (b)
+    double last = -1; std::string fs;
+    bool grows = true;
+    for (double a : {0.0, 0.5, 0.9, 0.99}) {
+        const ReturnFlux F = returnFluxCpu(a);
+        fs += " " + f(F.fo.front());                                       // (the node at r_ms)
+        grows = grows && F.fo.front() > last;
+        last = F.fo.front();
+        check(F.iterations < 500, "R11: (8a)'s iteration converged at a = " + f(a) + " (" + std::to_string(F.iterations) + " steps)");
+    }
+    check(grows, "R11 (b): f_o at the innermost node grows with the spin (a = 0, 0.5, 0.9, 0.99:" + fs + ")");
+    // (c)
+    for (double a : {0.0, 0.99}) {
+        const ReturnFlux F = returnFluxCpu(a), G = returnFluxCpu(a, 48, 64, 2048);
+        double w = 0;
+        for (int k = 0; k <= 400; k++) {
+            const double r = discInner(a) * std::exp(std::log(2000 / discInner(a)) * k / 400) * (k == 0 ? 1.0001 : 1.0);
+            const double fg = discFlux(r, a);
+            w = std::max(w, std::fabs((fg + F.fluxAt(r)) / (fg + G.fluxAt(r)) - 1));
+        }
+        check(w < 0.01, "R11 (c): a = " + f(a) + ": F + F_o of the lab's grid within " + f(w) + " of the finer grid's (48 nodes, 64 x 2048 rays; limit 1 %)");
+    }
+    // (d)
+    {   Settings s = settingsDefaults(); applyPreset(s, kFeedingKey); setSpin(s, 0.99);
+        const ReturnFlux* R = returnFluxNow(0.99);
+        const DiscPhys P = discPhys(s);
+        check(R && P.ret == R, "R11 (d): the Real look's disc carries the spin's table once made");
+        double w = 0, share = 0;
+        for (double r : {1.5, 2.0, 3.0, 6.0, 20.0}) {
+            const double want = std::pow((P.flux(r) + P.fluxScale() * R->fluxAt(r)) / stefanBoltzmann(), 0.25);
+            w = std::max(w, std::fabs(P.temperature(r) / want - 1));
+            share = std::max(share, R->fluxAt(r) / discFlux(r, 0.99));
+        }
+        check(w < 1e-14, "R11 (d): T = ((F + F_o) / sigma)^(1/4)");
+        check(R->fluxAt(1.4) == 0 && R->fluxAt(1.46) > 0, "R11 (d): no returning flux inside r_ms (" + f(discInner(0.99)) + ")");
+        Settings f0 = s; setLook(f0, Look::Film);
+        check(discPhys(shown(f0)).ret == nullptr, "R11 (d): Film: no returning light");
+        double sent = 0, back = 0;                                              // the whole disc's: Int 2 pi r F dr (flat measure, a check of size only)
+        for (int k = 0; k < 4000; k++) {
+            const double r0 = discInner(0.99) * std::exp(std::log(1000 / discInner(0.99)) * k / 4000.0), r1 = discInner(0.99) * std::exp(std::log(1000 / discInner(0.99)) * (k + 1) / 4000.0);
+            const double rm = 0.5 * (r0 + r1);
+            sent += 2 * kPi * rm * discFlux(rm, 0.99) * (r1 - r0); back += 2 * kPi * rm * R->fluxAt(rm) * (r1 - r0);
+        }
+        check(back > 0 && back < sent, "R11 (d): the returning light, " + f(back / sent) + " of the generated light at a = 0.99, is less than it");
+        (void)share;
     }
 }
 
@@ -3654,6 +4054,7 @@ int main() {
     if (const char* only = std::getenv("PL_BH_ONLY")) {             // (by hand: one of 0.79.0's tests)
         if (!std::strcmp(only, "height")) { testDiscHeight(); testDiscHeightSpin(); testDiscWords(); }
         if (!std::strcmp(only, "streaks")) testStreaks();
+        if (!std::strcmp(only, "real")) { testColourCorrection087(); testLimb087(); testReturning087(); }   // 0.87.0: the disc's real light
         if (!std::strcmp(only, "surface")) testDiscSurface();
         if (!std::strcmp(only, "hot")) { testHotModel(); testHotEmissivity(); testHotTransfer(); testHotSpectrum(); testHotColour(); }
         std::printf("%d checks, %d failed\n", g_checks, g_failed);
@@ -3716,6 +4117,9 @@ int main() {
     testTimedOnRequest();
     testAllLight();
     testTone();
+    testColourCorrection087();
+    testLimb087();
+    testReturning087();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

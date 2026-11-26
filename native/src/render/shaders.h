@@ -543,6 +543,29 @@ void main() {
 }
 )";
 
+// 0.87.0 (blackhole/disc.h, THE DISC'S REAL LIGHT; native/PLAN_REVIEW.md R9-R11): the disc's light rules shared by kLensFS, kKerrFS and kKerrSkyFS (placed in
+// each by the build's part lists: CMakeLists.txt, tests/check_shaders.py ASSEMBLED, render/kerr_sky.cpp). uDL: x the colour correction's lowest temperature
+// (R9, disc.h colourCorrection: Done et al. 2012 (1), (2) at the gas's own effective temperature): 3e4 K, or 1e30 for off; y unused; z the gas's own
+// temperature over uDT.x F^(1/4) (kLensFS: 1 / the camera's own shift that lab.cpp folds into uDT.x; else 1). uLimb: R10 (below; off: every node 1).
+// Written for size: kKerrSkyFS is near its limit (tests/check_shaders.py), so "off" is data, not a branch.
+// The returning light (R11) is in the flux the shaders already read (kKerrFS, kKerrSkyFS: uDF; kLensFS: uRet).
+static const char* const kDiscLightPart = R"(
+uniform vec4 uDL;
+float fcolOf(float T) {                                // disc.h colourCorrection: 1 up to 3e4 K, Equation (2) to 1e5 K, Equation (1) above (k_B in keV/K)
+    if (!(T > uDL.x)) return 1.0;                        // (uDL.x: 3e4 K, or 1e30 for off)
+    bool lo = T < 1.0e5;                                 // (one pow: Equation (2) or (1); 72 keV / k_B = 72 / 8.617333262e-8 K)
+    return pow(lo ? T / 3.0e4 : (72.0 / 8.617333262e-8) / T, lo ? 0.82 : 1.0 / 9.0);
+}
+// disc.h limbDarkening (Chandrasekhar 1946 Table 2 through the 4-point cubic, over N) at mu = k / 40, k = 0 .. 40, made by the CPU (disc.h limbFine; node k at
+// uLimb[k / 4][k % 4]), linear between them (within 7.3e-5 of the cubic, measured: tests/test_blackhole.cpp testLimb087). A uniform, not the table and its cubic here: kKerrSkyFS's size limit.
+uniform vec4 uLimb[11];
+float limbOf(float mu) {                              // (off: every node 1)
+    float q = clamp(mu, 0.0, 1.0) * 40.0;
+    int i = min(int(q), 39), j = i + 1;
+    return mix(uLimb[i >> 2][i & 3], uLimb[j >> 2][j & 3], q - float(i));
+}
+)";
+
 // 0.55.0, the Black Hole Lab: our sky seen past a non-spinning black hole at the middle (uCentre, window pixels, y up) of the picture, uKpx pixels per radian, by the
 // night sky's projection (the angle from the middle is the distance from it). Each pixel's ray: the angle from the shadow's edge, x = th - alpha_sh, is formed
 // without cancelling, x_px = (r^2 - e^2) / (r + e) with r^2 exact (half-integer offsets from an integer centre) and e^2 given as two floats (uEdge = e, e^2 hi, lo);
@@ -692,10 +715,20 @@ vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (tim
     q *= q;
     return y > 0.0 ? c * (q * q * s / y) : vec3(0.0);
 }
-vec3 discColourRaw(float r, float g, float gf) {
+// 0.87.0 R11: the returning flux F_o (blackhole/returning.h) against ln r (uRetR: ln r of the first value, the step, the count, 1 if there is a table)
+uniform sampler2D uRet;
+uniform vec4 uRetR;
+float retAt(float r) {
+    if (uRetR.w < 0.5) return 0.0;
+    float q = clamp((log(r) - uRetR.x) / uRetR.y, 0.0, uRetR.z - 1.001);
+    int i = int(q);
+    return mix(texelFetch(uRet, ivec2(i, 0), 0).r, texelFetch(uRet, ivec2(i + 1, 0), 0).r, q - float(i));
+}
+vec3 discColourRaw(float r, float g, float gf, float mu) {   // 0.87.0: mu, the cosine of the emission angle in the gas's frame (kDiscLightPart)
     float sr = sqrt(r), s3 = 1.7320508, s6 = 2.4494897;
-    float F = 3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3)))) * gf;
-    float T = uDT.x * pow(max(F, 0.0), 0.25) * g;
+    float F = (3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3)))) + retAt(r)) * gf;
+    float T0 = uDT.x * pow(max(F, 0.0), 0.25), fc = fcolOf(T0 * uDL.z);   // 0.87.0 R9: the colour temperature g f T, the light f^-4 (disc.h)
+    float T = T0 * g * fc;
     if (!(T > 0.0)) return vec3(0.0);
     float q = (log(T) * 0.43429448 - uDT.z) / uDT.w;
     if (q < 0.0) return vec3(0.0);
@@ -703,8 +736,10 @@ vec3 discColourRaw(float r, float g, float gf) {
     int i = int(q);
     vec3 c = mix(texelFetch(uDC, ivec2(i, 0), 0).rgb, texelFetch(uDC, ivec2(i + 1, 0), 0).rgb, q - float(i)) * gInv;
     if (uAll > 0.0) c = allLight(c, gInv, T);
-    return c;
+    return c * (limbOf(mu) / (fc * fc * fc * fc));
 }
+// 0.87.0 R10 (disc.h emissionCos): spin 0, the ray's Carter constant on the equator q = b^2 - Lz^2 = b^2 (1 - (Lz/b)^2), mu = g q^(1/2) / r
+float emitCos0(float g, float b, float LzB, float r) { return clamp(g * abs(b) * sqrt(max(1.0 - LzB * LzB, 0.0)) / r, 0.0, 1.0); }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0);
@@ -789,7 +824,8 @@ void main() {
     if (uExp == 1) {
         for (int k = 0; k < 4; k++)
             if (rk[k] >= uDR.z && rk[k] <= uDR.w) {
-                vec3 c = discColourRaw(rk[k], sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB), 1.0);
+                float ge = sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB);
+                vec3 c = discColourRaw(rk[k], ge, 1.0, emitCos0(ge, b, LzB, rk[k]));
                 float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
                 fragColor = vec4(max(c.r, max(c.g, c.b)), y, y, 1.0);   // (0.70.0: Y again for the log-average, kExpSumFS)
                 return;
@@ -822,7 +858,7 @@ void main() {
             if (isnan(gf) || isinf(gf)) gf = 1.0;
         }
         if (uDebug == 3) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
-        vec3 cr = discColourRaw(rc, g, gf);
+        vec3 cr = discColourRaw(rc, g, gf, emitCos0(g, b, LzB, rc));
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
@@ -844,7 +880,7 @@ void main() {
 // rIn <= r <= rOut, g = C75 (A9) from r and b (spin.h discShiftKerr: alpha, omega, varpi of J15 (A.2) on the equator, Omega = 1 / (r^(3/2) + a)), T = uDT.x
 // F(r)^(1/4) with F^(1/4) from uDF (Page and Thorne's flux at this spin, against ln r), the colour as kLensFS. uDebug 1: (far direction on the chart's axes,
 // x_px), uDebug 2: (order, r, g, x_px).
-static const char* const kKerrFS = R"(#version 330 core
+static const char* const kKerrHeadPart = R"(#version 330 core
 in vec2 vUV;
 uniform sampler2D uTex;
 uniform sampler2D uKA;
@@ -928,6 +964,8 @@ float shiftKerr(float r, float b) {                       // C75 (A9) on the equ
     float Om = 1.0 / (r * sqrt(r) + a), V = (Om - om) * vp / al;
     return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
 }
+)";
+static const char* const kKerrMainPart = R"(
 uniform float uAll;                                   // 0.58.0: 0 the eye's light; > 0 All light, 1 / T_sun (blackhole/disc.h allLightLinear)
 vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (times s) of a black body at T scaled so its luminance is (T / T_sun)^4 (times s);
     float y = dot(c, vec3(0.2126, 0.7152, 0.0722)), q = T * uAll;   // called only when uAll > 0 (the eye's picture keeps 0.57's operations)
@@ -937,14 +975,15 @@ vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (tim
 // 0.84.0: the held camera's own shift (blackhole/lab.h heldCameraShift): f_c/f' = uFido.x - b uFido.y = (1 - b omega) / alpha at the camera (J15 (A.16),
 // beta = 0), uFido = (1 / alpha, omega / alpha); (1, 0): none (Film, the card's own checks). The disc's colour temperature is g f T.
 uniform vec2 uFido;
-vec3 discColourRaw(float r, float g) {
+vec3 discColourRaw(float r, float g, float mu) {      // 0.87.0: mu, the cosine of the emission angle in the gas's frame (kDiscLightPart)
     if (uDFix.w > 0.0) return uDFix.rgb;                 // 0.55.3, Film: one colour all over the disc, no shift (blackhole/looks.h)
     float q = (log(r) - uDR.z) / uDR.w;
     if (q < 0.0) return vec3(0.0);
     q = min(q, float(uDN.x - 1) - 0.001);
     int i = int(q);
     float f4 = mix(texelFetch(uDF, ivec2(i, 0), 0).r, texelFetch(uDF, ivec2(i + 1, 0), 0).r, q - float(i));
-    float T = uDT.x * f4 * g;
+    float fc = fcolOf(uDT.x * f4 * uDL.z);               // 0.87.0 R9: the colour temperature g f T, the light f^-4 (disc.h)
+    float T = uDT.x * f4 * g * fc;
     if (!(T > 0.0)) return vec3(0.0);
     float c = (log(T) * 0.43429448 - uDT.z) / uDT.w;
     if (c < 0.0) return vec3(0.0);
@@ -952,7 +991,18 @@ vec3 discColourRaw(float r, float g) {
     int k = int(c);
     vec3 col = mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k)) * uDT.y;
     if (uAll > 0.0) col = allLight(col, uDT.y, T);
-    return col;
+    return col * (limbOf(mu) / (fc * fc * fc * fc));
+}
+// 0.87.0 R10 (disc.h emissionCos): the ray's Carter constant from its direction at the camera (kKerrSkyTracePart's launch, the same numbers uCam, uMet), the
+// table's b as lambda; on the equator mu = g q^(1/2) / r
+uniform vec4 uCam;
+uniform vec4 uMet;
+float emitCosK(float th, float chi, float lam, float g, float r) {
+    float a = uCam.x, cth = uCam.z, sth = max(uCam.w, 1e-6);
+    float nth = -sin(th) * cos(chi), nph = -sin(th) * sin(chi);
+    float EF = 1.0 / (uMet.x + uMet.y * uMet.z * nph), pth = EF * uMet.w * nth;
+    float eta = pth * pth + cth * cth * (lam * lam / (sth * sth) - a * a);
+    return clamp(g * sqrt(max(eta, 0.0)) / r, 0.0, 1.0);
 }
 uniform int uTone;                                    // 0.70.0 (blackhole/tone.h): 1 the Real look's camera curve (Reinhard et al. 2002 eq. (4)) on luminance,
 uniform float uEV;                                    // its chromaticity kept; 0 the screen's white (Film). uEV: stops from automatic; uKey: a of eq. (2); uLw: the
@@ -1014,7 +1064,8 @@ void main() {
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.x, uDR.y);
-        vec3 cr = discColourRaw(rc, shiftKerr(rc, b) * (uFido.x - b * uFido.y));   // 0.84.0: times the held camera's own f_c/f' for this ray's b
+        float ge = shiftKerr(rc, b);
+        vec3 cr = discColourRaw(rc, ge * (uFido.x - b * uFido.y), emitCosK(min(th, PI), chi, b, ge, rc));   // 0.84.0: times the held camera's own f_c/f' for this ray's b
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
@@ -2676,16 +2727,17 @@ uniform int uGas;                                     // 0.72.0: 1 the moving ga
 uniform float uGasTau;                                // root, so the colour follows; Film: the one colour times it); uGasTau: the far time now since the epoch (M);
 uniform float uGasCam;                                // uGasCam: the camera's phi (the crossings' phi are from it)
 uniform vec2 uFido;                                   // 0.84.0: the held camera's own shift f_c/f' = uFido.x - b uFido.y (as kKerrFS; (1, 0): none)
-vec3 discLightRaw(float r, float g, float gf) {
+vec3 discLightRaw(float r, float g, float gf, float mu) {   // 0.87.0: mu, the cosine of the emission angle in the gas's frame (kDiscLightPart)
     if (uDFix.w > 0.0) return uDFix.rgb * gf;
     float q = (log(r) - uDR.z) / uDR.w;
     if (q < 0.0) return vec3(0.0);
     q = min(q, float(uDN.x - 1) - 0.001);
     int i = int(q);
     float f4 = mix(texelFetch(uDF, ivec2(i, 0), 0).r, texelFetch(uDF, ivec2(i + 1, 0), 0).r, q - float(i));
-    float T = uDT.x * f4 * g * sqrt(sqrt(gf));
+    float T0 = uDT.x * f4 * sqrt(sqrt(gf)), fc = fcolOf(T0 * uDL.z);   // 0.87.0 R9: the colour temperature g f T, the light f^-4 (disc.h)
+    float T = T0 * g * fc;
     if (!(T > 0.0)) return vec3(0.0);
-    return lightOfT(T);
+    return lightOfT(T) * (limbOf(mu) / (fc * fc * fc * fc));
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }
 uniform int uGasFoot;                                 // 0.81.0 (tests): 0 the streaks read with no footprint (as kLensFS's uGasFoot)
@@ -2756,7 +2808,7 @@ void main() {
             if (isnan(gf) || isinf(gf)) gf = 1.0;
         }
         if (uMode == 5) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
-        vec3 raw = discLightRaw(rc, g * fc, gf);
+        vec3 raw = discLightRaw(rc, g * fc, gf, g * sqrt(max(R.q, 0.0)) / rc);   // 0.87.0 R10: mu = g q^(1/2) / r (disc.h emissionCos; limbOf holds it to [0, 1])
         if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }
         if (uMode == 10) { float y = dot(raw, vec3(0.2126, 0.7152, 0.0722)); fragColor = vec4(max(raw.r, max(raw.g, raw.b)), y, y, 1.0); return; }   // (0.70.0: Y again, kExpSumFS)
         vec3 cr = raw * inv;

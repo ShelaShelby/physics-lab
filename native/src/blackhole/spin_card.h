@@ -29,6 +29,10 @@ std::shared_ptr<SpinTable> cardTableNow(render::IKerrCompute& K, double a, doubl
 struct CardRay { SpinHit h; int end = 0, steps = 0; double y[5] = {0, 0, 0, 0, 0}; double q = 0; };
 void cardRays(render::IKerrCompute& K, double a, double rC, double thC, const std::vector<double>& psiChi, std::vector<CardRay>& out, double rtol = 1e-10);
 void cardEdges(render::IKerrCompute& K, double a, double rC, double thC, const std::vector<double>& chi, std::vector<double>& out);
+// 0.87.0 R11: the returning light's table made on the card (returning.h's rays and solve), waiting: for the checks (the app's own path is blackhole_view's
+// pumpReturn, a piece a frame). null-free: a ray the card did not answer counts as bringing nothing (counted in *unanswered)
+struct ReturnFlux;
+ReturnFlux cardReturnFlux(render::IKerrCompute& K, double a, int nodes, int nMu, int nPsi, int* unanswered = nullptr);
 
 // the start-up check's limits against the processor (spinRay, shadowEdge): the edge (rad), the far direction (rad), b and each u (relative to 1 + |value|);
 // the rays' ends (sky or horizon) must be equal. Measured (REPORT 0.55.6): the processor's own rays move by up to 2.5e-12 rad, u by 5.5e-10 when psi moves

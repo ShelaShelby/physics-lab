@@ -1,6 +1,9 @@
 #include "blackhole/disc.h"
+#include "blackhole/returning.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <string>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -97,9 +100,22 @@ double eddingtonRate(double m) { return 10 * eddingtonLuminosity(m) / (kC * kC);
 double DiscPhys::mdot() const { return lEdd * eddingtonLuminosity(massSun) / (discEfficiency(aSigned) * kC * kC); }
 double DiscPhys::fluxScale() const { const double rg = gravRadiusM(massSun); return mdot() * kC * kC / (rg * rg); }
 double DiscPhys::flux(double r) const { return fluxScale() * discFlux(r, aSigned); }
-double DiscPhys::temperature(double r) const { return std::pow(std::max(0.0, flux(r)) / stefanBoltzmann(), 0.25); }
+double DiscPhys::fluxOut(double r) const { return flux(r) + (ret ? fluxScale() * ret->fluxAt(r) : 0.0); }
+double DiscPhys::temperature(double r) const { return std::pow(std::max(0.0, fluxOut(r)) / stefanBoltzmann(), 0.25); }
 double DiscPhys::hottest(double* where) const {
-    const double r = fluxMaxRadius(aSigned);
+    double r = fluxMaxRadius(aSigned);
+    if (ret) {                                                                  // 0.87.0: the returning flux moves the largest inward: golden-section on F + F_o
+        const double r0 = discInner(aSigned), l0 = std::log(r0), l1 = std::log(4 * r);   // (a scan in ln r for its bracket first: F_o is piecewise linear in y)
+        double lb = l0, best = -1;
+        for (int i = 0; i <= 400; i++) { const double l = l0 + (l1 - l0) * i / 400, v = fluxOut(std::exp(l)); if (v > best) { best = v; lb = l; } }
+        double a = std::max(l0, lb - (l1 - l0) / 400), b = std::min(l1, lb + (l1 - l0) / 400);
+        const double gr = (std::sqrt(5.0) - 1) / 2;
+        for (int i = 0; i < 80; i++) {
+            const double c = b - gr * (b - a), d = a + gr * (b - a);
+            if (fluxOut(std::exp(c)) > fluxOut(std::exp(d))) b = d; else a = c;
+        }
+        r = std::exp(0.5 * (a + b));
+    }
     if (where) *where = r;
     return temperature(r);
 }
@@ -242,6 +258,58 @@ std::array<double, 3> allLightLinear(double T) {
     const double k = bolometricVsSun(T) / y;
     for (double& v : c) v *= k;
     return c;
+}
+
+// 0.87.0 R9 (disc.h): Done et al. 2012 Equations (1), (2), combined per radius
+DiscLightRules& discLightRules() {
+    static DiscLightRules r = [] {                                          // (tests: PL_BH_REALOFF=fcol,limb,returning switches each off on the CPU and the card alike)
+        DiscLightRules d;
+        if (const char* e = std::getenv("PL_BH_REALOFF")) { const std::string s(e); d.fcol = s.find("fcol") == std::string::npos; d.limb = s.find("limb") == std::string::npos; d.returning = s.find("returning") == std::string::npos; }
+        return d;
+    }();
+    return r;
+}
+double fcolDoneEq1(double T) {
+    const double kBkeV = kK / 1.602176634e-19 / 1000;                       // keV per K (SI: k and e exact)
+    return std::pow(72 / (kBkeV * T), 1.0 / 9);
+}
+double fcolDoneEq2(double T) { return std::pow(T / kFcolLow, 0.82); }
+double colourCorrection(double T) {
+    if (!(T > kFcolLow)) return 1;
+    return T < kFcolMid ? fcolDoneEq2(T) : fcolDoneEq1(T);
+}
+// 0.87.0 R10 (disc.h): Chandrasekhar 1946 Table 2, the column [Il(0,mu) + Ir(0,mu)] / F (the extract, p. 365)
+const double kLimbTable[kLimbN] = {0.4151, 0.5120, 0.6023, 0.6890, 0.7735, 0.8567, 0.9390, 1.0206, 1.1017, 1.1824, 1.2628};
+double limbRaw(double mu) {
+    mu = std::clamp(mu, 0.0, 1.0);
+    const double q = mu * (kLimbN - 1);
+    const int i = std::clamp(static_cast<int>(q), 1, kLimbN - 3);
+    const double u = q - i;                                                   // the stencil i-1 .. i+2, u in [-1, 2]
+    const double w0 = -u * (u - 1) * (u - 2) / 6, w1 = (u + 1) * (u - 1) * (u - 2) / 2, w2 = -(u + 1) * u * (u - 2) / 2, w3 = (u + 1) * u * (u - 1) / 6;
+    return w0 * kLimbTable[i - 1] + w1 * kLimbTable[i] + w2 * kLimbTable[i + 1] + w3 * kLimbTable[i + 2];
+}
+double limbNormRaw() {
+    static const double n = [] {
+        const double x[3] = {-std::sqrt(0.6), 0, std::sqrt(0.6)}, w[3] = {5.0 / 9, 8.0 / 9, 5.0 / 9};
+        const double h = 1.0 / (kLimbN - 1);
+        double s = 0;
+        for (int k = 0; k + 1 < kLimbN; k++)
+            for (int j = 0; j < 3; j++) { const double mu = h * k + 0.5 * h * (1 + x[j]); s += 0.5 * h * w[j] * limbRaw(mu) * mu; }
+        return 2 * s;
+    }();
+    return n;
+}
+double limbDarkening(double mu) { return limbRaw(mu) / limbNormRaw(); }
+std::array<double, kLimbFineN> limbFine() {
+    std::array<double, kLimbFineN> t{};
+    for (int k = 0; k < kLimbFineN; k++) t[static_cast<std::size_t>(k)] = limbDarkening(double(k) / (kLimbFineN - 1));
+    return t;
+}
+double emissionCos(double g, double q, double r) { return std::clamp(g * std::sqrt(std::max(q, 0.0)) / r, 0.0, 1.0); }
+double dilutedPlanck(double nu, double T, double f) {
+    if (!(nu > 0) || !(T > 0) || !(f > 0)) return 0;
+    const double Tc = f * T;
+    return 2 * kH * nu * nu * nu / (kC * kC) / std::expm1(kH * nu / (kK * Tc)) / (f * f * f * f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------

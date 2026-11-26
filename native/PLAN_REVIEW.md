@@ -7,7 +7,7 @@ Every number below comes from a saved source. Each source has a line in native/d
 ## The order
 - **0.85.0 Orbit Lab**: R1 true dimming and exposure, R2 the Sun's edge (and the same law in the eclipse code), R3 sunspots, R4 the Oort cloud.
 - **0.86.0 Atom Lab and Film**: R5 the made-up learning pictures labelled, R6 Film cleaned, R7 the Dirac citation, R8 the old Lamb-shift comment.
-- **0.87.0 Black Hole disc**: R9 colour-correction factor, R10 limb darkening, R11 returning radiation. (R12 spinning thickness: moved to 0.86.0.)
+- **0.87.0 Black Hole disc**: R9 colour-correction factor, R10 limb darkening, R11 returning radiation. (R12 spinning thickness: moved to 0.86.0.) -- DONE in 0.87.0
 - **Later (sources found, not in the three jobs)**: R13 Earth's air (ozone, aerosol), R14 the giants' limb darkening and the moons' opposition surge.
 - The owner's answers of 25 Nov 2026 (DECISIONS.md): R3's table is in the public repo; R4's dots sample a published model and Sedna-like objects are shown with the sentence.
 
@@ -107,7 +107,7 @@ Rules for every job below: the tests are written first and fail on the old build
 
 ---
 
-## R9. The disc's colour-correction factor (0.87.0)
+## R9. The disc's colour-correction factor (0.87.0) -- DONE in 0.87.0
 - **Sources**: Shimura & Takahara 1995 (ApJ 445, 780; scan, typed; extract native/data/blackhole/scans/shimura_takahara_1995_ApJ445_780.extract.txt): f ~ 1.7 at about 10 % of the Eddington rate, f ~ 1.8-2.0 near it.
   Below 1 % no f fits. Only for black holes of 1.4, 3 and 10 M_sun (abstract). **Not enough** alone: the lab's mass runs from 1 to 1e11 M_sun (lab.h kMassMin, kMassMax).
   Done et al. 2012 (MNRAS, doi:10.1111/j.1365-2966.2011.19779.x, arXiv:1107.5429; extract native/data/blackhole/arxiv/1107.5429_done2012.extract.txt): f_col ~ (72 / T_keV)^(1/9) where electron scattering dominates (Equation 1, above 1e5 K).
@@ -119,7 +119,7 @@ Rules for every job below: the tests are written first and fail on the old build
 - **Tests**: (a) Integral of f^-4 B_nu(f T) d nu = sigma T^4 / pi for f = 1.0, 1.7, 2.7 (conservation). (b) f_col at 2e4 K = 1. f_col at 1e5 K from (1) and from (2) within 2 % of each other (both "~2.7"). (c) GPU disc pixels against the CPU.
 - **GPU path**: f_col(T) is an analytic function in the disc shaders (kKerrFS, the lens and sky passes), the same as the CPU reference. No table.
 
-## R10. The disc's limb darkening (0.87.0)
+## R10. The disc's limb darkening (0.87.0) -- DONE in 0.87.0 (N = 0.99142 with the cubic, measured; the GPU reads a 41-point table of the cubic, its size limit)
 - **Source**: Chandrasekhar 1946, ApJ 103, 351 ("Radiative equilibrium of a stellar atmosphere. X"), Table 2, p. 365: the emergent intensity of a semi-infinite electron-scattering (Rayleigh phase function, polarised) atmosphere.
   11 values of mu from 0 to 1, in the "third approximation". Extract: native/data/blackhole/scans/chandrasekhar_1946_ApJ103_351.extract.txt (column [Il + Ir]/F).
   The typed table passes all its internal relations (sums, ratios, the degree of polarisation) to 1-3 units of the last digit.
@@ -132,7 +132,7 @@ Rules for every job below: the tests are written first and fail on the old build
 - **Tests**: (a) the flux normalisation integral equals 1 after the division (quadrature). (b) Face-on (mu_e = 1) and grazing (mu_e -> 0) ratios equal the table's. (c) GPU against CPU at 85 degrees from the pole.
 - **GPU path**: an 11-point table as a constant array in the disc shaders.
 
-## R11. Returning radiation (0.87.0)
+## R11. Returning radiation (0.87.0) -- DONE in 0.87.0 (every one of the 200 T_f cells within its bound but Table 2's (0.85, 0.75), printed 0.234, computed 0.380: REPORT 0.87.0)
 - **Source**: Cunningham 1976, ApJ 208, 534 (scan, typed; extract native/data/blackhole/scans/cunningham_1976_ApJ208_534.extract.txt). The flux returning to a thin disc by gravitational focusing is "unimportant for thin disks around non-rotating black holes".
   It is significant for a/M ~ 1. Computed for a/M = 0.9, 0.99, 0.9981, 0.9999. Transfer functions T_f(y_o, y_e) and T_s (Equation 7a), y = (r/r+)^-2 (6b).
   The returning flux f_o(y_o) = Integral_0^1 T_f(y_o, y_e) [f_o(y_e) + f_g(y_e)] dy_e (8a). Tables 1-4 give T_f and T_s on a 10 x 10 grid (y = 0.05 ... 0.95) for each spin.

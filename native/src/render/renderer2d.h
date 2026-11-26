@@ -294,6 +294,12 @@ public:
         double rO = 20, rIn = 6, rOut = 30, tScale = 0, white = 1, colLog0 = 0, colDlog = 1;
         float lp[4] = {0, 0, 0, 0};          // 0.58.0: the light check's pass (kKerrSkyFS uMode 11: corner x, y, width, pixels; set by skyProbe)
         double allInvTsun = 0;              // 0.58.0, All light (blackhole/lab.h allLightOn): 1 / T_sun; 0: the eye's light (the shaders' uAll)
+        // 0.87.0 (blackhole/disc.h, THE DISC'S REAL LIGHT): the shaders' uDL (render/shaders.h kDiscLightPart): the colour correction's lowest temperature
+        // (3e4 K; 1e30: off), unused, the gas's own temperature over tScale F^(1/4) (spin 0: 1 / the camera's own shift; else 1), unused
+        float discLight[4] = {1e30f, 0, 1, 0};
+        float limb[44] = {};                // 0.87.0 R10: blackhole/disc.h limbFine (uLimb, 11 x vec4: 41 nodes and 3 unused); every node 1 for off
+        const std::vector<float>* retF = nullptr;   // 0.87.0 R11, spin 0 (kLensFS uRet): the returning flux against ln r (retN values from retLog0 in steps retDl)
+        int retN = 0; double retLog0 = 0, retDl = 1; std::uint64_t retVersion = 0;
         // 0.55.2: the spinning hole (kKerrFS, blackhole/spin_sky.h SpinTable), used when kerr is true (then table, alphaSh and the disc's a = 0 table are not).
         // kA (dir, b) and kB (u0..u3): kS columns x 2 kChi rows; kEdge: kEdgeN edge samples; kTau: kEdgeN + 1 values of tau. kM: the chart's axes (camera at
         // phi = 0) to galactic, through the camera's phi and the view; kO: the screen directions (right, up) of e_theta and e_phi. discF: F^(1/4) against ln r

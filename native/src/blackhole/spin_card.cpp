@@ -1,4 +1,5 @@
 #include "blackhole/spin_card.h"
+#include "blackhole/returning.h"
 
 #include <algorithm>
 #include <chrono>
@@ -55,6 +56,30 @@ void cardRays(render::IKerrCompute& K, double a, double rC, double thC, const st
         for (int i = 0; i < 5; i++) r.y[i] = n[10 + i];
         r.q = n[15];
     }
+}
+
+ReturnFlux cardReturnFlux(render::IKerrCompute& K, double a, int nodes, int nMu, int nPsi, int* unanswered) {
+    std::vector<std::vector<ReturnHit>> hits(static_cast<std::size_t>(nodes));
+    std::vector<std::vector<double>> w(static_cast<std::size_t>(nodes));
+    int bad = 0;
+    for (int k = 0; k < nodes; k++) {
+        const double rO = returnNode(a, k, nodes), sh = returnShare(a, rO);
+        const std::vector<double> pc = returnPsiChi(a, rO, returnLooks(nMu, nPsi, sh)), par = cardParams(a, rO, kPi / 2);
+        w[std::size_t(k)] = returnWeights(nMu, nPsi, sh);
+        std::vector<ReturnHit>& H = hits[std::size_t(k)];
+        H.assign(pc.size() / 2, ReturnHit{});
+        for (std::size_t at = 0; at < H.size(); at += render::IKerrCompute::kPiece) {
+            const std::size_t n = std::min<std::size_t>(render::IKerrCompute::kPiece, H.size() - at);
+            std::vector<double> raw;
+            K.rays(par, std::vector<double>(pc.begin() + std::ptrdiff_t(2 * at), pc.begin() + std::ptrdiff_t(2 * (at + n))), raw);
+            for (std::size_t q = 0; q < n; q++) {
+                if (16 * q + 16 > raw.size() || !std::isfinite(raw[16 * q + 3])) { bad++; continue; }
+                H[at + q] = returnHitOf(a, rO, raw[16 * q + 3], &raw[16 * q + 4], kSpinCross);
+            }
+        }
+    }
+    if (unanswered) *unanswered = bad;
+    return returnSolve(a, hits, w);
 }
 
 void cardEdges(render::IKerrCompute& K, double a, double rC, double thC, const std::vector<double>& chi, std::vector<double>& out) {

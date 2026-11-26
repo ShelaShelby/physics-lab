@@ -247,6 +247,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
     (void)P;
     const double ph = std::atan2(v.ca * v.sb, v.sa * v.sb), cph = std::cos(ph), sph = std::sin(ph), th = s.pitch;
     const Vec3 er{std::sin(th) * cph, std::sin(th) * sph, std::cos(th)}, et{std::cos(th) * cph, std::cos(th) * sph, -std::sin(th)}, ep{-sph, cph, 0};
+    double atTh = 0, atChi = 0;                                           // (0.87.0: the last ray's angles, for its emission angle)
     const auto at = [&](double X, double Y, SpinHit& h, SpinDisc& d) {
         const double dx = X - v.cx, dy = v.cy - Y, dd = std::hypot(dx, dy), t = dd / v.K;
         if (!(t <= kPi)) return false;
@@ -254,6 +255,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
         if (chi < 0) chi += 2 * kPi;
         h = T.lookup(t, chi);
         d = spinDisc(h, s.spin, g.rIn, g.rOut);
+        atTh = t; atChi = chi;
         return true;
     };
     double white = 0;
@@ -262,7 +264,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
             SpinHit h; SpinDisc d;
             if (!at(x, y, h, d) || d.order < 0) continue;
             DiscPixel q;
-            discLightSeen(s, d.r, d.g, h.b, q);                           // (Real: blackBodyLinearFast(g f T(r)), 0.84.0 with the camera's own f; Film: the one colour)
+            discLightSeen(s, d.r, d.g, h.b, spinEmissionCos(s, atTh, atChi, d.g, d.r), q);   // (Real: 0.84.0 with the camera's own f, 0.87.0 the real light; Film: the one colour)
             const auto c = q.rgb;
             white = std::max({white, c[0], c[1], c[2]});
         }
@@ -300,7 +302,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
                 if (!at(X, Y, h, d)) continue;
                 if (d.order >= 0) {
                     DiscPixel dq;
-                    discLightSeen(s, d.r, d.g, h.b, dq);
+                    discLightSeen(s, d.r, d.g, h.b, spinEmissionCos(s, atTh, atChi, d.g, d.r), dq);
                     const auto c = dq.rgb;
                     const double m = std::max({c[0], c[1], c[2]}) / white;
                     for (int q = 0; q < 3; q++) { lin[q] += c[q] / white / std::max(1.0, m); dl[q] += c[q] / white / std::max(1.0, m); rl[q] += c[q] / white; }

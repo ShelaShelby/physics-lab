@@ -231,6 +231,7 @@ double benchPlannedS() {
 // 0.85.0: 30 scenes (orbit.true_light, orbit.sun_edge, orbit.oort_region) and 45 waits (response.sunspot_table): 291.0 s planned. The owner raised the limit
 // once to 4.9 minutes for them (25 Nov 2026, DECISIONS.md).
 // 0.86.0: 30 scenes: orbit.true_light_stars in place of blackhole.film_soft (removed with Film's see-through disc, R6), the same 291.0 s.
+// 0.87.0: 46 waits (response.blackhole_return, done once): 292.6 s planned, under the 4.9 minutes. No new scene: the real light adds no pass.
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= kBenchLimitS,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,

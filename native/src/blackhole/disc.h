@@ -72,12 +72,15 @@ constexpr double kThinMin = 0.015, kThinMax = 0.3;  // L / L_Edd where the thin-
 double stefanBoltzmann();                           // W m^-2 K^-4
 double eddingtonLuminosity(double massSun);         // W: 4 pi G M c / kappa_es (YN footnote 1)
 double eddingtonRate(double massSun);               // kg/s: YN's Mdot_Edd = 10 L_Edd / c^2 (only to check YN's printed number)
+struct ReturnFlux;
 struct DiscPhys {                                   // a disc in numbers
     double massSun = 1e8, lEdd = 0.1, aSigned = 0;  // mass, L / L_Edd, spin
+    const ReturnFlux* ret = nullptr;                // 0.87.0 R11 (returning.h): the returning flux; temperature() adds it (flux() stays the generated flux)
     double mdot() const;                            // kg/s: L = (1 - E(r_ms)) Mdot c^2 = lEdd L_Edd
     double fluxScale() const;                       // W/m^2 per unit of discFlux: Mdot c^2 / r_g^2
     double flux(double r) const;                    // W/m^2, per face
-    double temperature(double r) const;             // K: (F / sigma)^(1/4)
+    double temperature(double r) const;             // K: (F / sigma)^(1/4); 0.87.0: ((F + F_o) / sigma)^(1/4) with the returning flux F_o (ret)
+    double fluxOut(double r) const;                 // 0.87.0: W/m^2 sent per face: F + F_o
     double hottest(double* where = nullptr) const;  // the largest temperature and its radius (M)
     // 0.79.0: the true thickness (below): h (M) at r, radiation pressure only (hRad) and with the gas's pressure (height); 0 at and inside r_ms
     double heightRad(double r) const;
@@ -137,6 +140,45 @@ std::array<double, 3> blackBodyLinearFast(double T);
 constexpr double kLumR = 0.2126, kLumG = 0.7152, kLumB = 0.0722;   // IEC 61966-2-1: Y of linear sRGB
 double bolometricVsSun(double T);
 std::array<double, 3> allLightLinear(double T);
+
+// 0.87.0, THE DISC'S REAL LIGHT (native/PLAN_REVIEW.md R9-R11). Each is on for the Real look. The switches are for the tests (the old rule bit for bit).
+struct DiscLightRules { bool fcol = true, limb = true, returning = true; };
+DiscLightRules& discLightRules();
+// R9, THE COLOUR-CORRECTION FACTOR. C. Done, S. W. Davis, C. Jin, O. Blaes, M. Ward, MNRAS (2012), doi:10.1111/j.1365-2966.2011.19779.x, arXiv:1107.5429
+//   (data/blackhole/arxiv, extract):
+//   electron scattering makes a hot disc's light bluer than a black body at its effective temperature T, and dimmer for the same flux: each annulus emits
+//   f^-4 B_nu(f T) in place of B_nu(T) (the "colour temperature corrected blackbody"; the integral over nu is sigma T^4 / pi for any f, so the flux is kept).
+//   Equation (1) (p. 2): fcol ~ (72 / T_keV)^(1/9) where electron scattering dominates. Equation (2) (p. 4): fcol ~ (T_max / 3 x 10^4)^0.82 over
+//   3 x 10^4 K < T_max < 10^5 K, "from unity to 2.7"; the paper combines "Equations 1 and 2 to calculate fcol at each radius in the disc" (p. 4), and fcol -> 1
+//   as the disc's temperature drops below 3 x 10^4 K. Here T is the local effective temperature: (2) from 3e4 K to 1e5 K, (1) from 1e5 K up, 1 below.
+//   At 1e5 K the two give 2.684 and 2.727 (a step of 1.6 %, the paper's own). k_B = 1.380649e-23 J/K / 1.602176634e-19 C (SI, exact) = 8.617333262e-8 keV/K.
+//   Limits (the app says them): an approximate rule ("~" in the source) fitted to radiative-transfer models of non-spinning discs.
+constexpr double kFcolLow = 3e4, kFcolMid = 1e5;    // K
+double fcolDoneEq1(double T);                       // (72 / T_keV)^(1/9)
+double fcolDoneEq2(double T);                       // (T / 3e4)^0.82
+double colourCorrection(double T);                  // the rule above: 1, (2), (1)
+double dilutedPlanck(double nu, double T, double f);   // f^-4 B_nu(nu, f T), W m^-2 sr^-1 Hz^-1
+// R10, LIMB DARKENING. S. Chandrasekhar, ApJ 103, 351 (1946), "On the radiative equilibrium of a stellar atmosphere. X", Table 2, p. 365 (data/blackhole/scans,
+//   typed from the page image; extract): the light leaving a semi-infinite atmosphere that only scatters by electrons (Rayleigh's phase function, with the
+//   polarisation), [Il(0,mu) + Ir(0,mu)] / F at mu = 0, 0.1, ..., 1 (his "third approximation"). The disc's gas sends I(mu) = I_mean x [I/F](mu) / N in its own
+//   frame, N = 2 Int_0^1 [I/F] mu dmu, so the flux it sends stays the thin disc's (N = 0.99142 for this table and cubic, not 1: the table is an approximation).
+//   Between the nodes: the 4-point Lagrange cubic on the even grid (the end intervals from the first and last four nodes): a choice, stated in the app.
+//   limbDarkening(mu): [I/F](mu) / N, the factor on the light of an isotropic emitter with the same flux. mu is held to [0, 1].
+//   Limits (the app says them): grey, pure electron scattering, semi-infinite and plane-parallel; no absorption, not the disc's real vertical structure; the
+//   polarisation is computed by the source but not drawn.
+// THE EMISSION ANGLE: the gas orbits in the equator; its frame moves along e_phi only, so the ray's part along e_theta (p_theta / rho, rho = r on the
+//   equator) is the same in its frame, where the ray's energy is 1 / g (g = C75 (A9), spin.h discShiftKerr; p_t = -1). On the equator p_theta^2 = q, the
+//   Carter constant (J15 (A.12)): mu = g q^(1/2) / r. Spin 0: q = b^2 - Lz^2. The thick disc (spin 0) is drawn with this same mu: its surface's tilt is left out.
+constexpr int kLimbN = 11;
+extern const double kLimbTable[kLimbN];             // [Il + Ir] / F at mu = 0.1 k
+double limbRaw(double mu);                          // the cubic through the table
+double limbNormRaw();                               // N = 2 Int_0^1 limbRaw(mu) mu dmu (Gauss-Legendre, 3 points a step: exact for the cubic times mu)
+double limbDarkening(double mu);                    // limbRaw(mu) / N
+double emissionCos(double g, double q, double r);   // g q^(1/2) / r, held to [0, 1]
+// the shaders' table (render/shaders.h kDiscLightPart uLimb): limbDarkening at mu = k / 40, k = 0 .. 40; the card interpolates it linearly (its size limit
+// left no room for the cubic). Tested: within (1/40)^2 / 8 of the largest |second derivative| of the cubic (the bound of linear interpolation).
+constexpr int kLimbFineN = 41;
+std::array<double, kLimbFineN> limbFine();
 
 // ---- rays and the disc ----
 // The ray of a hovering camera at rO seen at psi (from the outward radial direction): where it ends, and u = 1/r along it. Reference: Dormand-Prince on Binet's equation.

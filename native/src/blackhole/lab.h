@@ -158,6 +158,8 @@ double sliderToOuter(double t);
 // 0.55.1: the disc's numbers for a picture (from disc.h): the physical disc of these settings and its edges (0.55.2: at the settings' spin, the gas orbiting with it;
 // 0.55.3: in the Film look the film's edges, looks.h)
 DiscPhys discPhys(const Settings& s);
+// 0.87.0 R11: the returning flux the disc is drawn with (returning.h): the Real look, the rule on and the spin's table made (else null: none yet)
+const ReturnFlux* discReturn(const Settings& s);
 DiscGeom discGeom(const Settings& s);
 // 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
 // true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). T, Tobs, rgb, Y of a DiscPixel (hit untouched).
@@ -166,7 +168,7 @@ DiscGeom discGeom(const Settings& s);
 Vec3 discAxisView(const HoleView& v);
 // One pixel of the picture through the disc's table (as the card draws it, in double): x is the pixel's angle from the shadow's edge, (dx, dy) the unit direction
 // from the middle (right, up). The hit, its observed temperature and its colour (linear sRGB in units of the Sun's surface luminance).
-struct DiscPixel { DiscHit hit; double T = 0, Tobs = 0; std::array<double, 3> rgb{0, 0, 0}; double Y = 0; };
+struct DiscPixel { DiscHit hit; double T = 0, Tobs = 0; std::array<double, 3> rgb{0, 0, 0}; double Y = 0; double fcol = 1, mu = -1, limb = 1; };   // 0.87.0: fcol, mu, limb (discLight)
 DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light = true, bool plane = false);   // light false: the hit only
 // 0.79.0: the same with the disc's geometry given (discGeom(s), made once for many pixels); plane above: the crossing of the plane even where the surface is drawn
 DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, const HoleView& v, double X, double Y, bool light = true);
@@ -183,7 +185,13 @@ std::string discEdgeOnWords(const Settings& s);
 std::string discThicknessWords(const Settings& s);
 // 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
 // true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). Sets T, Tobs, rgb and Y (the hit is left as it is).
-void discLight(const Settings& s, double r, double g, DiscPixel& o);
+// 0.87.0 (disc.h, THE DISC'S REAL LIGHT): Real: T(r) includes the returning light (R11), the colour is f^-4 of a black body at g f T (R9: Tobs = g f T, the
+// colour temperature seen; T stays the effective temperature), times the limb-darkening factor at mu (R10). mu: the cosine of the angle from the disc's
+// normal at which the gas sends this ray, in the gas's own frame (disc.h emissionCos); mu < 0: no direction (numbers that are not a pixel's): factor 1.
+void discLight(const Settings& s, double r, double g, double mu, DiscPixel& o);
+inline void discLight(const Settings& s, double r, double g, DiscPixel& o) { discLight(s, r, g, -1.0, o); }
+// 0.87.0: the same from the gas's own effective temperature T (K) in place of T(r) (the moving gas: T x its factor^(1/4)); Real only
+void discLightT(const Settings& s, double T, double g, double mu, DiscPixel& o);
 // 0.84.0: THE CAMERA'S OWN SHIFT, drawn. The lab's camera is held at a fixed distance (not falling, not orbiting). Without spin it is a static observer;
 // round a spinning hole it is a FIDO (J15 (A.3)): held at this distance and carried round by the turning space at the rate omega. A ray with axial angular
 // momentum b per unit energy (p_t = -1) reaches it at f_c/f' = (1 - b omega) / alpha over the frequency sent at rest far away (J15 (A.16) with beta = 0;
@@ -192,7 +200,12 @@ void discLight(const Settings& s, double r, double g, DiscPixel& o);
 double heldCameraShift(const Settings& s, double b);
 // the disc's light as the camera sees it: discLight at g x heldCameraShift(s, b), g against far away (Riazuelo (53): the colour temperature g f T; a black
 // body stays a black body, so its whole light goes up by f^4 and the eye's light as the black body's at that temperature, R19 (52))
-void discLightSeen(const Settings& s, double r, double g, double b, DiscPixel& o);
+void discLightSeen(const Settings& s, double r, double g, double b, double mu, DiscPixel& o);
+inline void discLightSeen(const Settings& s, double r, double g, double b, DiscPixel& o) { discLightSeen(s, r, g, b, -1.0, o); }
+// 0.87.0 R10: the emission angle's cosine (disc.h emissionCos) round a spinning hole, for the ray the held camera sees at th from the hole's direction and
+// azimuth chi (spin.h lookAt): its Carter constant q by KerrBL::launch at the camera (J15 (A.12); the shaders do the same in single precision, kKerrFS
+// emitCosK, kKerrSkyFS from traceRay's q); g the disc's own shift (without the camera's), r the crossing's radius
+double spinEmissionCos(const Settings& s, double th, double chi, double g, double r);
 // a catalogue star seen by the camera at factor f: its dot's colour (sRGB 0-255, largest channel 255 as the catalogue's colours) is that of a black body at
 // f x its colour temperature T (the catalogue colour times the black body's ratio at f T over T, channel by channel, in linear light); its V light by the
 // black body's eye's light at f T over T (vRatio; dmag = -2.5 log10 vRatio); its whole light by f^4 (boloRatio). f = 1: the catalogue's dot, unchanged.
@@ -233,6 +246,8 @@ struct Readout {
     // the light in watts (feed x L_Edd), and the hottest ring's visible brightness against the Sun's surface
     bool disc = false, realPreset = false;     // realPreset: Sagittarius A* or M87*, which have no such disc
     double rIn = 0, rInKm = 0, rOut = 0, tHot = 0, rHot = 0, rHotKm = 0, efficiency = 0, lumW = 0, feed = 0, hotVsSun = 0;
+    double fcolHot = 1;                      // 0.87.0 R9: the colour-correction factor at the hottest ring (disc.h colourCorrection; 1 when off)
+    double retShare = -1;                    // 0.87.0 R11: the returning flux over the disc's own at the hottest ring; -1: its table not made yet (or off)
     // 0.55.2, spin: the spin; the shadow's width (left-right) and height (up-down) on the camera's sky by the closed test (spin.h shadowEdge) and the share of the
     // sky inside its edge; the camera (a FIDO, J15 (A.3)) is carried round the axis by the dragged space at omega (J15 (A.2)): one turn in dragDays days of
     // far-away time (2 pi / omega, in GM/c^3 times the mass's GM/c^3); the disc's inner edge, efficiency and hottest ring above are at this spin.

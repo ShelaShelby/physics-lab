@@ -16,6 +16,7 @@
 
 #include "blackhole/kerr.h"
 #include "blackhole/presets.h"
+#include "blackhole/returning.h"
 #include "blackhole/spin.h"
 #include "blackhole/spin_sky.h"
 #include "orbit/camera_motion.h"
@@ -256,7 +257,14 @@ double sliderToFeed(double t) { return logV(t, kThinMin, kThinMax); }
 double outerToSlider(double r) { return logT(r, kOuterMin, kOuterMax); }
 double sliderToOuter(double t) { return logV(t, kOuterMin, kOuterMax); }
 
-DiscPhys discPhys(const Settings& s) { DiscPhys p; p.massSun = s.massSun; p.lEdd = s.feed; p.aSigned = s.spin; return p; }
+DiscPhys discPhys(const Settings& s) {
+    DiscPhys p; p.massSun = s.massSun; p.lEdd = s.feed; p.aSigned = s.spin;
+    p.ret = discReturn(s);                                              // 0.87.0 R11
+    return p;
+}
+const ReturnFlux* discReturn(const Settings& s) {
+    return s.look == Look::Real && discLightRules().returning ? returnFluxFor(s.spin) : nullptr;
+}
 DiscGeom discGeom(const Settings& s) {
     DiscGeom g;
     if (s.look == Look::Film) { const LookRule r = lookRule(Look::Film); g.rIn = r.rIn; g.rOut = r.rOut; return g; }   // J15 Figure 13's caption (looks.h)
@@ -297,30 +305,47 @@ const HeightTable* discHeight(const Settings& s) {
     kept.emplace_front(key, heightTable(discPhys(s)));
     return &kept.front().second;
 }
-void discLight(const Settings& s, double r, double g, DiscPixel& o) {
+void discLight(const Settings& s, double r, double g, double mu, DiscPixel& o) {
+    o.fcol = 1; o.mu = mu; o.limb = 1;
     if (s.look == Look::Film) {                                         // one temperature, no shift, the film's white balance (looks.h)
         o.T = o.Tobs = lookRule(Look::Film).discT;
         o.rgb = filmDiscLinear();
         o.Y = filmDiscY();
         return;
     }
-    const DiscPhys p = discPhys(s);
-    o.T = p.temperature(r);
-    o.Tobs = g * o.T;                                                   // Riazuelo (53)
+    discLightT(s, discPhys(s).temperature(r), g, mu, o);
+}
+void discLightT(const Settings& s, double T, double g, double mu, DiscPixel& o) {
+    o.fcol = 1; o.mu = mu; o.limb = 1;
+    o.T = T;
+    const DiscLightRules& R = discLightRules();
+    o.fcol = R.fcol ? colourCorrection(o.T) : 1;                        // 0.87.0 R9: f^-4 B(f T) (disc.h)
+    o.limb = R.limb && mu >= 0 ? limbDarkening(mu) : 1;                 // 0.87.0 R10 (disc.h)
+    o.Tobs = g * o.fcol * o.T;                                          // Riazuelo (53): the colour temperature seen
+    const double k = 1 / (o.fcol * o.fcol * o.fcol * o.fcol) * o.limb;
     if (s.allLight) {                                                   // 0.58.0: all light, the eye's colour (disc.h allLightLinear)
         o.rgb = allLightLinear(o.Tobs);
         o.Y = o.rgb[0] > 0 || o.rgb[1] > 0 || o.rgb[2] > 0 ? bolometricVsSun(o.Tobs) : 0;
+        if (k != 1) { for (double& c : o.rgb) c *= k; o.Y *= k; }
         return;
     }
     o.rgb = blackBodyLinearFast(o.Tobs);
     o.Y = visibleVsSunFast(o.Tobs);
+    if (k != 1) { for (double& c : o.rgb) c *= k; o.Y *= k; }
 }
 // 0.84.0 (lab.h): the held camera's own shift, the disc and the stars as it sees them
 double heldCameraShift(const Settings& s, double b) {
     if (!lookRule(s.look).shifts) return 1;                            // Film: no shifts (looks.h)
     return hoverShift(s.spin, s.dist, s.pitch, b);                      // J15 (A.16), beta = 0: (1 - b omega) / alpha at the camera (r = dist, theta = pitch)
 }
-void discLightSeen(const Settings& s, double r, double g, double b, DiscPixel& o) { discLight(s, r, g * heldCameraShift(s, b), o); }
+double spinEmissionCos(const Settings& s, double th, double chi, double g, double r) {
+    const KerrBL ch(s.spin);
+    const Camera cam{s.dist, s.pitch, 0};
+    Ray ray;
+    if (!ch.launch(cam, lookAt(std::min(th, kPi), chi), ray)) return -1;
+    return emissionCos(g, ray.c[1], r);
+}
+void discLightSeen(const Settings& s, double r, double g, double b, double mu, DiscPixel& o) { discLight(s, r, g * heldCameraShift(s, b), mu, o); }
 StarSeen starSeen(const std::array<int, 3>& rgb, double T, double f) {
     StarSeen o;
     o.rgb = rgb;
@@ -359,7 +384,8 @@ DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, c
     const Vec3 N = discAxisView(v);
     o.hit = discRayTable(t, x, N.z, nx * N.x + ny * N.y, ny * N.x - nx * N.y, g);
     if (o.hit.order < 0 || !light) return o;
-    discLightSeen(s, o.hit.r, o.hit.g, o.hit.b, o);                     // 0.84.0: with the camera's own shift (spin 0: one factor for all rays)
+    const double mu = emissionCos(o.hit.g, o.hit.b * o.hit.b - o.hit.Lz * o.hit.Lz, o.hit.r);   // 0.87.0 R10: spin 0, q = b^2 - Lz^2 (disc.h)
+    discLightSeen(s, o.hit.r, o.hit.g, o.hit.b, mu, o);                 // 0.84.0: with the camera's own shift (spin 0: one factor for all rays)
     return o;
 }
 
@@ -535,6 +561,8 @@ Readout readout(const Settings& s, bool latest) {
     r.tHot = dp.hottest(&r.rHot);
     r.rHotKm = r.rHot * r.rgM / 1000;
     r.hotVsSun = visibleVsSun(r.tHot);
+    r.fcolHot = s.look == Look::Real && discLightRules().fcol ? colourCorrection(r.tHot) : 1;   // 0.87.0
+    if (dp.ret) r.retShare = dp.ret->fluxAt(r.rHot) / std::max(discFlux(r.rHot, s.spin), 1e-300);
     r.efficiency = discEfficiency(a);
     r.lumW = s.feed * eddingtonLuminosity(s.massSun);
     r.look = s.look;

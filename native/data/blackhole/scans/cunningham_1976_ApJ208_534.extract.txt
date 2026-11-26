@@ -2,12 +2,12 @@
 # Original: data/blackhole/scans/cunningham_1976_ApJ208_534_typed.txt
 # Reference: C. Cunningham, "Returning radiation in accretion disks around black holes", Astrophys. J. 208, 534-549 (1976); the original here is the lines typed by hand from the page images of the scan data/blackhole/scans/cunningham_1976_ApJ208_534.pdf
 # URL: https://legacy.adsabs.harvard.edu/pdf/1976ApJ...208..534C
-# Date read: 2026-11-25
-# sha256 of the original: 472f302c7d7bba93bd522cd9b0fc2ed1c8edf05c37dbc83ea925bf44f419beac
-# Place in the original: p. 534 (abstract), p. 536 ((6b), (7a), (8a)), pp. 537-538 (table captions)
+# Date read: 2026-11-25 (Tables 1 and 2: 2026-11-26)
+# sha256 of the original: 3de8a630507798f9a0ce8cae899b2cd75c28220978ccc808d3efd74bd863905b
+# Place in the original: p. 534 (abstract), p. 536 ((6b), (7a), (8a)), pp. 537-538 (table captions), pp. 536-537 (isotropic emission), p. 537 (Tables 1 and 2, typed 2026-11-26)
 # Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
 # native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
-# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); tests/test_blackhole.cpp testReturning087 (0.87.0: blackhole/returning.h, T_f against Tables 1 and 2)
 #--- begin p. 534 to p. 538
 p. 534, abstract
 Returning radiation is radiation emitted by an accretion disk which returns to its surface due to
@@ -31,4 +31,59 @@ TABLE 3 The transfer functions Tf(yo, ye) and Ts(yo, ye) for a/M = 0.9981
 TABLE 4 The transfer functions Tf(yo, ye) and Ts(yo, ye) for a/M = 0.9999
 Each table: ye and yo = 0.05, 0.15, ..., 0.95 (10 x 10 values of Tf and of Ts), with re/M and ro/M beside them.
 
+#--- end
+#--- begin pp. 536-537, the emission assumed, and Tables 1 and 2
+pp. 536-537, the emission assumed in Tables 1-4
+Numerical values for the transfer functions are given in Tables 1-4 for a/M = 0.9, 0.99, 0.9981, 0.9999, as-
+suming isotropic emission. (We do not include a/M = 0 because returning radiation is unimportant in the case
+of a nonrotating hole.)
+The values of the transfer functions assuming the limb darkening of an electron-scattering atmosphere do not
+differ from the isotropic values by more than a few percent: the effects of limb darkening in this problem are
+negligible.
+
+p. 537, Tables 1 and 2 (typed 2026-11-26 from the page image at 300 dpi; every value read twice, in two separate crops; printed as on the page: 0.195 (Table 1 Tf, yo 0.65, ye 0.55), -0.115 (Table 1 Ts, yo 0.15, ye 0.65) and 0.234 (Table 2 Tf, yo 0.85, ye 0.75) stand out from their neighbours but are typed as printed)
+ye: 0.05 0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95
+Table 1 (a/M = 0.9) re/M: 6.42 3.71 2.87 2.43 2.14 1.94 1.78 1.66 1.56 1.47
+Table 2 (a/M = 0.99) re/M: 5.10 2.95 2.28 1.93 1.70 1.54 1.42 1.32 1.24 1.17
+table part yo ro/M then the ten values for ye = 0.05 ... 0.95
+T1F 0.05 6.42 0.333 0.322 0.321 0.337 0.378 0.405 0.295 0.095 0.007 0.000
+T1F 0.15 3.71 0.222 0.226 0.228 0.245 0.289 0.351 0.325 0.134 0.012 0.000
+T1F 0.25 2.87 0.194 0.197 0.193 0.201 0.239 0.304 0.320 0.154 0.015 0.000
+T1F 0.35 2.43 0.188 0.186 0.178 0.180 0.206 0.267 0.304 0.169 0.019 0.000
+T1F 0.45 2.14 0.191 0.187 0.172 0.168 0.189 0.241 0.289 0.182 0.022 0.000
+T1F 0.55 1.94 0.198 0.193 0.173 0.165 0.179 0.228 0.280 0.197 0.026 0.000
+T1F 0.65 1.78 0.206 0.202 0.178 0.166 0.175 0.195 0.275 0.211 0.031 0.000
+T1F 0.75 1.66 0.214 0.211 0.184 0.169 0.173 0.210 0.270 0.224 0.036 0.000
+T1F 0.85 1.56 0.223 0.221 0.192 0.173 0.174 0.207 0.267 0.237 0.041 0.000
+T1F 0.95 1.47 0.231 0.232 0.199 0.178 0.176 0.206 0.265 0.248 0.047 0.000
+T1S 0.05 6.42 0.099 0.048 0.030 0.022 0.020 0.019 0.015 0.006 0.001 0.000
+T1S 0.15 3.71 0.097 0.050 0.024 0.009 -0.002 -0.010 -0.115 -0.004 0.000 0.000
+T1S 0.25 2.87 0.102 0.059 0.029 0.010 -0.007 -0.024 -0.032 -0.015 -0.001 0.000
+T1S 0.35 2.43 0.100 0.071 0.038 0.015 -0.004 -0.028 -0.045 -0.026 -0.002 0.000
+T1S 0.45 2.14 0.122 0.086 0.050 0.024 0.001 -0.027 -0.054 -0.038 -0.004 0.000
+T1S 0.55 1.94 0.137 0.102 0.063 0.034 0.008 -0.024 -0.061 -0.052 -0.006 0.000
+T1S 0.65 1.78 0.154 0.122 0.079 0.046 0.017 -0.039 -0.068 -0.069 -0.010 0.000
+T1S 0.75 1.66 0.173 0.142 0.096 0.060 0.027 -0.014 -0.074 -0.087 -0.014 0.000
+T1S 0.85 1.56 0.192 0.164 0.114 0.074 0.038 -0.008 -0.079 -0.107 -0.020 0.000
+T1S 0.95 1.47 0.205 0.181 0.129 0.087 0.048 0.000 -0.084 -0.124 -0.026 0.000
+T2F 0.05 5.10 0.441 0.411 0.413 0.432 0.458 0.479 0.470 0.314 0.064 0.001
+T2F 0.15 2.95 0.315 0.295 0.297 0.322 0.362 0.416 0.478 0.450 0.143 0.001
+T2F 0.25 2.28 0.292 0.262 0.254 0.268 0.303 0.358 0.442 0.509 0.234 0.003
+T2F 0.35 1.93 0.297 0.257 0.236 0.241 0.267 0.313 0.396 0.518 0.327 0.005
+T2F 0.45 1.70 0.321 0.270 0.236 0.230 0.243 0.275 0.352 0.496 0.415 0.008
+T2F 0.55 1.54 0.361 0.298 0.249 0.230 0.234 0.256 0.314 0.461 0.487 0.013
+T2F 0.65 1.42 0.423 0.345 0.279 0.245 0.234 0.246 0.294 0.418 0.530 0.020
+T2F 0.75 1.32 0.494 0.404 0.319 0.272 0.251 0.250 0.279 0.394 0.569 0.031
+T2F 0.85 1.24 0.578 0.476 0.372 0.311 0.277 0.265 0.282 0.234 0.600 0.050
+T2F 0.95 1.17 0.683 0.567 0.440 0.361 0.316 0.291 0.294 0.375 0.613 0.078
+T2S 0.05 5.10 0.130 0.056 0.037 0.034 0.036 0.041 0.044 0.032 0.007 0.000
+T2S 0.15 2.95 0.138 0.059 0.027 0.014 0.009 0.010 0.014 0.018 0.008 0.000
+T2S 0.25 2.28 0.149 0.071 0.032 0.012 0.001 -0.005 -0.007 -0.005 0.002 0.000
+T2S 0.35 1.93 0.163 0.087 0.042 0.017 0.001 -0.011 -0.020 -0.029 -0.013 0.000
+T2S 0.45 1.70 0.183 0.107 0.057 0.027 0.006 -0.009 -0.025 -0.046 -0.036 0.000
+T2S 0.55 1.54 0.212 0.134 0.078 0.042 0.017 -0.003 -0.025 -0.059 -0.066 -0.001
+T2S 0.65 1.42 0.256 0.173 0.108 0.066 0.035 0.011 -0.018 -0.061 -0.100 -0.003
+T2S 0.75 1.32 0.323 0.232 0.152 0.101 0.062 0.032 0.000 -0.058 -0.138 -0.007
+T2S 0.85 1.24 0.429 0.323 0.223 0.157 0.107 0.066 0.024 -0.042 -0.188 -0.017
+T2S 0.95 1.17 0.601 0.471 0.338 0.247 0.181 0.125 0.069 -0.024 -0.244 -0.040
 #--- end

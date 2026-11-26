@@ -23,8 +23,9 @@ PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBl
 
 # 0.56.0: shaders the renderer puts together from pieces (render/kerr_sky.cpp, the same order); a piece's name ends in "Part"
 ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMathPart"],
-             "kKerrSkyFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyTracePart", "kGasPart", "kKerrSkyMainPart"],
-             "kLensFS": ["kLensHeadPart", "kGasPart", "kLensMainPart"],   # 0.72.0: the moving gas (kGasPart) in both
+             "kKerrSkyFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyTracePart", "kGasPart", "kDiscLightPart", "kKerrSkyMainPart"],
+             "kLensFS": ["kLensHeadPart", "kGasPart", "kDiscLightPart", "kLensMainPart"],   # 0.72.0: the moving gas (kGasPart) in both
+             "kKerrFS": ["kKerrHeadPart", "kDiscLightPart", "kKerrMainPart"],   # 0.87.0: the disc's real light (kDiscLightPart) in all three
              # 0.64.0: Saturn's rings per pixel (Vulkan) and their probe (the start-up check)
              "kRingsFS": ["kRingsHeadFSPart", "kRingsPart", "kRingsMainFSPart"], "kRingsProbeCS": ["kRingsHeadCSPart", "kRingsPart", "kRingsMainCSPart"],
              "kLinesCS": ["kLinesHeadCSPart", "kLinesPart", "kLinesMainCSPart"],   # 0.68.0: the Orbit Lab's lines

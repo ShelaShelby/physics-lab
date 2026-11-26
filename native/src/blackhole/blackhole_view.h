@@ -243,6 +243,20 @@ private:
     void ensureSkyF(double spin);
     void cardOff(const std::string& why);                      // 0.55.7: the processor's path from now on in this run (said, logged, printed)
     void pumpCard(const Settings& s, double W, double H, double cx, double cy, bool start);
+    // 0.87.0 R11: the returning light's table for the spin shown (returning.h), made once per spin: on the card's light paths when they are on (a piece of
+    // 8,192 rays a frame, between the card's table fills), else on a thread of the processor (spinRayClosed). Until it is made the disc has none.
+    struct ReturnJob;
+    std::unique_ptr<ReturnJob> retJob_;
+    std::thread retThread_;
+    std::atomic<bool> retThreadBusy_{false};
+    void pumpReturn(render::Renderer2D& R, const Settings& s, bool card);
+    bool retQueued() const;
+    mutable std::shared_ptr<const std::vector<float>> retF_;        // spin 0 (kLensFS uRet): F_o against ln r, the grid of ensureDiscF at spin 0
+    mutable const void* retFOf_ = nullptr;
+    mutable std::uint64_t retFVer_ = 0;
+    mutable double retFLog0_ = 0, retFDl_ = 1;
+    const void* discFRet_ = nullptr;                                // the returning table each flux table was made with (null: none)
+    const void* skyFRet_ = nullptr;
     void pollFine(const Settings& s);
     void install(Picture& p);
     void drawAsync(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
@@ -259,7 +273,9 @@ private:
     void trueNumbers(const Settings& s, const HoleView& v);
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
-    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool allLight = false; bool operator==(const Key& o) const; } key_;
+    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool allLight = false;
+                 const void* ret = nullptr;   // 0.87.0: the returning light's table drawn with (lab.h discReturn)
+                 bool operator==(const Key& o) const; } key_;
     static Key keyOf(const Settings& s, double W, double H, double cx, double cy);   // 0.55.5: the view asked for (spinVer 0)
     Key wantKey_, shownKey_, postedKey_, skyKey_;
     struct WantNote { Key k; double last = 0; };                   // 0.83.0: the last views asked for and when each was last asked for (lagMs)

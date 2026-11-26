@@ -170,6 +170,8 @@ private:
     Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_, discTt_;
     Tex streak_, hgt_;                                     // 0.79.0: the streaks' field (sent once), the disc's thickness table
     std::uint64_t hgtVer_ = ~std::uint64_t(0);
+    Tex ret_;                                              // 0.87.0: spin 0's returning flux (kLensFS uRet)
+    std::uint64_t retVer_ = ~std::uint64_t(0);
     bool discTtOk_ = false;                                // 0.72.0: discTt_ holds the travel times of the disc table now sent
     std::uint64_t tableVer_ = ~std::uint64_t(0), discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0), kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     int lensN_ = 0;

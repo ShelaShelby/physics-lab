@@ -50,7 +50,7 @@ int benchSceneIndex(const std::string& id);             // -1: no such scene
 
 // 0.56.1: the whole default run's planned length (s): the Hard scenes, the waits (Part 2) and the labs left alone (Part 3). A wait or a rest that takes
 // longer than planned makes the run longer (each is capped: kBenchResponseCapS, kBenchIdleSettleCapS).
-constexpr int kBenchResponseActions = 45;      // 0.85.0: + the sunspot table x 3; 4 lab switches x 3, and 3 each of: element, density, molecule, spin and distance, Real to Film, Film to Real, the streaks (0.79.0), a tilt at spin (0.82.0), a wheel step at spin (0.83.0), date
+constexpr int kBenchResponseActions = 46;      // 0.87.0: + the returning light at a new spin x 1 (done once: each spin's table is made once; 3 tries would pass the fixed limit, 295.8 s); 0.85.0: + the sunspot table x 3; 4 lab switches x 3, and 3 each of: element, density, molecule, spin and distance, Real to Film, Film to Real, the streaks (0.79.0), a tilt at spin (0.82.0), a wheel step at spin (0.83.0), date
 constexpr double kBenchResponsePlanS = 1.6;    // a wait's planned time with the pause after it
 constexpr int kBenchIdleEntries = 6;           // the four labs, and the Black Hole Lab spinning and with the glare
 constexpr double kBenchIdlePlanS = 4.0;        // the 3 s left alone and the picture finished before

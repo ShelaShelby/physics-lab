@@ -189,7 +189,7 @@ void VkBlackHole::destroy() {
     vkDeviceWaitIdle(dev_);
     writeCache();
     for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glareSrc_, &glareVeil_, &glareNear_, &glareCorr_, &probe_,
-                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
+                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &ret_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
     for (GlareLevel& g : gL_) for (Tex* t : {&g.E, &g.D, &g.M1, &g.M2, &g.S}) dropTex(*t);
@@ -722,6 +722,8 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     gasUniforms(u, L);
     const float hr[4] = {L.hgtR[0], L.hgtR[1], L.hgtR[2], hgt_.img && L.hgt ? L.hgtR[3] : 0.0f};   // 0.79.0: the surface (no table on the card: the plane)
     u.f("uHgtR", hr, 4);
+    const float rr[4] = {static_cast<float>(L.retLog0), static_cast<float>(L.retDl), static_cast<float>(L.retN), ret_.img && L.retF ? 1.0f : 0.0f};   // 0.87.0
+    u.f("uRetR", rr, 4);
     i1("uGasFoot", L.gasNoFoot ? 0 : 1);
     const double st = L.expStep * ppp;                               // 0.56.0: the card's exposure (spin 0)
     const bool cw = L.whiteMode == 1 && disc && !sum_.empty() && !exp;
@@ -740,6 +742,7 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
         const float dt[4] = {static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog)};
         u.f("uDT", dt, 4);
         f1("uAll", L.allInvTsun);
+        u.f("uDL", L.discLight, 4); u.f("uLimb", L.limb, 4, 11);                                  // 0.87.0
     }
     toneUniforms(u, L);
     f1("uBright", std::clamp(L.bright, 0.0, 1.0));
@@ -752,7 +755,7 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     draw(cb, p, variant, {{"uTex", sky, skyS}, {"uTable", table_.view, nearest_}, {"uDU", discU_.view, nearest_}, {"uDP", discP_.view, nearest_},
                           {"uDC", discC_.view, nearest_}, {"uWhite", cw ? sum_.back().view : white_.view, nearest_},
                           {"uDTt", discTt_.img ? discTt_.view : discU_.view, nearest_}, {"uStreak", streak_.img ? streak_.view : white_.view, nearest_},
-                          {"uHgt", hgt_.img ? hgt_.view : white_.view, nearest_}}, 0, 0, vw, vh);
+                          {"uHgt", hgt_.img ? hgt_.view : white_.view, nearest_}, {"uRet", ret_.img ? ret_.view : white_.view, nearest_}}, 0, 0, vw, vh);
 }
 
 void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw, int variant) {
@@ -785,6 +788,9 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     u.i("uDN", dn, 3);
     u.f("uDFix", L.discFix, 4);
     u.f("uFido", L.fido, 2);                                         // 0.84.0
+    u.f("uDL", L.discLight, 4); u.f("uLimb", L.limb, 4, 11);                                      // 0.87.0: the disc's real light; the camera for each ray's Carter constant (R10)
+    u.f("uCam", L.skyCam, 4);
+    u.f("uMet", L.skyMet, 4);
     i1("uRaw", raw ? 1 : 0);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
@@ -819,6 +825,7 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     const float dt[4] = {static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog)};
     u.f("uDT", dt, 4);
     f1("uAll", L.allInvTsun);
+    u.f("uDL", L.discLight, 4); u.f("uLimb", L.limb, 4, 11);                                      // 0.87.0
     toneUniforms(u, L);
     u.f("uLP", L.lp, 4);
     const int dn[3] = {L.discFN, L.discC, 0};
@@ -918,6 +925,10 @@ void VkBlackHole::gasTextures(VkCommandBuffer cb, const LensSky& L) {
     if (L.hgt && !L.hgt->empty() && L.hgtVersion != hgtVer_) {
         upload(cb, hgt_, static_cast<int>(L.hgt->size()), 1, kR32, L.hgt->data(), 1, "the disc's thickness");
         hgtVer_ = L.hgtVersion;
+    }
+    if (L.retF && !L.retF->empty() && L.retVersion != retVer_) {             // 0.87.0
+        upload(cb, ret_, static_cast<int>(L.retF->size()), 1, kR32, L.retF->data(), 1, "the returning light");
+        retVer_ = L.retVersion;
     }
 }
 

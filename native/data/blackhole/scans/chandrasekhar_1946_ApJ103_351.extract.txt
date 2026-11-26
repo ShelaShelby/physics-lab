@@ -7,7 +7,7 @@
 # Place in the original: p. 365, Table 2 (all 11 rows)
 # Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
 # native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
-# Used by: native/PLAN_REVIEW.md (0.84.1 research); no test reads it yet
+# Used by: native/PLAN_REVIEW.md (0.84.1 research); blackhole/disc.h kLimbTable (0.87.0, the column [Il+Ir]/F); tests/test_blackhole.cpp testLimb087
 #--- begin p. 365, Table 2
 p. 365, Table 2. The laws of darkening in the two states of polarization given by the third approximation; the degree of polarization of the emergent radiation;
 comparison of the total intensities given by the theory ignoring the polarization of the existing field of radiation but incorporating Rayleigh's phase function

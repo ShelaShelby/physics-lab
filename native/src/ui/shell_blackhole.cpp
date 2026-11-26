@@ -207,6 +207,12 @@ void blackholeCard(AppState& app, Panel& p) {
             pStat(p, "Disc's inner edge", sig(r.rIn, 3) + " GM/c²  ·  " + kmText(r.rInKm) + " (nothing shines inside it)");
             pStat(p, "Light from the infalling gas", sig(100 * r.efficiency, 3) + " % of its mass (the rest falls in)");
             pStat(p, "Hottest ring", tempText(r.tHot) + " at " + sig(r.rHot, 3) + " GM/c²  ·  " + kmText(r.rHotKm));
+            // 0.87.0 (blackhole/disc.h, returning.h): the disc's real light, its numbers at the hottest ring
+            pStat(p, "Colour correction", r.fcolHot > 1 ? "f = " + sig(r.fcolHot, 3) + " at the hottest ring: its light is a black body's " + sig(r.fcolHot, 3) +
+                                                          " times hotter, " + sig(std::pow(r.fcolHot, 4), 3) + " times dimmer (Done et al. 2012; 1 below 30,000 K, about 2.7 at 100,000 K)"
+                                                        : std::string("f = 1: the disc is too cool for it (below 30,000 K; Done et al. 2012)"));
+            pStat(p, "Returning light", r.retShare >= 0 ? "+" + sig(100 * r.retShare, 2) + " % of the disc's own light at the hottest ring, bent back onto it (Cunningham 1976)"
+                                                        : std::string("being worked out for this spin"));
         }
         // 0.55.9: the camera can stand exactly in the disc's plane (the tilt reaches 90 degrees). 0.86.0: the words follow the shape drawn (lab.h discEdgeOnWords)
         if (std::fabs(sv.pitch - 1.5707963267948966) < 1e-9) pCaption(p, blackhole::discEdgeOnWords(sv));
@@ -631,7 +637,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars, the disc's shape. The Real look is still a model, not a photograph.", false);
         } else {
             const std::string kind = s.spin > 0 ? "a black hole spinning at " + sig(s.spin, 3) + " of the largest possible spin (your choice)" : std::string("a black hole that does not spin");
-            pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: " + blackhole::discShapeWords(s) + ", each face a perfect black body, steady." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
+            pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: " + blackhole::discShapeWords(s) + ", steady; each face's light by three approximate rules: bluer and dimmer than a black body (Done et al. 2012), darker towards its edge (Chandrasekhar 1946), with the light gravity bends back onto it (Cunningham 1976)." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
                                : "A calculated model: " + kind + " with no gas around it. Real black holes have gas; switch on the gas disc to see the standard model of one.", false);
             pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars" + std::string(s.disc ? ", the disc's shape, its colour shift and brightness by the model" : "") +
                         ". Soft: the sky map's own sharpness (about 0.09° a map pixel). Drawn: your own shift of colour and brightness, exact for a camera held still at this distance "
