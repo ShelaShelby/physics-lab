@@ -4,3 +4,6 @@ data/maps/ (same names). native/data/SOURCES.md lists each with its reference, U
 The picture maps' product pages (0.77.0, outside review items 1 to 3): the USGS pages of the Europa, Io, Rhea and Pluto mosaics (how their bytes were made:
 display products, not calibrated reflectance; Pluto's a linear stretch), the Mars mosaic's page and NASA's PIA07782 page (both planetocentric latitude),
 Blue Marble's pages (Next Generation: no latitude type stated; 2002: the cloud layer, its terms and credit) and the 2002 cloud layer and composite images.
+
+[0.88.0] usgs_pluto_new_horizons_lorri_mvic_global_mosaic_300m_2026-11-23.extract.txt: the page's Process Description line (a linear stretch to 8 bit):
+Pluto's map bytes are decoded as linear light since 0.88.0 (render/planet_maps.h MapInfo::linear).

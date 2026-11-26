@@ -1,24 +1,21 @@
-# 0.87.0: the disc's real light
+# 0.88.0: Orbit Lab accuracy: the big moons outside 1800-2100, Pluto's map
 
 ## What changed
-- CPU before the shaders changed: lab.cpp discLight took T(r) from DiscPhys (double, Page and Thorne's flux), g T as the colour temperature, the fast 4096-point black-body table (blackBodyLinearFast, visibleVsSunFast); callers: discPixelG (spin 0), spinPixel, the exposure samples, the picture tool. kLensFS, kKerrFS and kKerrSkyFS did the same in float from uDT, uDF and uDC.
-- R9 (disc.h colourCorrection): Done et al. 2012 (1) and (2) at each ring's own temperature. The light is f^-4 of a black body at g f T. The total light is unchanged.
-- R10 (disc.h limbDarkening): Chandrasekhar 1946 Table 2, cubic, over N = 0.99142. mu = g q^(1/2) / r in the gas's frame. The GPU reads a 41-point table of the cubic (uLimb), within 7.3e-5: kKerrSkyFS had no room for the cubic (100,168 of 100,437 bytes).
-- R11 (returning.h): Cunningham 1976 (7a), (8a) as sums over rays from 32 rings, solved by iteration. Made once per spin, by the GPU's light paths when they are on (pieces of 8,192 rays a frame), else by a CPU thread. Spin 0: 2 % of the disc's flux. Spin 0.99: about 15 % at every radius. The plan expected the inner disc only.
-- Shared GLSL part kDiscLightPart. Card lines: f and the returned light at the hottest ring. Guide, captions and About name the four sources and the limits. Response line response.blackhole_return, done once (each spin's table is made once; 3 tries would pass the 4.9-minute limit). No Hard scene: no new pass is drawn.
+- Part A: outside 1800 to 1 Jan 2100 12:00 TDB the 13 big moons follow JPL's table of mean elements (saved data/jpl/sats_mean_elements_2026-11-23.html; rows in orbit/moon_jpl_elements.inc; satMeanState, satPlace in orbit/moon_sats.cpp). Size, shape, tilt, plane (the table's Laplace pole) and period are JPL's. Inside 1800-2100 nothing changes. Card, date note and About say what the code does (no "made-up places").
+- JPL states no error for the table. Its page only warns "not intended for ephemeris computation". The test bound is built from the table's printed rounding plus the lab's own measured error for the same kind of model (satWorstErrKm), not chosen.
+- Reading the table: P is the period of the mean anomaly for Phobos, Io, Europa, Ganymede and Callisto, and of the mean longitude for the other eight. The page prints no signs for the precession periods. The five anomaly rows' signs are the ones that match Horizons' mean motion. The rest follow oblateness theory (apsis forward, node backward, Triton's node forward). Rounded periods turn the angle along the orbit by a full turn after satMeanDriftYears (Phobos about 5 years, Io thousands): the card says so.
+- Doubtful rows, used as printed except the mean longitude of four (Rhea, Titan, Enceladus, Triton: the Horizons fit's value at J2000, moon_sats_data.inc). Horizons (tests/reference/moon_sats_table.inc, JD 2451545.0) against JPL: Rhea mean longitude 157.4 deg off, Titan 156.9, Enceladus 5.9, Triton 4.3. Node in Jan 2026 (Horizons positions against JPL's node and rate): Rhea 98.1 against 232.1 deg, Titan 13.3 against 65.0. Triton inclination 156.82 against 157.3, period 5.8766 d against 5.8792. Deimos period 1.262441 d against 1.2625. Phobos period is 4.8e-3 rad/day off.
+- The Moon: JPL's table has a row for it (ecliptic frame, no pole, no stated error). Left as it was (simple ellipse outside ELP2000's 1800-2100), because no error is stated to test a mean ellipse against. ROADMAP says how to fix it.
+- Part B: Pluto's bytes are linear light (USGS page: "linearly stretched to 8bit (1-255) using the input range of 0.03344 to 0.99981"). MapInfo::linear, mapDecode, a UNORM texture on the GPU. Map mean 0.1606 to 0.3970, factor 7.6678 to 2.1411, clipped pixels 76 to 36 %. Other rows of map_albedo_scale.txt are unchanged. Extracts of both pages, SOURCES.md, About, changelog, VERSION 0.88.0.
 
 ## Tests run
-- Written first, failed on 0.86.0 (missing functions): testColourCorrection087 18 checks, testLimb087 26, testReturning087 38. All pass. blackhole_tests: all pass.
-- R11: T_f against Tables 1 and 2, 200 cells, bound 0.0005 + 3 sigma (jittered rays, Richardson in the bin). The lab's own rays: 52 cells, worst 0.21 of the bound. KerrBL with Cunningham's falling gas: every cell but one.
-- GPU vs CPU (check_blackhole.py sky, 50 checks, 0 failed): new cases hot, edgesky, edgetable 0 % over 8 levels (max 1, 6, 1). Every case draws the returning light. precisioncard (20 checks): the GPU-made returning table = the CPU's within 1.5e-10.
-- check.sh job: quick 18 of 18 and ui_smoke passed (the first run failed on the 1000 M reference, below). check_sources.py: ok. check_shaders.py: 42, 0 failed.
+- orbit_tests: 2248 checks, 0 failed. Before the code: 31 failed (every new check: rows, plane, text, card, Pluto decode and mean).
+- check.sh job: passed (quick 18 of 18, ui_smoke 7 s). By hand: check_orbit_ui.py planets: 25 checks, 0 failed (Pluto 0.24 % of pixels over 8 levels, GPU against CPU twin).
+- check_sources.py: both new extracts found. With the sources checkout it lists 110 files there that are not in the manifest (already so before this job).
 
 ## Not done
-- Doubtful printed value: Cunningham 1976 Table 2, T_f(y_o 0.85, y_e 0.75), printed 0.234. Computed 0.380 +- 0.041; its column neighbours are 0.394 and 0.375. No other source gives the value. The test names it and checks it lies between them.
-- Left out (ROADMAP): the returned light's push on the gas (8b), the falling gas shining, limb darkening on the thick disc's tilt.
-- Needs pc_tests.ps1 on the owner's PC: the sky part (close case on the Radeon), the returning-light job's time on the card, response.blackhole_return.
+- Not run: Pluto on the owner's GPU (a new texture format) and the planets' GPU-vs-CPU picture on a real driver (pc_tests.ps1 on the new release).
+- The doubtful rows above need a newer table or the SAT/URA kernels (ROADMAP). Big moons still cast no shadow on their planet outside 1800-2100 (ROADMAP).
 
 ## References changed on purpose
-- toneCompare: pixels whose radius range reaches past the disc's edge are left out (the shader's coverage). Case close failed at 1.5 % once the disc dimmed: corner rays move r by 13 M a pixel. Likely the Radeon's 1.99 % too.
-- Old checks of the earlier rules (camera shift, 0.55.2's light, 0.57's eye picture) run with the real light off (RealLightOff). The reference picture's T_obs includes f. The 1000 M check's reference light is at the pixel's own mu (it failed at 48 %: the limb factor, not the camera).
-- Benchmark: 46 waits (was 45), test_app's count.
+- test_orbit.cpp: fullPhaseAlbedo reads a map through mapDecode (Pluto linear); Pluto's factor 7.6678 to 2.1411 (planet_maps.cpp, map_albedo_scale.txt). The jump note's old sentence "simple orbits that start at made-up places" is replaced (the "only from 1800 to 1 Jan 2100" checks stay). tests/planet_picture.cpp decodes through mapDecode.

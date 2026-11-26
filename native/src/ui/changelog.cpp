@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.88.0", "The big moons outside 1800 to 2100 follow JPL's table, and Pluto's map is read as it was made",
+     "Before 1800 and after 2100, the 13 big moons (Phobos, Deimos, the four Galilean moons, Enceladus, Rhea, Titan, Titania, Oberon, Triton and Charon) no longer start at made-up angles "
+     "on a plane tilted by the planet's tilt. Their orbits now follow JPL's table of mean elements: JPL's size, shape, tilt, plane and period. The table is rounded, so where "
+     "each moon is on its orbit is not the real place there: the card says after about how many years the rounding alone turns the angle by a full turn (Phobos: a few years; "
+     "Io: thousands). Four rows of the table (Rhea, Titan, Enceladus, Triton) start from the mean longitude of the Horizons fit, because JPL's printed one is far from Horizons; "
+     "REPORT lists them. Our Moon outside 1800 to 2100 is unchanged: a simple ellipse. Pluto's map was decoded as if its bytes were sRGB, but USGS says they are a linear stretch of "
+     "the measured values. They are now read linearly: its contrast changes, and its average brightness is 0.40 instead of 0.16 (the ball is still as bright as measured)."},
     {"0.87.0", "The disc's real light: bluer, darker towards its edge, and the light it gets back",
      "Black Hole Lab, Real look: the gas disc's light now follows three rules from radiative transfer, each from a paper and each said in the guide with its "
      "limits. A hot disc's atmosphere scatters light off electrons, so each ring shines like a black body a factor f hotter but f⁴ dimmer: the same total "

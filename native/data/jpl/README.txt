@@ -74,3 +74,7 @@ horizons-moon-subearth.txt
 horizons-io-subjupiter.txt
     JPL Horizons API, target 501, observer 500@599, quantity 14 (IAU_IO, WEST positive), the same 7 dates. The drawn sub-Jupiter point is within 0.47 deg
     (the app's Io place is a fit with a worst error of 4,514 km = 0.61 deg seen from Jupiter; testIauMoons050).
+
+[0.88.0] sats_mean_elements_2026-11-23.extract.txt: the lines of JPL's "Planetary Satellite Mean Elements" table that src/orbit/moon_jpl_elements.inc and
+tests/test_orbit.cpp (testMoonMeanElements) use: the warning, the definition, the column list and one row for each of Earth's Moon and the 13 big moons.
+The page (saved in the private sources repo, data/jpl/) states no numerical error for the table.

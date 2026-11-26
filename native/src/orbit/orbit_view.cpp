@@ -519,7 +519,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         if (r.realM) { const Vec3 g = sys.moonGeocentric(); r.rh = g * (1 / length(g)); r.ph = cross(sys.moonOrbitNormal(), r.rh); r.dW2 = r.dW * length(g) / r.aM; }
         // 0.27: the 13 big moons at their real places (orbit/moon_sats.h, fitted to JPL Horizons), drawn as our real Moon: same direction, the drawn distance
         // scaled by the real one over the mean one, on the ring of its present orbit plane. In both Simple and Real (they are not part of the planets' physics).
-        r.realS = !r.realM && !(b.name == "Earth" && j == 0) && satState(m.name, sys.julianDayTDB(), r.sp, r.sv);
+        r.realS = !r.realM && !(b.name == "Earth" && j == 0) && satPlace(m.name, sys.julianDayTDB(), r.sp, r.sv);   // 0.88.0: outside 1800-2100 JPL's mean elements (orbit/moon_sats.h)
         if (r.realS) { r.rh = r.sp * (1 / length(r.sp)); Vec3 nn = cross(r.sp, r.sv); nn = nn * (1 / length(nn)); r.ph = cross(nn, r.rh); r.dW2 = r.dW * length(r.sp) / m.aKm; }
         r.realP = r.realM || r.realS;
         const double Y = r.dW * r.yr * r.sgn;

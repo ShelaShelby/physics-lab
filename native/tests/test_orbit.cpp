@@ -7,6 +7,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
+#include <sstream>
 #include <limits>
 #include <map>
 #include <regex>
@@ -293,6 +295,136 @@ static void testMoonSats() {
     }
     Vec3 p, v;
     check(!satState("Io", kSatFirstJD - 1, p, v) && !satState("Io", kSatLastJD + 1, p, v) && !satState("Moon", 2451545, p, v), "outside 1800-2100, or for our Moon, no real place");
+}
+
+// 0.88.0: outside 1800-2100 the 13 big moons follow JPL's table of mean elements (data/jpl/sats_mean_elements_2026-11-23.html; the lines used are in its .extract.txt).
+// JPL states no number for the table's error: its page only warns that the elements are "not intended for ephemeris computation". So the error allowed here is built from
+// two things, neither chosen: (a) what the table's printed rounding can move (half of the last printed digit of every number, carried through the position and, for dates away
+// from J2000, through the rates), and (b) what a precessing ellipse is off from the real motion, measured by this lab for the same kind of model (satWorstErrKm, against Horizons).
+static double meanRoundingKm(const SatTableRow& r, double tDays) {
+    const double D = 3.14159265358979323846 / 180, a = satTableNumber(r.a), e = satTableNumber(r.e), P = satTableNumber(r.P), Pw = satTableNumber(r.Pw), Pn = satTableNumber(r.Pn);
+    const double rr = a * (1 + e);
+    double b = satTableHalfUnit(r.a) * (1 + e) + 2 * a / (1 - e) * satTableHalfUnit(r.e);
+    b += rr * (satTableHalfUnit(r.w) + satTableHalfUnit(r.M) / (1 - e) + satTableHalfUnit(r.i) + satTableHalfUnit(r.node)) * D;
+    if (r.ra[0]) b += rr * (satTableHalfUnit(r.ra) + satTableHalfUnit(r.dec)) * D;
+    const double yr = 365.25, twoPi = 2 * 3.14159265358979323846;
+    const double dRate = twoPi * satTableHalfUnit(r.P) / (P * P) + (Pw > 0 ? 2 * twoPi * satTableHalfUnit(r.Pw) * yr / ((Pw * yr) * (Pw * yr)) : 0) + (Pn > 0 ? 2 * twoPi * satTableHalfUnit(r.Pn) * yr / ((Pn * yr) * (Pn * yr)) : 0);
+    return b + rr / (1 - e) * std::fabs(tDays) * dRate;
+}
+
+static void testMoonMeanElements() {
+    static const double kRef[][5] =
+#include "reference/moon_sats_table.inc"
+    ;
+    const char* names[13] = {"Phobos", "Deimos", "Io", "Europa", "Ganymede", "Callisto", "Enceladus", "Rhea", "Titan", "Titania", "Oberon", "Triton", "Charon"};
+    const double D = 3.14159265358979323846 / 180, twoPi = 2 * 3.14159265358979323846;
+    // (1) a date inside 1800-2100: J2000 itself, then the other 89 Horizons dates, against the real places the lab holds (tests/reference/moon_sats_table.inc)
+    for (int k = 0; k < 13; k++) {
+        const SatTableRow* row = satTableRow(names[k]);
+        check(row != nullptr, std::string(names[k]) + ": has a row of JPL's table");
+        if (!row) continue;
+        double epochErr = -1, epochTol = 0, worstOver = 0;
+        bool allIn = true;
+        for (const auto& r : kRef) {
+            if (static_cast<int>(r[0]) != k) continue;
+            Vec3 p, v;
+            if (!satMeanState(names[k], r[1], p, v)) { check(false, std::string(names[k]) + ": a mean-element place at JD " + std::to_string(r[1])); continue; }
+            const double err = length(p - Vec3{r[2], r[3], r[4]}), tol = meanRoundingKm(*row, r[1] - 2451545.0) + satWorstErrKm(names[k]);
+            if (r[1] == 2451545.0) { epochErr = err; epochTol = tol; }
+            worstOver = std::max(worstOver, err / tol);
+            if (err > tol) allIn = false;
+        }
+        // Doubtful rows (REPORT 0.88.0, each with the Horizons value): Rhea and Titan (JPL's node and periapsis, and for Saturn's two moons the mean longitude, are far from Horizons), Triton
+        // (its inclination to Neptune's pole is 0.5 deg more than Horizons': JPL's equatorial frame is not the mean pole used here), and Deimos (its P, 1.2625 d, is 4.7e-5 off Horizons' mean
+        // motion where the rounding allows 4.0e-5). For them the test says the doubt is real, so it ends if JPL's page is ever corrected.
+        const std::string nm = names[k];
+        const bool doubtEpoch = nm == "Rhea" || nm == "Titan" || nm == "Triton", doubtDates = doubtEpoch || nm == "Deimos";
+        if (!doubtEpoch) check(epochErr >= 0 && epochErr <= epochTol, nm + ": at J2000 the table's elements are within " + std::to_string(epochTol) + " km of Horizons (off by " + std::to_string(epochErr) + ")");
+        else check(epochErr > epochTol, nm + ": at J2000 the table is further from Horizons than its rounding allows (" + std::to_string(epochErr) + " > " + std::to_string(epochTol) + " km): doubtful, in REPORT");
+        if (!doubtDates) check(allIn, nm + ": at all 90 Horizons dates inside the bound (worst " + std::to_string(worstOver) + " of it)");
+        else check(!allIn, nm + ": over the 90 dates the table leaves the bound (doubtful, in REPORT)");
+    }
+    // (2) each moon's period and plane from the elements are the table's
+    for (int k = 0; k < 13; k++) {
+        const SatTableRow* row = satTableRow(names[k]);
+        if (!row) continue;
+        const double P = satTableNumber(row->P);
+        check(std::fabs(satMeanPeriodDays(names[k]) - P) < 1e-12 * P, std::string(names[k]) + ": the model's period is the table's " + row->P + " d (" + std::to_string(satMeanPeriodDays(names[k])) + ")");
+        double ra = 0, dec = 0;
+        check(satMeanPole(names[k], ra, dec), std::string(names[k]) + ": has a reference plane");
+        if (row->ra[0]) check(ra == satTableNumber(row->ra) && dec == satTableNumber(row->dec), std::string(names[k]) + ": reference plane = the table's Laplace pole " + row->ra + ", " + row->dec);
+        // the plane the moon moves in: its angular momentum against the pole is the table's inclination, its node the table's node (nodes of i < 0.1 deg are not defined)
+        Vec3 p, v;
+        satMeanState(names[k], 2451545.0, p, v);
+        Vec3 h = cross(p, v);
+        h = h * (1 / length(h));
+        const double rar = ra * D, dcr = dec * D, obl = 84381.448 / 3600 * D;
+        const Vec3 Peq{std::cos(dcr) * std::cos(rar), std::cos(dcr) * std::sin(rar), std::sin(dcr)};
+        const Vec3 Pe{Peq.x, std::cos(obl) * Peq.y + std::sin(obl) * Peq.z, -std::sin(obl) * Peq.y + std::cos(obl) * Peq.z};   // the pole in the ecliptic of J2000 (the frame of p, v)
+        const double inc = std::acos(std::max(-1.0, std::min(1.0, dot(h, Pe)))) / D, iTab = satTableNumber(row->i);
+        check(std::fabs(inc - iTab) <= satTableHalfUnit(row->i) + 0.01, std::string(names[k]) + ": orbit plane is " + std::to_string(inc) + " deg from the pole, the table says " + row->i);
+    }
+    // (2b) the planes of the four moons in the planet's equatorial frame: JPL gives no pole there. The planet's IAU 2015 pole (NAIF pck00011.tpc, saved data/jpl/naif_pck00011.tpc):
+    // Uranus 257.311, -15.175 (JPL's i of 0.1 deg for Titania and Oberon means they go round the opposite pole: 77.311, 15.175, as the 0.52.1 fit), Neptune 299.36, 43.46, Pluto 132.993, -6.163
+    struct Pole { const char* moon; double ra, dec; };
+    for (const Pole& q : {Pole{"Titania", 77.311, 15.175}, Pole{"Oberon", 77.311, 15.175}, Pole{"Triton", 299.36, 43.46}, Pole{"Charon", 132.993, -6.163}}) {
+        double ra = 0, dec = 0;
+        check(satMeanPole(q.moon, ra, dec) && ra == q.ra && dec == q.dec, std::string(q.moon) + ": its planet's IAU 2015 pole is the reference plane");
+    }
+    // (2c) the kind and signs of each row were read against the lab's Horizons fit: the table's rates give the real mean longitude rate (rad/day) within their printed rounding.
+    // Phobos, Deimos and Triton do not (REPORT 0.88.0): their P is further from the real mean motion than its rounding.
+    for (int k = 0; k < 13; k++) {
+        const SatTableRow* row = satTableRow(names[k]);
+        if (!row) continue;
+        const double P = satTableNumber(row->P), Pw = satTableNumber(row->Pw), Pn = satTableNumber(row->Pn), yr = 365.25;
+        const double wd = Pw > 0 ? row->apsisSign * twoPi / (Pw * yr) : 0, Od = Pn > 0 ? row->nodeSign * twoPi / (Pn * yr) : 0;
+        const double Ldot = twoPi / P + (row->kind == 'A' ? wd + Od : 0);
+        const double tol = twoPi * satTableHalfUnit(row->P) / (P * P) + (Pw > 0 ? twoPi * satTableHalfUnit(row->Pw) * yr / ((Pw * yr) * (Pw * yr)) : 0) + (Pn > 0 ? twoPi * satTableHalfUnit(row->Pn) * yr / ((Pn * yr) * (Pn * yr)) : 0);
+        const double diff = std::fabs(Ldot - satFitMeanMotion(names[k])), fitRate = satWorstErrKm(names[k]) / satTableNumber(row->a) / (kSatLastJD - kSatFirstJD);   // the fit's own rate: its error over its 300 years
+        const std::string nm = names[k];
+        if (nm == "Phobos" || nm == "Deimos" || nm == "Triton") check(diff > tol + fitRate, nm + ": its table period is inconsistent with Horizons' mean motion (" + std::to_string(diff) + " rad/day, rounding " + std::to_string(tol) + ")");
+        else check(diff <= tol + fitRate, nm + ": the table's rates give Horizons' mean motion within their rounding and the fit's rate (" + std::to_string(diff) + " <= " + std::to_string(tol + fitRate) + " rad/day)");
+    }
+    // (2d) the mean longitude at J2000 JPL prints (omega + M + node) against the lab's Horizons fit: the four moons whose printed value is further than rounding plus the fit's error are marked
+    for (int k = 0; k < 13; k++) {
+        const SatTableRow* row = satTableRow(names[k]);
+        if (!row) continue;
+        const double L = (satTableNumber(row->w) + satTableNumber(row->M) + satTableNumber(row->node)) * D, Lf = satFitLongitudeJ2000(names[k]);
+        double d = std::fmod(L - Lf, twoPi);
+        if (d > twoPi / 2) d -= twoPi;
+        if (d < -twoPi / 2) d += twoPi;
+        const double a = satTableNumber(row->a), allowed = (satTableHalfUnit(row->w) + satTableHalfUnit(row->M) + satTableHalfUnit(row->node)) * D + satWorstErrKm(names[k]) / a;
+        check((std::fabs(d) > allowed) == row->longitudeFromFit, std::string(names[k]) + ": the printed mean longitude is " + std::to_string(d / D) + " deg from Horizons' (allowed " + std::to_string(allowed / D) + "): the fit's value is used exactly when it is further");
+    }
+    // outside 1800-2100 the place is the mean-element one, inside it is the real one
+    Vec3 p, v, pr, vr;
+    bool real = true;
+    check(satPlace("Io", kSatFirstJD - 1, p, v, &real) && !real && satMeanState("Io", kSatFirstJD - 1, pr, vr) && length(p - pr) == 0, "Io before 1800: JPL's mean-element place");
+    check(satPlace("Io", kSatLastJD + 1, p, v, &real) && !real && satPlace("Io", 2451545.0, p, v, &real) && real && satState("Io", 2451545.0, pr, vr) && length(p - pr) == 0, "Io after 2100 the mean-element place, in 2000 the real one");
+    check(!satPlace("Moon", 2500000.0, p, v, &real) && !satMeanState("Moon", 2500000.0, p, v), "our Moon is not one of the 13: unchanged (REPORT 0.88.0)");
+    // a moon far outside (year 2900, 1 year of its orbit later): it moves, on its orbit's size, and its plane is the same
+    Vec3 pa, va, pb, vb;
+    satMeanState("Titan", 2451545.0 + 365250.0 * 9, pa, va);
+    satMeanState("Titan", 2451545.0 + 365250.0 * 9 + 4.0, pb, vb);
+    check(length(pa) > 1.1e6 && length(pa) < 1.3e6 && length(pb - pa) > 1e5, "Titan in year 2900: on its orbit (" + std::to_string(length(pa)) + " km from Saturn) and moving");
+    // (3) the date text no longer says "made-up places", and says what the code does
+    const std::string out = outsideRangeNote(-8000000000000LL), outAfter = outsideRangeNote(5000000000000LL), moonsOut = dateNotes(false, true, false);
+    for (const std::string* t : {&out, &outAfter, &moonsOut}) {
+        check(t->find("made-up places") == std::string::npos && t->find("made-up start") == std::string::npos, "date text outside 1800-2100: no 'made-up places'");
+        check(t->find("JPL") != std::string::npos && t->find("mean elements") != std::string::npos, "date text outside 1800-2100 names JPL's mean elements");
+    }
+    check(out.find("Moon") != std::string::npos && out.find("simple ellipse") != std::string::npos, "date text outside 1800-2100 still says our Moon is on a simple ellipse");
+    // the card of a moon in 2200 says what the code does (1 June 2200 UT)
+    SolarSystem sys; sys.loadAt(7271164800000LL);
+    for (const Body& b : sys.bodies) {
+        if (b.name != "Jupiter" && b.name != "Earth") continue;
+        Card c; CardOptions o;
+        cardText(sys, Selection{Selection::Moon, b.id, 0}, o, c);
+        std::string txt;
+        for (const auto& l : c.lines) txt += l + "\n";
+        if (b.name == "Jupiter") check(txt.find("JPL") != std::string::npos && txt.find("mean elements") != std::string::npos && txt.find("made-up") == std::string::npos && txt.find("roughly right") == std::string::npos, "Io's card in 2200: JPL's mean elements, no made-up angle, no 'roughly right' plane");
+        else check(txt.find("made-up starting angle") != std::string::npos, "our Moon's card in 2200: unchanged, still a simple ellipse with a made-up angle");
+    }
 }
 
 // 0.27: the real shapes. The radii against the NASA fact sheets (typed again here from the sheets, read 5 Nov 2026), each sheet's own flattening
@@ -1005,7 +1137,7 @@ static void testAlphaCen073() {
 static double fullPhaseAlbedo(render::Map m, double k, bool lunar, bool earth = false, int nDir = 160, int N = 96) {
     render::MapImage im;
     if (!render::decodeMap(m, im)) return -1;
-    double lut[256]; for (int i = 0; i < 256; i++) lut[i] = render::srgbDecode(i / 255.0);
+    double lut[256]; for (int i = 0; i < 256; i++) lut[i] = render::mapDecode(m, i);   // 0.88.0: Pluto's bytes are linear light
     const double kPi = 3.14159265358979323846;
     double sum = 0;
     for (int d = 0; d < nDir; d++) {
@@ -1085,6 +1217,45 @@ static void testFarOcclusion077() {
     double q[3]; for (int k = 0; k < 3; k++) q[k] = 3.0 * f.e1[k];
     double sx = 0, sy = 0; orbit::ringOnScreen(f, q, sx, sy);
     near(orbit::farSeen(occ, sx, sy), 1.0, 1.0, 1e-12, "far marker beside Saturn, beyond its rings: fully seen");
+}
+
+// 0.88.0 Part B: Pluto's map bytes are LINEAR light. USGS's saved page (data/maps/usgs_pluto_new_horizons_lorri_mvic_global_mosaic_300m_2026-11-23.html): "The original 32bit
+// pixel values were linearly stretched to 8bit (1-255) using the input range of 0.03344 to 0.99981". Until 0.87.x the bytes were decoded as sRGB (a byte of 128 gave 0.216, not 0.502).
+// The map's mean brightness is read from tools/map_albedo_scale.txt, which tools/map_albedo_scale.py (numpy, its own decode) wrote: the C++ decode must give the same mean.
+static void testPlutoLinear088() {
+    using render::Map;
+    check(render::mapInfo(Map::Pluto).linear, "Pluto's map is marked linear (USGS: linearly stretched to 8 bit)");
+    for (int m = 1; m < static_cast<int>(Map::Count); m++)
+        if (static_cast<Map>(m) != Map::Pluto) check(!render::mapInfo(static_cast<Map>(m)).linear, std::string(render::mapInfo(static_cast<Map>(m)).file) + ": still sRGB (its source says so, or nothing says otherwise)");
+    double worst = 0;
+    for (int b = 0; b < 256; b++) worst = std::max(worst, std::fabs(render::mapDecode(Map::Pluto, b) - b / 255.0));
+    check(worst < 1e-15, "Pluto: a byte decodes to byte / 255 (linear): worst " + std::to_string(worst));
+    check(std::fabs(render::mapDecode(Map::Pluto, 128) / render::mapDecode(Map::Pluto, 64) - 2.0) < 1e-12, "Pluto: twice the byte, twice the light (a linear stretch)");
+    // IEC 61966-2-1 for the other maps: 128 / 255 = 0.50196 -> 0.21586
+    near(render::mapDecode(Map::Mercury, 128), std::pow((128 / 255.0 + 0.055) / 1.055, 2.4), 1.0, 1e-12, "Mercury: a byte decodes by the sRGB curve");
+    check(render::mapDecode(Map::Mercury, 128) < 0.22 && render::mapDecode(Map::Mercury, 128) > 0.21, "Mercury: byte 128 is 0.216 of full light");
+    // the mean brightness (Rec. 709 luminance, weighted by cos latitude, linear light) against the saved number
+    double saved = -1;
+    {
+        std::ifstream f(PL_DATA_DIR "/../tools/map_albedo_scale.txt");   // native/tools: the numpy script's saved output
+        std::string line;
+        while (std::getline(f, line)) if (line.rfind("Pluto", 0) == 0) { std::istringstream is(line); std::string name; is >> name >> saved; }
+    }
+    render::MapImage im;
+    check(render::decodeMap(Map::Pluto, im), "Pluto's map decodes");
+    double sum = 0, wsum = 0;
+    for (int y = 0; y < im.h; y++) {
+        const double w = std::cos((90 - (y + 0.5) * 180.0 / im.h) * 3.14159265358979323846 / 180);
+        for (int x = 0; x < im.w; x++) {
+            const uint8_t* p = &im.rgba[4 * (static_cast<std::size_t>(y) * im.w + x)];
+            sum += w * (0.2126 * render::mapDecode(Map::Pluto, p[0]) + 0.7152 * render::mapDecode(Map::Pluto, p[1]) + 0.0722 * render::mapDecode(Map::Pluto, p[2]));
+            wsum += w;
+        }
+    }
+    const double mean = sum / wsum;
+    std::printf("  Pluto's map: mean brightness %.4f (saved in tools/map_albedo_scale.txt: %.4f)\n", mean, saved);
+    near(mean, saved, 1.0, 5e-4, "Pluto's decoded mean brightness is the saved one (tools/map_albedo_scale.txt, numpy)");
+    check(saved > 0.39 && saved < 0.40, "the saved mean is the linear one, 0.397 (the sRGB decode gave 0.161)");
 }
 
 static void testAlbedo077() {
@@ -1255,6 +1426,7 @@ int main() {
     testIauMoons050();
     testMoonOrientation050();
     testMapColours050();
+    testPlutoLinear088();
     testAlbedo077();
     testFarOcclusion077();
     testStarBrightness050();
@@ -1268,6 +1440,7 @@ int main() {
     testSaturnRings();
     testShapes();
     testMoonSats();
+    testMoonMeanElements();
     testRealRocks();
     testSkyMaps();
     testLabelClear();

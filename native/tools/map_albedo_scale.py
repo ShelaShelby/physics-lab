@@ -42,8 +42,14 @@ P = {
 }
 W709 = np.array([0.2126, 0.7152, 0.0722])
 
-def decode(c):
+# 0.88.0: Pluto's bytes are LINEAR light, not sRGB: USGS's page says "The original 32bit pixel values were linearly stretched to 8bit (1-255) using the input range of
+# 0.03344 to 0.99981" (saved data/maps/usgs_pluto_new_horizons_lorri_mvic_global_mosaic_300m_2026-11-23.html), so a byte is proportional to the measured value
+# (render/planet_maps.h MapInfo::linear). Until 0.87.x it was decoded as sRGB, which made Pluto's map look darker in the middle and its mean 0.161 instead of 0.397.
+LINEAR = {'pluto'}
+
+def decode(c, linear=False):
     c = c / 255.0
+    if linear: return c
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 
 def solve(lin, w, p, g):
@@ -69,7 +75,7 @@ print('body       map mean Y  albedo p  law      plain k  factor   drawn p  clip
 for body, (f, p, src, law) in P.items():
     im = np.asarray(Image.open(os.path.join(D, f + '.jpg')).convert('RGB'), dtype=np.float64)
     H = im.shape[0]
-    lin = decode(im)
+    lin = decode(im, f in LINEAR)
     lat = 90 - (np.arange(H) + 0.5) * 180 / H
     w = np.cos(np.radians(lat))[:, None]
     g = 2.0 / 3.0 if law == 'lambert' else 1.0
