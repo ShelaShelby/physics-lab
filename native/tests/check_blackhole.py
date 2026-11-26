@@ -419,6 +419,31 @@ def hottest_k(mass, feed):
     mdot = feed * 4 * math.pi * GM * c / 0.04 / ((1 - math.sqrt(8 / 9)) * c * c)
     rg = GM / c ** 2
     return (mdot * c * c / rg ** 2 * fmax / sigma) ** 0.25
+def ring_k(mass, feed, r):
+    # 0.89.0: the same papers' disc (as hottest_k) at a given radius r (GM/c^2): T(r) = (F(r) / sigma)^(1/4), the disc's own light only
+    GM, c, h, k = 1.32712440041279419e20 * mass, 299792458.0, 6.62607015e-34, 1.380649e-23
+    sigma = 2 * math.pi ** 5 * k ** 4 / (15 * h ** 3 * c ** 2)
+    s, s3, s6 = math.sqrt(r), math.sqrt(3), math.sqrt(6)
+    F = 3 / (8 * math.pi) / ((r - 3) * r ** 2.5) * (s - s6 + s3 / 2 * math.log((s + s3) * (s6 - s3) / ((s - s3) * (s6 + s3))))
+    mdot = feed * 4 * math.pi * GM * c / 0.04 / ((1 - math.sqrt(8 / 9)) * c * c)
+    rg = GM / c ** 2
+    return (mdot * c * c / rg ** 2 * F / sigma) ** 0.25
+def done_fcol(t):
+    # 0.89.0: the colour-correction factor written here from Done et al. 2012 (extract data/blackhole/arxiv/1107.5429_done2012.extract.txt), at each ring's own
+    # temperature: 1 below 3e4 K, (2) (T / 3e4 K)^0.82 from 3e4 to 1e5 K, (1) (72 / T_keV)^(1/9) above (T_keV = k T / e / 1000, the exact k and e)
+    if t < 3e4: return 1.0
+    if t < 1e5: return (t / 3e4) ** 0.82
+    return (72 / (1.380649e-23 * t / 1.602176634e-19 / 1000)) ** (1 / 9)
+def hottest_with_return(name, d, mass, feed, own_k):
+    # 0.89.0 (REPORT "References changed on purpose"): since 0.87.0 (PLAN_REVIEW R11, Cunningham 1976) the readout's hottest ring is the hottest of the light the disc
+    # sends, its own plus the light bent back onto it: T^4 = T_own(r)^4 (1 + F_o / F). At spin 0 that adds about 2 % of the flux and moves the ring inward.
+    # The papers' ring (own light only) is checked exactly in the run with the returning light off. Here: the returning table was made (ret >= 0), the readout's T
+    # is the papers' T at the readout's radius with that share added (1e-5, as before), the ring lies inside the papers' 9.551 (the share rises inward), the
+    # readout is hotter than the papers' hottest ring, and the card's line gives the same share (2 digits).
+    ret, rh = float(d["ret"]), float(d["rhot9"])
+    want = ring_k(mass, feed, rh) * (1 + max(ret, 0.0)) ** 0.25
+    check(ret >= 0 and abs(float(d["thot"]) / want - 1) < 1e-5 and float(d["rin"]) == 6 and 6 < rh < 9.551 and float(d["thot"]) > own_k,
+          f"{name}: the readout's hottest ring {d['thot']} K = the papers' {want:.6g} K at its radius {rh:.6g} with the returning light (+{100 * ret:.3g} %; own light only {own_k:.6g} K at 9.551)")
 
 # 0.82.1, bugs the owner saw (a bug the owner has seen: the new checks are parts of "disc", the group ui_blackhole)
 def part_gasrow(binary, work):
@@ -509,16 +534,35 @@ def part_disc(binary, work):
         d = disc_note(on)
         if d is None or d.get("on") != "1": check(False, f"{name}: the card's disc numbers ({d})"); continue
         tk = hottest_k(4.297e6, 0.1)
-        check(abs(float(d["thot"]) / tk - 1) < 1e-5 and float(d["rin"]) == 6 and abs(float(d["rhot"]) - 9.551) < 0.001, f"{name}: the readout's hottest ring {d['thot']} K = {tk:.6g} K at {d['rhot']}, inner edge {d['rin']}")
+        hottest_with_return(name, d, 4.297e6, 0.1, tk)
+        pct = f"+{float(d['ret']) * 100:.2g} %"                          # (the card: sig(100 x share, 2), shell_blackhole.cpp)
+        check(texts_has(on, pct + " of the disc's own light"), f"{name}: the card's returning light says {pct}")
         check(float(d["bright"]) > 1 and d["auto"] == "1" and float(d["white"]) > 0, f"{name}: brighter than the Sun's surface, automatic exposure ({d['bright']}, {d['white']})")
+    # 0.89.0: the papers' hottest ring itself, exactly as before 0.87.0, with the returning light off (PL_BH_REALOFF, disc.cpp discLightRules): the disc's own light
+    e = dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o", PL_BH_SET="pitch=0.35;glare=off;disc=on", PL_BH_REALOFF="returning")
+    d = disc_note(run_app(binary, work, "bh_disc_own", e, frames=12))
+    tk = hottest_k(4.297e6, 0.1)
+    check(d is not None and abs(float(d["thot"]) / tk - 1) < 1e-5 and float(d["rin"]) == 6 and abs(float(d["rhot"]) - 9.551) < 0.001,
+          f"the returning light off: the readout's hottest ring {d and d['thot']} K = the papers' {tk:.6g} K at {d and d['rhot']}, inner edge {d and d['rin']}")
     # the feeding rate and the outer edge move the picture and the readout (a fixed exposure, so that brightness shows)
     runs = {}
     for name, extra in (("f02", "feed=0.02"), ("f20", "feed=0.2"), ("o15", "outer=15"), ("o60", "outer=60")):
         runs[name] = run_app(binary, work, f"bh_disc_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"preset=feeding;pitch=1.2;{extra}"), frames=12)
+    for name, extra in (("f02bb", "feed=0.02"), ("f20bb", "feed=0.2")):     # 0.89.0: the same two with black-body rings (the colour correction off)
+        runs[name] = run_app(binary, work, f"bh_disc_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"preset=feeding;pitch=1.2;{extra}",
+                                                                   PL_BH_REALOFF="fcol"), frames=12)
+    runs["f02own"] = run_app(binary, work, "bh_disc_f02own", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;pitch=1.2;feed=0.02", PL_BH_REALOFF="returning"), frames=12)
     a, b = disc_note(runs["f02"]), disc_note(runs["f20"])
     if a and b:
         check(abs(float(b["thot"]) / float(a["thot"]) - 10 ** 0.25) < 1e-6 and float(a["feed"]) == 0.02 and float(b["feed"]) == 0.2, f"feeding rate: T ~ rate^(1/4) ({a['thot']}, {b['thot']})")
-        check(abs(float(a["thot"]) / hottest_k(1e8, 0.02) - 1) < 1e-5, f"the feeding preset's hottest ring = the papers' ({a['thot']} K)")
+        hottest_with_return("the feeding preset", a, 1e8, 0.02, hottest_k(1e8, 0.02))
+        own = disc_note(runs["f02own"])
+        check(own is not None and abs(float(own["thot"]) / hottest_k(1e8, 0.02) - 1) < 1e-5, f"the returning light off: the feeding preset's hottest ring = the papers' ({own and own['thot']} K)")
+        # 0.89.0: the card's colour correction at the hottest ring = Done et al.'s at the readout's temperature (3 digits, as the card prints it). The readout's T has
+        # 6 digits (half a unit: 1.1e-6 of 47,000 K), so f from it is good to 0.82 x that: 2e-6
+        for x, r_ in ((a, runs["f02"]), (b, runs["f20"])):
+            f = done_fcol(float(x["thot"]))
+            check(abs(float(x["fcol"]) / f - 1) < 2e-6 and texts_has(r_, f"f = {f:.3g} at the hottest ring"), f"the card's colour correction at {x['thot']} K = Done et al.'s {f:.4g} ({x['fcol']})")
     else: check(False, "feeding rate runs printed the card")
     occ = [v for k, v in runs["f02"].rects.items() if re.match(r"occ\d+$", k) or k == "handle"]
     free = lambda x, y: y > 60 and not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)
@@ -530,8 +574,18 @@ def part_disc(binary, work):
         lb = sum(lum(Bb.px(int(x), int(y))) for x, y in pa[0])
         # ten times the feeding rate: T x 10^(1/4) = 1.78; far above the visible a black body's visible light grows about like T. 0.70.0: the exposure is
         # always tied to automatic (stops from it), so the picture is drawn at the disc's own key: the readout's brightest part carries the physics, the picture still changes
+        # 0.89.0 (REPORT "References changed on purpose"): this premise holds for black-body rings, so it is checked with the colour correction off. Since 0.87.0
+        # (PLAN_REVIEW R9, Done et al. 2012) each ring sends f^-4 B(f T) with f rising with T ((2): f ~ T^0.82 from 3e4 to 1e5 K); far above the visible that is
+        # about T f^-3 ~ T^-1.5: ten times the feeding rate makes these rings (47,000 -> 84,000 K) dimmer in visible light, not brighter. As drawn: the picture's
+        # light changes, and the readout's brightest part grows less than for black-body rings (here it falls)
+        Bc, Bd = Bmp(runs["f02bb"].bmp), Bmp(runs["f20bb"].bmp)
+        lc = sum(lum(Bc.px(int(x), int(y))) for x, y in pa[0])
+        ld = sum(lum(Bd.px(int(x), int(y))) for x, y in pa[0])
+        bc, bd = float(disc_note(runs["f02bb"])["bright"]), float(disc_note(runs["f20bb"])["bright"])
+        check(bd > 1.5 * bc and abs(ld - lc) > 0.005 * lc, f"black-body rings: a higher feeding rate is brighter on the disc (the readout's brightest part {bc:.4g} -> {bd:.4g}; the picture's light {lc:.3g} -> {ld:.3g})")
         ba, bb = float(disc_note(runs["f02"])["bright"]), float(disc_note(runs["f20"])["bright"])
-        check(bb > 1.5 * ba and abs(lb - la) > 0.005 * la, f"a higher feeding rate is brighter on the disc (the readout's brightest part {ba:.4g} -> {bb:.4g}; the picture's light {la:.3g} -> {lb:.3g})")
+        check(bb / ba < bd / bc and abs(lb - la) > 0.005 * la,
+              f"with the colour correction a higher feeding rate brightens the disc less than black-body rings do ({ba:.4g} -> {bb:.4g} against {bc:.4g} -> {bd:.4g}; the picture's light {la:.3g} -> {lb:.3g})")
     c15, c60 = disc_note(runs["o15"]), disc_note(runs["o60"])
     p15, p60 = disc_points(runs["o15"]), disc_points(runs["o60"])
     check(c15 is not None and c60 is not None and float(c15["outer"]) == 15 and float(c60["outer"]) == 60, f"outer edge in the readout ({c15}, {c60})")

@@ -2337,6 +2337,57 @@ static void testCardReference057() {
     }
 }
 
+// 0.89.0: buildManyJump in fixed chunks, each on its own random stream, on threads: the dots are the same for any thread count, compared exactly (every float and sign),
+// for a level atom (radium-226, as atom.emit_all: Ultra, Shells enlarged), an alkali valence jump (sodium 3s -> 3p, every electron) and the same on the Slice.
+// Built over frames or at once with 8 threads gives the same dots too.
+static void testManyJumpThreads089() {
+    using namespace atom;
+    struct Out { std::vector<float> jp, jph; std::vector<signed char> jsg; long jn = 0; bool many = false; };
+    const auto run = [](int Z, int N, const char* view, int threads, bool frames) {
+        Out o;
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        seedRandom(77);
+        lab.p = AtomParams::appDefaults(); lab.restart();
+        lab.setParam("Z", double(Z)); lab.setParam("N", double(N));
+        lab.p.elec = "All"; lab.p.mrel = "Relativistic"; lab.p.show = "Whole atom"; lab.p.cdens = "Ultra"; lab.p.rscale = "Shells enlarged";
+        const std::vector<JLine>& ln = jumpLines(Z);
+        int line = -1;
+        if (lab.levelOn()) for (int k = 0; k < int(ln.size()); k++) if (jumpOffered(Z, k)) { line = k; lab.s.lvl = ln[std::size_t(k)].hi; break; }
+        lab.setParam("view", std::string(view));
+        for (int i = 0; i < 40000 && lab.s.k < lab.cloudCap(); i++) lab.step(1.0 / 240);
+        AtomLab::manyJumpThreadsOverride = threads;
+        if (line >= 0) lab.emitLevelLine(line);
+        else if (lab.valenceOn() && (!lab.valenceTargets(-1).empty() || !lab.valenceTargets(+1).empty())) {   // (to: an alkaliOrbitals index)
+            const bool up = !lab.valenceTargets(+1).empty();
+            const AlkOrbital t = lab.valenceTargets(up ? +1 : -1).front();
+            const std::vector<AlkOrbital> orbs = alkaliOrbitals(Z);
+            for (int k = 0; k < int(orbs.size()); k++) if (orbs[std::size_t(k)].n == t.n && orbs[std::size_t(k)].l == t.l) { lab.startJump(up ? "absorb" : "emit", k); break; }
+        }
+        for (int i = 0; i < 2000 && !lab.s.trans; i++) { if (line >= 0 && lab.s.photon) lab.s.photon.reset(); lab.step(1.0 / 240); }   // (an absorbed photon flies in first)
+        if (lab.s.trans) {
+            const auto t0 = std::chrono::steady_clock::now();
+            if (frames) for (int i = 0; i < 100 && !lab.jumpReady(); i++) lab.step(1.0 / 240);
+            lab.completeJump();
+            std::printf("PLMANYJUMP Z=%d view=%s threads=%d frames=%d dots=%ld ms=%.1f\n", Z, view, threads, frames ? 1 : 0, lab.s.jn,
+                        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+            o.jp = lab.s.jp; o.jph = lab.s.jph; o.jsg = lab.s.jsg; o.jn = lab.s.jn; o.many = lab.s.jb.many;
+        }
+        AtomLab::manyJumpThreadsOverride = 0;
+        return o;
+    };
+    struct Case { int Z, N; const char* view; const char* name; };
+    for (const Case& c : {Case{88, 138, "Cloud 3D", "radium-226, a level jump"}, Case{11, 12, "Cloud 3D", "sodium, a valence jump"}, Case{11, 12, "Slice", "sodium on the Slice"}}) {
+        const Out one = run(c.Z, c.N, c.view, 1, false);
+        checkTrue(std::string("many-electron jump on threads, ") + c.name + ": a valence or level jump with dots (" + std::to_string(one.jn) + ")", one.many && one.jn > 20000);
+        for (int t : {2, 8, 16}) {
+            const Out o = run(c.Z, c.N, c.view, t, false);
+            checkTrue(std::string("many-electron jump on threads, ") + c.name + ": " + std::to_string(t) + " threads give the 1 thread's dots exactly", o.jn == one.jn && o.jp == one.jp && o.jph == one.jph && o.jsg == one.jsg);
+        }
+        const Out f = run(c.Z, c.N, c.view, 8, true);
+        checkTrue(std::string("many-electron jump on threads, ") + c.name + ": built over frames on 8 threads = at once on 1", f.jn == one.jn && f.jp == one.jp && f.jph == one.jph && f.jsg == one.jsg);
+    }
+}
+
 static void testJumpBuild() {
     using namespace atom;
     // random numbers: skipping n is the same as drawing n
@@ -4523,6 +4574,7 @@ int main() {
     // before the fix (0.10.6 stage 2 code, one leapfrog step per frame): radius 7.783e-3 (n = 1, speed 30), energy 5.964e-5, rate 5.165e-3, so this fails without the sub-steps.
     testJumpSameDots();
     testJumpBuild();
+    testManyJumpThreads089();
     testPlainWaste057();
     testSliceSuper064();
     testCardReference057();

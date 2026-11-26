@@ -239,9 +239,10 @@ void blackholeCard(AppState& app, Panel& p) {
             std::snprintf(gq, sizeof gq, "bhglare share=%.9g", blackhole::glareShare());
             auditNote(gq);
         }
-        char d[260];
-        std::snprintf(d, sizeof d, "bhdisc on=1 feed=%.6g outer=%.6g rin=%.6g thot=%.6g rhot=%.6g bright=%.6g white=%.6g any=%d auto=%d edgein=%.6g edgeout=%.6g filmt=%.6g", r.feed, r.rOut, r.rIn, r.tHot, r.rHot, L.brightY, L.white,
-                      L.any ? 1 : 0, app.blackhole.expAuto ? 1 : 0, r.discEdgeIn, r.discEdgeOut, r.filmT);
+        char d[320];
+        std::snprintf(d, sizeof d, "bhdisc on=1 feed=%.6g outer=%.6g rin=%.6g thot=%.6g rhot=%.6g bright=%.6g white=%.6g any=%d auto=%d edgein=%.6g edgeout=%.6g filmt=%.6g ret=%.9g rhot9=%.9g fcol=%.9g",
+                      r.feed, r.rOut, r.rIn, r.tHot, r.rHot, L.brightY, L.white, L.any ? 1 : 0, app.blackhole.expAuto ? 1 : 0, r.discEdgeIn, r.discEdgeOut, r.filmT,
+                      r.retShare, r.rHot, r.fcolHot);   // (0.89.0: the returning share and the colour correction at the hottest ring, as the card says them)
         auditNote(d);
     } else auditNote("bhdisc on=0");
     if (r.hasPreset && r.realPreset) {

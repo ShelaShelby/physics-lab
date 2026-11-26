@@ -160,6 +160,9 @@ def part_smoke(binary, work):
         check(r.code == 0 and "Vulkan: " in r.out, f"smoke {lab}: the app started on Vulkan and ended with exit code 0 (exit {r.code})")
         errs = [l for l in r.err.splitlines() if l.startswith("PLVKVALIDATION error")]
         check("PLVKVALIDATION missing" not in r.err and "PLVK validation errors=0" in r.out and not errs, f"smoke {lab}: zero Vulkan validation errors ({len(errs)}; first: {errs[:1]})")
+        # 0.89.0: no swapchain image is used before it is acquired (0.88.0 and before: Dear ImGui's helper moved every new image to PRESENT_SRC first)
+        na = [l for l in r.err.splitlines() if l.startswith("PLVKVALIDATION") and "non-acquired-swapchain-image-used" in l]
+        check(not na, f"smoke {lab}: no swapchain image used before it is acquired ({len(na)}; first: {na[:1]})")
         if not os.path.exists(r.bmp):
             check(False, f"smoke {lab}: the frame was read back")
             continue

@@ -576,8 +576,7 @@ bool VkDraw2D::targetsFor(Targets& t, int w, int h, int s) {
     dropImage(t.ms); dropImage(t.pic); dropImage(t.gray);
     t = Targets();
     const VkImageUsageFlags use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   // (0.69.0: the copy's source)
-    bool ok = makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, use, 1, t.pic, "the picture") &&
-              makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, use, 1, t.gray, "the grey picture");
+    bool ok = makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, use, 1, t.pic, "the picture");   // (0.89.0: the grey picture is made when first drawn, endPicture)
     if (ok && s > 1) ok = makeImage(w, h, kRgba8, static_cast<VkSampleCountFlagBits>(s), VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, t.ms, "the multisampled picture");
     if (!ok) { failed_ = true; return false; }
     t.w = w; t.h = h; t.s = s;
@@ -997,6 +996,9 @@ void VkDraw2D::endPicture(bool gray) {
     usedGray_ = false;
     if (failed_) return;
     if (gray) {                                                              // the picture drawn into its own image, then copied over in grey (kGrayFS)
+        // 0.89.0: that image is made the first time a picture of this size is greyed, not with every new size (ui.resize_blackhole: one image less a size)
+        const VkImageUsageFlags use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        if (!cur_->gray.img && !makeImage(cur_->w, cur_->h, kRgba8, VK_SAMPLE_COUNT_1_BIT, use, 1, cur_->gray, "the grey picture")) { failed_ = true; return; }
         beginPass(kPass8, cur_->gray, nullptr, cur_->w, cur_->h, true, nullptr);
         draw(kGray, kNoBlend, 0, 0, 6, 0, 0, 0, -2);
         endPass();

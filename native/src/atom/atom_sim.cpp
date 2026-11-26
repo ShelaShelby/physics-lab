@@ -11,6 +11,8 @@
 #include "zeeman.h"
 
 #include <algorithm>
+#include <atomic>
+#include <thread>
 #include <cstring>
 #include <random>
 #include <chrono>
@@ -477,9 +479,24 @@ std::string AtomLab::levelShapeNote() const {
 
 // The new dots of a valence jump: independent samples of the atom with the electron in the target orbital (the whole atom, or the shown orbital in that atom), coloured as the cloud is.
 // Core dots are new samples of the same core density, so the core looks the same throughout; the outer electron's part changes shape. Its own generator, as buildJump.
+// 0.89.0: built in fixed chunks of kManyJumpChunk dots. Chunk c has its own random stream, seeded from the jump's seed and c (manyJumpChunkSeed), so a dot depends only on its
+// index: the same dots for any number of threads and any split over frames (tested exactly for 1, 2, 8 and 16 threads). The chunks run on up to manyJumpThreads threads.
+// The sampler's lazy caches (hf.cpp prep, AtomLab::enlargedRadius, manyExtM) are filled on this thread first; inside the threads they are only read.
+int AtomLab::manyJumpThreadsOverride = 0;
+std::uint32_t AtomLab::manyJumpChunkSeed(std::uint32_t base, long chunk) {     // splitmix32-style mixing of the jump's seed and the chunk number
+    std::uint32_t z = base + 0x9E3779B9u * (std::uint32_t(chunk) + 1u);
+    z = (z ^ (z >> 16)) * 0x85EBCA6Bu;
+    z = (z ^ (z >> 13)) * 0xC2B2AE35u;
+    return z ^ (z >> 16);
+}
+int AtomLab::manyJumpThreads() {
+    if (manyJumpThreadsOverride > 0) return manyJumpThreadsOverride;
+    return std::clamp(static_cast<int>(std::thread::hardware_concurrency()) - 1, 1, 16);   // (one core left for the frame's other work)
+}
 void AtomLab::buildManyJump(long upTo) {
     AtomState::JumpBuild& b = s.jb;
-    upTo = std::min(upTo, s.jn);
+    upTo = std::min(s.jn, ((std::min(upTo, s.jn) + kManyJumpChunk - 1) / kManyJumpChunk) * kManyJumpChunk);   // (whole chunks only; the last may be short)
+    if (b.done >= upTo) return;
     const hf::Atom* a = nullptr;
     if (levelOn()) { if (const GraspLevel* g = levelCloud(p.Z, b.to)) a = &g->atom; }   // 0.47.3
     else {
@@ -491,22 +508,41 @@ void AtomLab::buildManyJump(long upTo) {
     const int one = manySubOf(*a), vi = valenceSub(*this, *a);
     const GraspLevel* gl = graspOfAtom(a);
     const std::vector<int> vset = levelValenceSet(*this, *a);
+    const bool slice = sliceDots();
+    const int axis = sliceAxisNow();
+    const double off = slice ? sliceOffNow() : 0;
     hf::Plane pl;
-    if (sliceDots()) pl = hf::planeOf(*a, sliceOffNow());
-    orbit::Mulberry32 r(b.rng);
-    for (; b.done < upTo; b.done++) {
-        const long i = b.done;
-        double x = 0, y = 0, z = 1e4;
-        int shell = -1;
-        bool ok = false;
-        for (int k = 0; k < 4096 && !ok; k++) ok = manyDot(*this, *a, one, vi, gl, sliceDots() ? &pl : nullptr, sliceAxisNow(), r, x, y, z, shell, &vset);
-        signed char sg = 1; float ph = 0;
-        if (ok) manyColour(*a, one, shell, x, y, z, sg, ph);
-        else { x = 0; y = sliceAxisNow() == 1 ? sliceOffNow() + 1e4 : 0; z = sliceAxisNow() == 2 ? sliceOffNow() + 1e4 : 0; }
-        s.jp[3 * i] = float(x * kA0); s.jp[3 * i + 1] = float(y * kA0); s.jp[3 * i + 2] = float(z * kA0);
-        s.jph[std::size_t(i)] = ph; s.jsg[std::size_t(i)] = sg;
+    if (slice) pl = hf::planeOf(*a, off);
+    for (const hf::Subshell& sh : a->sub) (void)hf::radialCdf(sh, 1.0);     // (fills every subshell's table: sampleRadius, radialR, totalRadial only read them now)
+    if (p.rscale == "Shells enlarged") (void)enlargedRadius(*a, 1.0);
+    const long c0 = b.done / kManyJumpChunk, c1 = (upTo + kManyJumpChunk - 1) / kManyJumpChunk;
+    const auto chunk = [&](long c) {
+        orbit::Mulberry32 r(manyJumpChunkSeed(b.rng, c));
+        const long i1 = std::min(upTo, (c + 1) * kManyJumpChunk);
+        for (long i = c * kManyJumpChunk; i < i1; i++) {
+            double x = 0, y = 0, z = 1e4;
+            int shell = -1;
+            bool ok = false;
+            for (int k = 0; k < 4096 && !ok; k++) ok = manyDot(*this, *a, one, vi, gl, slice ? &pl : nullptr, axis, r, x, y, z, shell, &vset);
+            signed char sg = 1; float ph = 0;
+            if (ok) manyColour(*a, one, shell, x, y, z, sg, ph);
+            else { x = 0; y = axis == 1 ? off + 1e4 : 0; z = axis == 2 ? off + 1e4 : 0; }
+            s.jp[std::size_t(3 * i)] = float(x * kA0); s.jp[std::size_t(3 * i + 1)] = float(y * kA0); s.jp[std::size_t(3 * i + 2)] = float(z * kA0);
+            s.jph[std::size_t(i)] = ph; s.jsg[std::size_t(i)] = sg;
+        }
+    };
+    const int nth = static_cast<int>(std::min<long>(manyJumpThreads(), c1 - c0));
+    if (nth <= 1) { for (long c = c0; c < c1; c++) chunk(c); }
+    else {
+        std::atomic<long> next{c0};
+        const auto work = [&] { for (long c = next++; c < c1; c = next++) chunk(c); };
+        std::vector<std::thread> pool;
+        pool.reserve(std::size_t(nth - 1));
+        for (int t = 1; t < nth; t++) pool.emplace_back(work);
+        work();
+        for (std::thread& t : pool) t.join();
     }
-    b.rng = r.seed;
+    b.done = upTo;
 }
 double AtomLab::manyExtM() const {                              // 0.39: 1.7 times the radius that holds 90 % of the most extended orbital shown (the one-electron views use kExt, which is about
     double r90 = 0;                                              // 1.7 times the 90 % radius of 1s: 4.5 against 2.66 a0)

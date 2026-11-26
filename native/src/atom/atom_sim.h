@@ -370,6 +370,10 @@ public:
     static constexpr long kSliceDotsPerFrame = 1500;      // Slice: at most this many new dots a frame while the plane's dots are replaced (about 2 ms here; 0.37 stage 1 made up to 6,000 and lagged)
     bool jumpReady() const { return s.jb.done >= s.jn; }  // every dot of the jump is built (the picture shows the jump only then; until then it shows the cloud as it was: the jump has only just begun)
     bool jumpDrawn() const { return jumpCloud() && jumpReady(); }
+    static constexpr long kManyJumpChunk = 1024;          // 0.89.0: buildManyJump's chunk of dots, each chunk on its own random stream (manyJumpChunkSeed)
+    static int manyJumpThreadsOverride;                   // 0.89.0: > 0: buildManyJump uses this many threads (the tests); 0: manyJumpThreads()
+    static int manyJumpThreads();
+    static std::uint32_t manyJumpChunkSeed(std::uint32_t base, long chunk);
     void completeJump() { if (!jumpReady()) { if (s.jb.many) buildManyJump(s.jn); else buildJump(s.jn); } }   // build what is left now (anything that reads the jump's arrays calls this first)
     // 0.13 stage 2: the same two results from the GPU. They return false when the compute path cannot run (the caller then uses the CPU functions). The CPU functions stay the reference.
     render::SuperGroupParams superGpuParams(double theta) const;      // a, b, exp(-i theta), overlap: what the kernel needs each frame

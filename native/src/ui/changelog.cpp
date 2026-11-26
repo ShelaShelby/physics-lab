@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.89.0", "Faster jumps with every electron, and a lighter window resize",
+     "Atom Lab: a jump with every electron shown (a level jump of radium, a valence jump of sodium, and the other atoms) makes its new dots on all the processor's cores, not on one. "
+     "The dots are exactly the same whatever the number of cores. On a 4-core test machine radium's 240,000 dots take 34 ms instead of 128 ms. Resizing the window: the app now makes the "
+     "window's images itself and no longer waits for an extra step at each new size, and the grey copy of the picture (Monochrome theme) is made only when it is used. Nothing "
+     "you see changes."},
     {"0.88.0", "The big moons outside 1800 to 2100 follow JPL's table, and Pluto's map is read as it was made",
      "Before 1800 and after 2100, the 13 big moons (Phobos, Deimos, the four Galilean moons, Enceladus, Rhea, Titan, Titania, Oberon, Triton and Charon) no longer start at made-up angles "
      "on a plane tilted by the planet's tilt. Their orbits now follow JPL's table of mean elements: JPL's size, shape, tilt, plane and period. The table is rounded, so where "

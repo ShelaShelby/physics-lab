@@ -58,6 +58,8 @@ struct BenchScene {
     std::string gpuProblem;      // "" if the GPU numbers look right; else why they are not reliable
     bool windowInactive = false; // 0.15 stage 2: the window lost focus or was minimised at some time during this scene (warm-up or measuring): Windows can slow a background app
     std::vector<std::string> notes;   // 0.55.5: lines of the scene's own (the Black Hole Lab's: benchBlackHoleLines), printed after its numbers
+    int swapchains = 0;          // 0.89.0: the swapchain made again in the counted frames, their total and longest time (ms)
+    double swapchainMs = 0, swapchainMaxMs = 0;
     double waitAvgMs = -1;       // 0.63.1: the frame thread's waits for the card a frame (fence, acquire, batches read back), not in cpuAvgMs; < 0 not measured
     std::vector<BenchFrameCost> worst;   // 0.63.1: the three worst counted frames, worst first, with where their time went
     double lagMs = -1;           // 0.83.0: a Black Hole Lab scene: the worst time the shown picture was behind the settings while counted (ms; behindMs); < 0 not such a scene
@@ -238,6 +240,8 @@ private:
     std::vector<std::vector<double>> frameMs_;
     std::vector<double> cpuSum_, gpuSum_, spanSum_, waitSum_;
     std::vector<int> cpuN_, gpuN_, waitN_;
+    std::vector<int> swapN_;                      // 0.89.0: the swapchain made again (count, total ms, longest ms) per scene
+    std::vector<double> swapMs_, swapMax_;
     std::vector<std::vector<BenchFrameCost>> worst_;
     std::vector<char> inactive_;
 };

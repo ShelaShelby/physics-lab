@@ -177,10 +177,109 @@ struct VkBackend::Impl {
         return m == VK_PRESENT_MODE_FIFO_KHR ? "FIFO (waits for the screen)" : m == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE (does not wait)" :
                m == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX (does not wait)" : "other";
     }
+    // 0.89.0: the swapchain is made here, not by ImGui_ImplVulkanH_CreateOrResizeWindow. That function also moved every new image from UNDEFINED to PRESENT_SRC
+    // in a submit of its own, before any image was acquired (the validation layers: UNASSIGNED-non-acquired-swapchain-image-used), and waited for it.
+    // Here no image is touched before it is acquired: each frame moves its acquired image from UNDEFINED (render, copyTo), so no first transition is needed.
+    // The rest is as Dear ImGui's helper made it (its v1.92.9b CreateWindowSwapChain and CreateWindowCommandBuffers): one command pool, buffer and signalled
+    // fence per image, ImageCount + 1 semaphore pairs, the old swapchain handed on as oldSwapchain.
+    void destroyFrames() {
+        for (int i = 0; i < wd.Frames.Size; i++) {
+            ImGui_ImplVulkanH_Frame& f = wd.Frames[i];
+            if (f.Fence) vkDestroyFence(device, f.Fence, nullptr);
+            if (f.CommandBuffer) vkFreeCommandBuffers(device, f.CommandPool, 1, &f.CommandBuffer);
+            if (f.CommandPool) vkDestroyCommandPool(device, f.CommandPool, nullptr);
+            if (f.BackbufferView) vkDestroyImageView(device, f.BackbufferView, nullptr);
+            if (f.Framebuffer) vkDestroyFramebuffer(device, f.Framebuffer, nullptr);
+        }
+        for (int i = 0; i < wd.FrameSemaphores.Size; i++) {
+            ImGui_ImplVulkanH_FrameSemaphores& f = wd.FrameSemaphores[i];
+            if (f.ImageAcquiredSemaphore) vkDestroySemaphore(device, f.ImageAcquiredSemaphore, nullptr);
+            if (f.RenderCompleteSemaphore) vkDestroySemaphore(device, f.RenderCompleteSemaphore, nullptr);
+        }
+        wd.Frames.clear();
+        wd.FrameSemaphores.clear();
+        wd.ImageCount = 0;
+        wd.SemaphoreCount = 0;
+        wd.SemaphoreIndex = 0;
+    }
     bool makeSwapchain(int w, int h) {
         wd.UseDynamicRendering = true;                                    // 0.63.0 (Vulkan step 5): no render pass, no framebuffers (Vulkan 1.3)
-        ImGui_ImplVulkanH_CreateOrResizeWindow(instance, phys, device, &wd, family, nullptr, w, h, minImages, extraUsage);
-        return wd.Swapchain != VK_NULL_HANDLE && wd.ImageCount >= 2 && wd.Frames.Size == static_cast<int>(wd.ImageCount) && wd.Frames[0].BackbufferView != VK_NULL_HANDLE;
+        const VkSwapchainKHR old = wd.Swapchain;
+        wd.Swapchain = VK_NULL_HANDLE;
+        if (!check(vkDeviceWaitIdle(device), "vkDeviceWaitIdle (new swapchain)")) return false;
+        destroyFrames();
+        VkSurfaceCapabilitiesKHR cap{};
+        if (!check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys, wd.Surface, &cap), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR")) { if (old) vkDestroySwapchainKHR(device, old, nullptr); return false; }
+        VkSwapchainCreateInfoKHR info{};
+        info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        info.surface = wd.Surface;
+        info.minImageCount = std::max(minImages, cap.minImageCount);
+        if (cap.maxImageCount != 0) info.minImageCount = std::min(info.minImageCount, cap.maxImageCount);
+        info.imageFormat = wd.SurfaceFormat.format;
+        info.imageColorSpace = wd.SurfaceFormat.colorSpace;
+        info.imageArrayLayers = 1;
+        info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | extraUsage;
+        info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;               // (the graphics family presents: checked at start-up)
+        info.preTransform = (cap.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR : cap.currentTransform;
+        info.compositeAlpha = (cap.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR :
+                              (cap.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR :
+                              static_cast<VkCompositeAlphaFlagBitsKHR>(cap.supportedCompositeAlpha & (~cap.supportedCompositeAlpha + 1u));   // (the lowest bit the surface offers)
+        info.presentMode = wd.PresentMode;
+        info.clipped = VK_TRUE;
+        info.oldSwapchain = old;
+        if (cap.currentExtent.width == 0xffffffffu) {
+            info.imageExtent.width = static_cast<uint32_t>(std::clamp(w, static_cast<int>(cap.minImageExtent.width), static_cast<int>(cap.maxImageExtent.width)));
+            info.imageExtent.height = static_cast<uint32_t>(std::clamp(h, static_cast<int>(cap.minImageExtent.height), static_cast<int>(cap.maxImageExtent.height)));
+        } else info.imageExtent = cap.currentExtent;
+        wd.Width = static_cast<int>(info.imageExtent.width);
+        wd.Height = static_cast<int>(info.imageExtent.height);
+        const bool made = check(vkCreateSwapchainKHR(device, &info, nullptr, &wd.Swapchain), "vkCreateSwapchainKHR");
+        if (old) vkDestroySwapchainKHR(device, old, nullptr);
+        if (!made) { wd.Swapchain = VK_NULL_HANDLE; return false; }
+        uint32_t n = 0;
+        if (!check(vkGetSwapchainImagesKHR(device, wd.Swapchain, &n, nullptr), "vkGetSwapchainImagesKHR") || n < 2) return false;
+        std::vector<VkImage> images(n, VK_NULL_HANDLE);
+        if (!check(vkGetSwapchainImagesKHR(device, wd.Swapchain, &n, images.data()), "vkGetSwapchainImagesKHR")) return false;
+        wd.ImageCount = n;
+        wd.SemaphoreCount = n + 1;
+        wd.Frames.resize(static_cast<int>(n));
+        wd.FrameSemaphores.resize(static_cast<int>(n + 1));
+        for (int i = 0; i < wd.Frames.Size; i++) wd.Frames[i] = ImGui_ImplVulkanH_Frame();
+        for (int i = 0; i < wd.FrameSemaphores.Size; i++) wd.FrameSemaphores[i] = ImGui_ImplVulkanH_FrameSemaphores();
+        for (uint32_t i = 0; i < n; i++) {
+            ImGui_ImplVulkanH_Frame& f = wd.Frames[static_cast<int>(i)];
+            f.Backbuffer = images[i];
+            VkImageViewCreateInfo vi{};
+            vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            vi.image = f.Backbuffer;
+            vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            vi.format = wd.SurfaceFormat.format;
+            vi.components = {VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
+            vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            if (!check(vkCreateImageView(device, &vi, nullptr, &f.BackbufferView), "vkCreateImageView (swapchain)")) return false;
+            VkCommandPoolCreateInfo pi{};
+            pi.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            pi.queueFamilyIndex = family;
+            if (!check(vkCreateCommandPool(device, &pi, nullptr, &f.CommandPool), "vkCreateCommandPool (frame)")) return false;
+            VkCommandBufferAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            ai.commandPool = f.CommandPool;
+            ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            ai.commandBufferCount = 1;
+            if (!check(vkAllocateCommandBuffers(device, &ai, &f.CommandBuffer), "vkAllocateCommandBuffers (frame)")) return false;
+            VkFenceCreateInfo fi{};
+            fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;                     // (the first frame on this image does not wait)
+            if (!check(vkCreateFence(device, &fi, nullptr, &f.Fence), "vkCreateFence (frame)")) return false;
+        }
+        for (int i = 0; i < wd.FrameSemaphores.Size; i++) {
+            VkSemaphoreCreateInfo si{};
+            si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            ImGui_ImplVulkanH_FrameSemaphores& f = wd.FrameSemaphores[i];
+            if (!check(vkCreateSemaphore(device, &si, nullptr, &f.ImageAcquiredSemaphore), "vkCreateSemaphore (acquire)")) return false;
+            if (!check(vkCreateSemaphore(device, &si, nullptr, &f.RenderCompleteSemaphore), "vkCreateSemaphore (render)")) return false;
+        }
+        return true;
     }
 };
 
