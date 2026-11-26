@@ -130,6 +130,17 @@ void manyScene(AtomLab& L, int which, double w, double h) {
 }
 }  // namespace
 
+void benchGlowAtom(AtomLab& L, int Z, double w, double h) {
+    fresh(L, Z, defaultN(Z), w, h);
+    if (Z > 1) { L.p.elec = "All"; L.p.mrel = "Relativistic"; L.p.show = "Whole atom"; L.p.rscale = "Shells enlarged"; }
+    L.p.cdens = "Ultra"; L.p.cstyle = "Glow";
+    L.setParam("view", std::string("Cloud 3D"));
+    L.resetView();
+    L.setParam("zoom", 0.0);
+    fill(L);
+    still(L);
+}
+
 void benchSetup(AtomLab& L, int which, double w, double h) {
     if ((which >= kBenchAllEnlarged && which <= kBenchJumpAll) || which == kBenchEmitAll) { manyScene(L, which, w, h); still(L); return; }
     if (which >= kBenchSliceAll && which <= kBenchSliceClassicUltra) {   // 0.64.0: the heavy views the benchmark missed (atom_bench.h)

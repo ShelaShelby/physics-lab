@@ -262,6 +262,33 @@ static void testClock() {
         for (double d = 1200; d >= -1200; d -= 2.9) { on.stateAt(d * 86400.0, xa, va); off.stateAt(d * 86400.0, xb, vb); same = same && std::memcmp(xa, xb, sizeof xa) == 0 && std::memcmp(va, vb, sizeof va) == 0; }
         check("clock: the background stretch gives bit for bit the same states as stepping on the drawing thread", same);
     }
+    // 0.90.0: the stretches made ahead, a chain of kAhead each from the end of the one before: at the fastest time (orbit.real_fast: 1 s = about 50 years,
+    // several stretches a frame) the drawing thread finds them made and does not wait, and the states are bit for bit those of stepping on the drawing
+    // thread (forwards after the epoch with relativity on, backwards before it, and back again)
+    {
+        NBodyClock on(kNBodyStep, true), off(kNBodyStep, true); off.setPrefetch(false);
+        Vec3 xa[kNBodies], va[kNBodies], xb[kNBodies], vb[kNBodies];
+        bool same = true, full = true, noWait = true;
+        const double stretchDays = double(NBodyClock::kEvery) * kNBodyStep / 86400.0;
+        double d = 10;
+        on.stateAt(d * 86400.0, xa, va); off.stateAt(d * 86400.0, xb, vb);
+        for (int frame = 0; frame < 40; frame++) {
+            while (!on.aheadReady()) std::this_thread::sleep_for(std::chrono::milliseconds(1));   // (the rest of a frame: the workers keep making)
+            full = full && on.ahead() == NBodyClock::kAhead;
+            const long w0 = on.waits();
+            for (int k = 0; k < 4; k++) {                                     // four stretches a frame, each looked at a few times
+                d += 0.9 * stretchDays;
+                on.stateAt(d * 86400.0, xa, va); off.stateAt(d * 86400.0, xb, vb);
+                same = same && std::memcmp(xa, xb, sizeof xa) == 0 && std::memcmp(va, vb, sizeof va) == 0;
+            }
+            noWait = noWait && on.waits() == w0;
+        }
+        for (double e = -10; e > -10 - 60 * stretchDays; e -= 0.7 * stretchDays) { on.stateAt(e * 86400.0, xa, va); off.stateAt(e * 86400.0, xb, vb); same = same && std::memcmp(xa, xb, sizeof xa) == 0 && std::memcmp(va, vb, sizeof va) == 0; }
+        for (double e = -10 - 60 * stretchDays; e < 20 * stretchDays; e += 1.3 * stretchDays) { on.stateAt(e * 86400.0, xa, va); off.stateAt(e * 86400.0, xb, vb); same = same && std::memcmp(xa, xb, sizeof xa) == 0 && std::memcmp(va, vb, sizeof va) == 0; }
+        check("clock: kAhead stretches are made ahead in the direction of travel", full);
+        check("clock: at four stretches a frame the drawing thread never waits for a stretch made ahead", noWait);
+        check("clock: the chain of stretches made ahead gives bit for bit the states of stepping on the drawing thread (relativity on, both ways)", same);
+    }
 }
 
 // Mercury's perihelion advance caused by the other planets in this model (no general relativity). Published value for the planetary perturbations:

@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.90.0", "More work on the graphics card: the vibrating surface, the Glow's core, the Orbit Lab's dotted orbits",
+     "Molecule Lab: the Density surface of a vibrating molecule is now made on the graphics card for each new phase, the same surface as before. Atom Lab: the Glow's pass that "
+     "finds the dots near the cores (for the exposure's cap and the jump) now runs on the graphics card; the processor checks only the dots it found, so the result is the same. "
+     "Glow and Density clouds: the exposure now uses the brightness grid of the frame before, so a frame no longer waits for its own. The exposure follows a change one frame "
+     "late; a still view looks the same. Orbit Lab: comets' dotted orbits, the Sun's path in Real and the moons' orbits are drawn by the graphics card with the same dashes and "
+     "widths, and the planets' motion is worked out several steps ahead on a second core (the same positions), so fast time no longer waits for it."},
     {"0.89.0", "Faster jumps with every electron, and a lighter window resize",
      "Atom Lab: a jump with every electron shown (a level jump of radium, a valence jump of sodium, and the other atoms) makes its new dots on all the processor's cores, not on one. "
      "The dots are exactly the same whatever the number of cores. On a 4-core test machine radium's 240,000 dots take 34 ms instead of 128 ms. Resizing the window: the app now makes the "

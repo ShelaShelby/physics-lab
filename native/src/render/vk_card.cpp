@@ -33,6 +33,7 @@
 #include "r2d_cgrid_vert.h"
 #include "r2d_mgrid_vert.h"
 #include "r2d_grid_frag.h"
+#include "r2d_glownear_comp.h"   // 0.90.0
 
 namespace render {
 
@@ -476,6 +477,12 @@ void VkCards::dropKernel(Kernel& k) {
 }
 
 bool VkCards::dispatch(Kernel& k, std::initializer_list<const Buf*> bufs, std::uint32_t gx, std::uint32_t gy, std::uint32_t gz) {
+    return record(k, bufs, nullptr, 0, gx, gy, gz);
+}
+bool VkCards::dispatchIndirect(Kernel& k, std::initializer_list<const Buf*> bufs, const Buf& args, VkDeviceSize at) {   // 0.90.0
+    return args.b && record(k, bufs, &args, at, 0, 0, 0);
+}
+bool VkCards::record(Kernel& k, std::initializer_list<const Buf*> bufs, const Buf* args, VkDeviceSize at, std::uint32_t gx, std::uint32_t gy, std::uint32_t gz) {
     if (!k.pipe || bufs.size() != k.storage.size() || !openSlot()) return false;
     const VkDescriptorSet set = descriptorSet(k.dsl);
     VkDescriptorBufferInfo ub{};
@@ -504,7 +511,8 @@ bool VkCards::dispatch(Kernel& k, std::initializer_list<const Buf*> bufs, std::u
     const VkCommandBuffer cb = slots_[static_cast<std::size_t>(open_)].cmd;
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, k.pipe);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, k.pl, 0, 1, &set, 0, nullptr);
-    if (gx && gy && gz) vkCmdDispatch(cb, gx, gy, gz);
+    if (args) vkCmdDispatchIndirect(cb, args->b, at);
+    else if (gx && gy && gz) vkCmdDispatch(cb, gx, gy, gz);
     return true;
 }
 
@@ -726,8 +734,8 @@ bool VkCards::gridTarget(Grid& g, int w, int h) {
 int VkCards::grid(int which, int gw, int gh, VkBuffer b0, VkBuffer b1, std::uint32_t points) {
     which &= 1;
     if (!gridPipe_[which] || gw <= 0 || gh <= 0 || !b0 || (which == 0 && !b1) || !openSlot()) return -1;
-    if (static_cast<int>(grids_.size()) <= gridsUsed_) grids_.resize(static_cast<std::size_t>(gridsUsed_) + 1);
-    const int index = gridsUsed_++;
+    const int index = 3 * gridsUsed_++ + bank_;                // 0.90.0: three banks (gridFrame)
+    if (static_cast<int>(grids_.size()) <= index) grids_.resize(static_cast<std::size_t>(index) + 1);
     Grid& g = grids_[static_cast<std::size_t>(index)];
     if (!gridTarget(g, gw, gh)) return -1;
     const VkDescriptorSet set = descriptorSet(gridDsl_);
@@ -1779,14 +1787,43 @@ VkBuffer vkMolCloudDots(MoleculeCard* m) { const MoleculeCardVk* v = dynamic_cas
 class VkGlow {
 public:
     explicit VkGlow(VkCards& c) : c_(c) {}
-    ~VkGlow() { c_.dropBuffer(pos_); c_.dropBuffer(grp_); }
+    ~VkGlow() { c_.dropBuffer(pos_); c_.dropBuffer(grp_); c_.dropBuffer(near_[0]); c_.dropBuffer(near_[1]); c_.dropKernel(kn_); }
+    // 0.90.0: the Glow core's dots found on the card (kGlowNearCS); off: the caller's own pass
+    static constexpr std::uint32_t kNearRoom = 65536;
+    bool buildNear(std::string& why) {
+        if (kn_.pipe) return true;
+        if (forcedFail("glownear")) { why = "made to fail on purpose (PL_VK_CARDFAIL=glownear)"; return false; }
+        for (VkCards::Buf& b : near_)
+            if (!b.b && !c_.makeBuffer(VkDeviceSize(4 * kNearRoom + 1) * 4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, b, "the Glow core's dots")) return false;
+        return c_.makeKernel(k_r2d_glownear_comp, sizeof k_r2d_glownear_comp, kn_, why);
+    }
+    bool nearOk() const { return kn_.pipe != VK_NULL_HANDLE && near_[0].b != VK_NULL_HANDLE && near_[1].b != VK_NULL_HANDLE; }
+    void dropNear() { c_.dropKernel(kn_); c_.dropBuffer(near_[0]); c_.dropBuffer(near_[1]); nearAsked_[0] = nearAsked_[1] = false; }
+    int nearBank() const { return nearBank_; }                  // the bank the last record wrote (two by turns: the frame after reads it while it records)
+    // the dots a recorded pass kept (bank: nearBank() then), in increasing number, with their places, once its batch has finished; false: none
+    // asked, or more than the room
+    bool nearRead(int bank, Renderer2D::GlowNearDots& out) const {
+        out.idx.clear(); out.xyz.clear();
+        if (bank < 0 || bank > 1 || !nearAsked_[bank] || !near_[bank].map) return false;
+        const std::uint32_t* o = static_cast<const std::uint32_t*>(near_[bank].map);
+        if (o[0] > kNearRoom) return false;
+        std::vector<std::uint32_t> order(o[0]);
+        for (std::uint32_t k = 0; k < o[0]; k++) order[k] = k;
+        std::sort(order.begin(), order.end(), [o](std::uint32_t a, std::uint32_t b) { return o[1 + 4 * a] < o[1 + 4 * b]; });
+        out.idx.reserve(o[0]); out.xyz.reserve(3 * std::size_t(o[0]));
+        for (const std::uint32_t k : order) {
+            out.idx.push_back(static_cast<int>(o[1 + 4 * k]));
+            for (int c = 0; c < 3; c++) { float f = 0; std::memcpy(&f, &o[2 + 4 * k + c], 4); out.xyz.push_back(f); }
+        }
+        return true;
+    }
     int record(const Renderer2D::CloudGpuDraw& d, VkBuffer jump, long& bytes) {
         if (!c_.ok() || d.cnt <= 0 || !d.pts || (!d.grp && !jump) || (counting && !c_.firstUseTurn(use))) return -1;
         // 1. the places: the whole ring when it is another cloud (or it was changed other than by adding), else only the dots added since the last frame
         if (d.epoch != epoch_ || d.cap != cap_ || d.k < k_ || d.k - k_ >= d.cap) {
             if (pos_.size != VkDeviceSize(d.cap) * 12u) {
                 c_.dropBuffer(pos_);
-                if (!c_.makeBuffer(VkDeviceSize(d.cap) * 12u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, pos_, "the cloud's places")) return -1;
+                if (!c_.makeBuffer(VkDeviceSize(d.cap) * 12u, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, pos_, "the cloud's places")) return -1;
             }
             c_.copyIn(d.pts, static_cast<std::size_t>(d.cap) * 12u, pos_, 0);
             bytes += static_cast<long>(d.cap * 3 * static_cast<long>(sizeof(float)));
@@ -1806,8 +1843,25 @@ public:
             }
             sendGroups(c_, d.grp, d.cnt, d.cap, d.k, d.grpEpoch, grp_, grpEpoch_, grpK_, grpCap_);
         }
-        c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToVertex);
+        c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToVertex | VkCards::kToCompute);
         groups_ = jump ? jump : grp_.b;
+        // 0.90.0: the core's dots (kGlowNearCS), read back with the grid (in the other bank from the last record's)
+        nearBank_ ^= 1;
+        VkCards::Buf& nb = near_[nearBank_];
+        nearAsked_[nearBank_] = false;
+        if (d.near && nearOk()) {
+            const std::uint32_t zero = 0;
+            c_.copyIn(&zero, 4, nb, 0);
+            c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute);
+            VkUniforms& nu = kn_.u;
+            const float turn[4] = {d.nearPass[0], d.nearPass[1], d.nearPass[2], d.nearPass[3]}, pass[4] = {d.nearPass[4], d.nearPass[5], d.nearPass[6], d.nearPass[7]};
+            const int n[2] = {static_cast<int>(d.cnt), static_cast<int>(kNearRoom)};
+            nu.f("uTurn", turn, 4); nu.f("uPass", pass, 4); nu.f("uLim", &d.nearPass[8], 1); nu.i("uN", n, 2);
+            if (c_.dispatch(kn_, {&pos_, &nb}, static_cast<std::uint32_t>((d.cnt + 255) / 256))) {
+                c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
+                nearAsked_[nearBank_] = true;
+            }
+        }
         // 3. the exposure's grid
         const int gw = static_cast<int>(d.w / 8) + 2, gh = static_cast<int>(d.h / 8) + 2;
         VkUniforms& u = c_.gridUniforms(0);
@@ -1824,6 +1878,10 @@ public:
 private:
     VkCards& c_;
     VkCards::Buf pos_, grp_;
+    VkCards::Kernel kn_;                                         // 0.90.0: kGlowNearCS
+    VkCards::Buf near_[2];
+    bool nearAsked_[2] = {false, false};
+    int nearBank_ = 1;
     VkBuffer groups_ = VK_NULL_HANDLE;
     std::uint64_t epoch_ = 0;
     long cap_ = 0, k_ = -1;
@@ -1840,16 +1898,21 @@ VkGlow* makeVkGlow(VkCards& c, std::string& why) {
     std::string w;
     if (forcedFail("cloud")) return S.fail(pipe, "made to fail on purpose (PL_VK_CARDFAIL=cloud)"), nullptr;
     if (!c.makeGrid(0, w) || (c.draw2d() && !c.draw2d()->addProgram(VkDraw2D::kCloud, w))) return S.fail(pipe, "the Glow dots' programs on Vulkan: " + w), nullptr;
-    G.end(pipe, "kCloudVS, kCloudGridVS and kCloudGridFS as SPIR-V (with kBlobFS)");
+    std::string nw;
+    VkGlow* g = new VkGlow(c);
+    const bool nearMade = g->buildNear(nw);                     // 0.90.0 (its failure leaves the core's dots to the processor)
+    G.end(pipe, std::string("kCloudVS, kCloudGridVS and kCloudGridFS as SPIR-V (with kBlobFS)") + (nearMade ? ", kGlowNearCS too" : ", kGlowNearCS could not be made (" + nw + ")"));
     // one dot at the middle of a 100 x 100 picture, at depth 0: r = 4.6, weight 0.75, so its cell (6, 6) of the 14 x 14 grid holds 0.75 x 4.6^2 x 0.785
     G.begin(small);
-    VkGlow* g = new VkGlow(c);
     g->counting = false;
     const float pts[3] = {0, 0, 0};
     const unsigned char grp[1] = {0};
     Renderer2D::CloudGpuDraw d;
     d.pts = pts; d.cnt = 1; d.cap = 1; d.epoch = 1; d.k = 1; d.grp = grp;
     d.cx = 50; d.cy = 50; d.pxm = 1; d.ext = 1; d.w = 100; d.h = 100;
+    d.near = nearMade;                                           // 0.90.0: the core at the dot (its pass keeps it)
+    const float pass[9] = {1, 0, 1, 0, 0.25f, 1, 0, 0, (4.6f * 1.2f + 1.f) * (4.6f * 1.2f + 1.f)};
+    std::copy(pass, pass + 9, d.nearPass);
     long bytes = 0;
     const double t0 = nowS();
     const int index = g->record(d, VK_NULL_HANDLE, bytes);
@@ -1862,6 +1925,9 @@ VkGlow* makeVkGlow(VkCards& c, std::string& why) {
     char t[200];
     std::snprintf(t, sizeof t, "cell (6, 6) %.6g, want %.6g (relative difference %.2g, limit 1e-5); the other cells add up to %g; after %s", got, want, rel, rest, msText(nowS() - t0).c_str());
     if (!(rel <= 1e-5) || rest != 0) { delete g; return S.fail(small, std::string("wrong: ") + t), nullptr; }
+    Renderer2D::GlowNearDots nearDots;
+    const bool nearGood = !nearMade || (g->nearRead(g->nearBank(), nearDots) && nearDots.idx.size() == 1 && nearDots.idx[0] == 0 && nearDots.xyz.size() == 3 && nearDots.xyz[0] == 0 && nearDots.xyz[1] == 0 && nearDots.xyz[2] == 0);
+    if (!nearGood) { g->dropNear(); std::snprintf(t + std::strlen(t), sizeof t - std::strlen(t), "; the core's pass found %zu dots, want the one: off", nearDots.idx.size()); }
     G.end(small, t);
     g->counting = true;
     g->use.guard = &G;
@@ -1871,6 +1937,9 @@ VkGlow* makeVkGlow(VkCards& c, std::string& why) {
 
 void dropVkGlow(VkGlow* g) { delete g; }
 int vkGlowRecord(VkGlow* g, const Renderer2D::CloudGpuDraw& d, VkBuffer jump, long& bytes) { return g ? g->record(d, jump, bytes) : -1; }
+bool vkGlowNearOk(const VkGlow* g) { return g && g->nearOk(); }
+int vkGlowNearBank(const VkGlow* g) { return g ? g->nearBank() : -1; }
+bool vkGlowNear(const VkGlow* g, int bank, Renderer2D::GlowNearDots& out) { out = Renderer2D::GlowNearDots(); return g && g->nearRead(bank, out); }
 VkBuffer vkGlowPlaces(VkGlow* g) { return g ? g->places() : VK_NULL_HANDLE; }
 VkBuffer vkGlowGroups(VkGlow* g) { return g ? g->groups() : VK_NULL_HANDLE; }
 

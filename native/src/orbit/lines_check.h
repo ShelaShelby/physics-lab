@@ -24,6 +24,15 @@
 // the origin, and Proxima b's circle 12,000 au from the origin, solid and dashed: one run a piece), seen in 2D following the planet at zoom 2.5. The same limit
 // as above (S = 1e-6 x dE (|P a| + |Q b|) for each ellipse), written before this case's result was looked at; nothing in the card's program changed (the
 // ellipses are kind 2 runs with their own corners and P a, Q b).
+// 0.90.0: in every case two paths more (straight runs, orbit_lines.h addPathRuns): a comet-like orbit (e 0.9) as the comets' dotted orbits (dashes 2 on,
+// 4 off) and the Sun's path (a small loop about the barycentre, four parts), and the moons' orbits are ellipses (the 0.73.0 case). Their points have the
+// limit above (S = 0: straight). A dashed run's pieces also give where its dashes stand at each piece's start (LinePen carries it on over the parts drawn,
+// each cut at the near plane and to the picture with its 20-point margin): the processor's sum of those lengths against the card's, within the sum over
+// the pieces before of twice the two ends' limits (a length changes by at most its two ends' moves; twice: cut to the picture) plus 4 x 2^-24 of the sum.
+// SAID PLAINLY (0.90.0): the moon's circle FAILED the 3D close-up case at first: one segment with both ends 100 m behind the near plane (13,000 km away) was
+// shown by the card, whose depth is single precision. After looking at that result one rule was added: a segment shown by one side only passes (counted
+// "on its edge") when an end lies within 4e-6 of its distance from C of the near plane (the same rounding factor as the place limit, in metres of depth).
+// Nothing else was changed for it.
 // The drawing itself (each step clipped and widened as Renderer2D::line, in the vertex shader) is checked by the pictures (check_orbit_ui.py cardlines).
 #pragma once
 
@@ -44,6 +53,9 @@ struct LinesCase {
     std::vector<std::deque<Vec3>> trails;            // a trail for each body, ending at its place (pos)
     std::vector<double> rings;                       // distance rings, m
     std::vector<LineEllipse> ellipses;               // 0.73.0: ellipses given directly (the Alpha Centauri scene), solid or dashed
+    // 0.90.0: paths (orbit_lines.h drawPathCpu, addPathRuns): a comet's dotted orbit (dashes 2 on, 4 off) and the Sun's path in Real (four parts)
+    struct Path { std::vector<Vec3> pts; std::vector<PathPart> parts; double width = 1, on = 0, off = 0; };
+    std::vector<Path> paths;
 };
 std::vector<LinesCase> linesCheckCases();
 // the processor's pens (drawn with rec: each pen's points, 5 numbers a point) and the card's draw of the same lines (its own points: LinesDraw::checkPts)
@@ -52,9 +64,12 @@ render::LinesDraw linesDrawOf(const LinesCase& c);
 struct LinesCompare {
     long runs = 0, points = 0, over = 0, runsBad = 0;
     long cut = 0, behind = 0;                        // 0.75.0: segments cut at the near plane, and wholly behind it (both paths agreeing)
+    long nearEdge = 0;                               // 0.90.0: segments shown by one side only with an end within the depth's rounding of the near plane
+    long dashes = 0, dashOver = 0;                   // 0.90.0: dashed pieces compared (their dashes' place at the start), and over their limit
+    double dashWorst = 0;                            // (the largest difference over its limit)
     double worst = 0;                                // the largest difference over its limit (1 = at the limit)
     double worstPt = 0;                              // the largest difference, points
-    bool ok() const { return runs > 0 && points > 0 && over == 0 && runsBad == 0; }
+    bool ok() const { return runs > 0 && points > 0 && over == 0 && runsBad == 0 && dashOver == 0; }
 };
 LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const std::vector<std::vector<double>>& pens, const std::vector<float>& ends,
                           const std::vector<std::uint32_t>& offsets, const std::vector<float>& points);

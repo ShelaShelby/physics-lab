@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 
 #include "app/gpu_guard.h"
@@ -110,6 +111,7 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
         if (off & 8) { dropVkGlow(vkGlow_); vkGlow_ = nullptr; }
     }
     bool grids = false;
+    vkc_->gridFrame(true);                                                    // 0.90.0: this frame's grids in their bank (the frame after reads them)
     for (std::size_t i = 0; i < n; i++) {
         const Segment& sg = segments_[i];
         if (sg.kind == Kind::RocksGpu) vkRocks_[i] = rocks_ && (sg.grains ? rocks_->grainDispatch(sg.slot, sg.rf) : rocks_->dispatch(sg.slot, sg.rf)) ? 1 : 0;   // (0.78.0: or a comet's grains)
@@ -133,8 +135,35 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
         }
         grids = grids || vkGrid_[i] >= 0;
     }
-    {   app::FrameCostLabel l(grids ? "the exposure grids (Glow or Density cloud)" : "the frame's card batch");
-        if (!vkc_->flush(grids) && vkc_->failed()) return false; }
+    vkc_->gridFrame(false);
+    // 0.90.0: each Glow or Density cloud's exposure from its grid of the frame before (the same kind and number in the frame, the same size, made in the
+    // frame just before): the frame does not wait for its own grid. The exposure is then one frame late. The Glow core's dots come from that frame too
+    // (its pass and its places), so the exposure is the one that frame would have had. Only a cloud with no such grid (its first frame, a new size), the
+    // side view's Glow (its last steps need the light in the same batch) and PL_GRID_WAIT (tests: the frame's own grid, as before) wait.
+    static const bool ownGrid = std::getenv("PL_GRID_WAIT") != nullptr;
+    const long frame = ++cardsFrame_;
+    std::vector<int> prevOf(n, -1);
+    bool wait = false;
+    int nthGlow = 0, nthMol = 0;
+    std::vector<int> nth(n, 0);
+    for (std::size_t i = 0; i < n; i++) {
+        if (classicOk_[i] == 2) wait = true;
+        if (vkGrid_[i] < 0) continue;
+        const Segment& sg = segments_[i];
+        const bool glow = sg.kind == Kind::CloudGpu;
+        nth[i] = glow ? nthGlow++ : nthMol++;
+        const float w = glow ? clouds_[std::size_t(sg.slot)].w : molClouds_[std::size_t(sg.slot)].cam.w, h = glow ? clouds_[std::size_t(sg.slot)].h : molClouds_[std::size_t(sg.slot)].cam.h;
+        const int gw = static_cast<int>(w / 8) + 2, gh = static_cast<int>(h / 8) + 2;
+        for (std::size_t k = 0; k < prevGrids_.size() && !ownGrid; k++) {
+            const PrevGrid& p = prevGrids_[k];
+            if (p.frame == frame - 1 && p.kind == static_cast<int>(sg.kind) && p.nth == nth[i] && p.gw == gw && p.gh == gh) { prevOf[i] = static_cast<int>(k); break; }
+        }
+        if (prevOf[i] < 0) wait = true;
+    }
+    std::uint64_t ticket = 0;
+    {   app::FrameCostLabel l(wait && grids ? "the exposure grids (Glow or Density cloud)" : "the frame's card batch");
+        ticket = vkc_->flush(wait && grids);
+        if (!ticket && vkc_->failed()) return false; }
     std::vector<float> cells;
     bool more = false;
     for (std::size_t i = 0; i < n; i++) {                                     // 0.65.0: the side view's Glow: the dots' light from its cells, then its last two steps
@@ -148,20 +177,50 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
         app::FrameCostLabel l("the frame's card batch");
         if (!vkc_->flush(false) && vkc_->failed()) return false;
     }
+    GlowNearDots nearDots;
+    std::vector<PrevGrid> now;
     for (std::size_t i = 0; i < n; i++) {
         if (vkGrid_[i] < 0) continue;
         const Segment& sg = segments_[i];
         const bool glow = sg.kind == Kind::CloudGpu;
         const float w = glow ? clouds_[std::size_t(sg.slot)].w : molClouds_[std::size_t(sg.slot)].cam.w, h = glow ? clouds_[std::size_t(sg.slot)].h : molClouds_[std::size_t(sg.slot)].cam.h;
-        const std::size_t cnt = std::size_t(static_cast<int>(w / 8) + 2) * std::size_t(static_cast<int>(h / 8) + 2);
-        const float* c = vkc_->cells(vkGrid_[i]);
+        const int gw = static_cast<int>(w / 8) + 2, gh = static_cast<int>(h / 8) + 2;
+        const std::size_t cnt = std::size_t(gw) * std::size_t(gh);
+        PrevGrid me;
+        me.kind = static_cast<int>(sg.kind); me.nth = nth[i]; me.index = vkGrid_[i]; me.gw = gw; me.gh = gh; me.ticket = ticket; me.frame = frame;
+        if (glow) { me.draw = clouds_[std::size_t(sg.slot)]; me.nearBank = vkGlowNearBank(vkGlow_); }
+        now.push_back(me);
+        int index = vkGrid_[i];
+        const PrevGrid* p = !wait && prevOf[i] >= 0 ? &prevGrids_[std::size_t(prevOf[i])] : nullptr;   // (a frame that waited uses its own grids, as before)
+        if (p && !vkc_->done(p->ticket)) {                                  // (the frame before's batch not finished yet: waited for, counted)
+            app::FrameCostLabel l("the exposure grids of the frame before");
+            app::FrameCostSpan span(app::FrameCostKind::Readback);
+            const double t0 = app::frameCostNowMs();
+            const bool ok = vkc_->waitFor(p->ticket, 2.0);
+            gridStats_.waited++; gridStats_.waitMs += app::frameCostNowMs() - t0;
+            if (!ok) { p = nullptr; if (!vkc_->waitFor(ticket, 2.0)) continue; }
+        }
+        if (p) { index = p->index; gridStats_.late++; } else gridStats_.own++;
+        // the core's dots of the same frame as the grid (the frame before: its own nearFound with its pass's dots and places)
+        if (glow && p && p->draw.near && p->draw.nearFound && vkGlowNear(vkGlow_, p->nearBank, nearDots)) p->draw.nearFound(&nearDots);
+        else if (glow && clouds_[std::size_t(sg.slot)].near && clouds_[std::size_t(sg.slot)].nearFound) {
+            const CloudGpuDraw& d = clouds_[std::size_t(sg.slot)];
+            d.nearFound(!p && vkGlowNear(vkGlow_, vkGlowNearBank(vkGlow_), nearDots) ? &nearDots : nullptr);   // (this frame's: its pass, or its own over every dot)
+        }
+        const float* c = vkc_->cells(index);
         if (!c) continue;
         cells.assign(c, c + cnt);
         const auto& exposure = glow ? clouds_[std::size_t(sg.slot)].exposure : molClouds_[std::size_t(sg.slot)].exposure;
         vkLight_[i] = exposure ? exposure(cells) : -1;
     }
+    prevGrids_.swap(now);
     vkc_->collect();
     return !vkc_->failed();
+}
+
+bool Renderer2D::cloudNearGpuOk() const {   // 0.90.0
+    static const bool never = std::getenv("PL_NO_GLOW_NEAR_GPU") != nullptr;   // (tests and timing: the processor's pass over every dot)
+    return !never && vk_ && vkGlowNearOk(vkGlow_);
 }
 
 // 0.69.0: the Black Hole Lab's test hooks on Vulkan (render/vk_blackhole.h)
@@ -357,7 +416,8 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setF(VkDraw2D::kSurf, "uAlpha", alpha, 2);
             V.setI(VkDraw2D::kSurf, "uMaskOn", &zero, 1);
             V.setF(VkDraw2D::kSurf, "uSpace", space, 3);
-            V.drawStorage(VkDraw2D::kSurf, bufs, VK_NULL_HANDLE, static_cast<std::uint32_t>(3 * sg.count));
+            const VkBuffer ind = vkSurfaceIndirect(surfaceCard_);            // 0.90.0: the surface made on the card: its count from the card
+            V.drawStorage(VkDraw2D::kSurf, bufs, ind, ind ? 0u : static_cast<std::uint32_t>(3 * sg.count));
             break;
         }
         case Kind::CloudClassic: {                                             // 0.64.0: the squares kClassicCS wrote, in the processor's order (kBlob)

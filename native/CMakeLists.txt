@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.89.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.90.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -443,7 +443,9 @@ if(PL_BUILD_APP)
                       # 0.68.0: the Orbit Lab's lines (the compute steps and the vertex shader that draws them, Vulkan only: storage buffers in set 1)
                       "lines_comp:kLinesHeadCSPart+kLinesPart+kLinesMainCSPart" "lines_vert:kLinesHeadVSPart+kLinesPart+kLinesMainVSPart"
                       # 0.68.0: the Molecule Lab's Density surface (turned, coloured and sorted on the card; its vertex shader Vulkan only)
-                      "surface_comp:kSurfaceCS" "surface_vert:kSurfaceVSHeadPart+kSurfaceVSMainPart")
+                      "surface_comp:kSurfaceCS" "surface_vert:kSurfaceVSHeadPart+kSurfaceVSMainPart"
+                      "surfmake_comp:kSurfaceMakeCS"   # 0.90.0: the vibrating surface made on the card
+                      "glownear_comp:kGlowNearCS")   # 0.90.0: the Glow core's dots found on the card   # 0.90.0: the vibrating surface made on the card
   foreach(pair ${PL_VK2D_SHADERS})
     string(REPLACE ":" ";" parts ${pair})
     list(GET parts 0 shId)
@@ -618,9 +620,9 @@ if(PL_BUILD_APP)
       add_test(NAME ui_molecule COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_molecule
                check_molecule.py check_molecule.py:rotation check_molecule.py:anharm check_molecule.py:card check_molecule.py:cardpiclight)
       set_tests_properties(ui_molecule PROPERTIES TIMEOUT 900 COST 207)
-      # ui_molecule_card: the Molecule Lab's Density cloud and surface on the card against the processor's pictures
+      # ui_molecule_card: the Molecule Lab's Density cloud and surface on the card against the processor's pictures; 0.90.0: the exposure grid of the frame before
       add_test(NAME ui_molecule_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_molecule_card
-               check_molecule.py:cardpic check_molecule.py:cardsurface)
+               check_molecule.py:cardpic check_molecule.py:cardsurface check_molecule.py:gridlate)
       set_tests_properties(ui_molecule_card PROPERTIES TIMEOUT 900 COST 288)
       # ui_blackhole: the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, the disc, spin, all light; the card's bent sky against the double-precision reference
       add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole

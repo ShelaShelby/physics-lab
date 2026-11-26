@@ -33,6 +33,18 @@ void drawRingCpu(render::Renderer2D& R, const LineCam& cam, const std::vector<do
     for (std::size_t i = 0; i + 2 < xyz.size(); i += 3) { const Q q = cam.proj(xyz[i], xyz[i + 1], xyz[i + 2]); go(pen, q, xyz[i], xyz[i + 1], xyz[i + 2]); }
 }
 
+void drawPathCpu(render::Renderer2D& R, const LineCam& cam, const std::vector<Vec3>& pts, const std::vector<PathPart>& parts, double width, double dashOn, double dashOff,
+                 std::vector<std::vector<double>>* rec) {
+    const int n = static_cast<int>(pts.size());
+    for (const PathPart& pp : parts) {
+        const int from = std::max(1, pp.from), to = std::min(n - 1, pp.to);
+        if (to < from) continue;
+        LinePen pen{R, cam.W, cam.H, width, pp.col, dashOn, dashOff};
+        pen.rec = recNext(rec); pen.cam = &cam;
+        for (int i = from - 1; i <= to; i++) { const Vec3& v = pts[std::size_t(i)]; go(pen, cam.proj(v.x, v.y, v.z), v.x, v.y, v.z); }
+    }
+}
+
 int trailStart(const std::deque<Vec3>& tr, const Vec3& pos, bool full) {
     const int n = static_cast<int>(tr.size());
     int st0 = 0;
@@ -262,6 +274,21 @@ bool addOrbitRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, con
     r.qb[0] = static_cast<float>(qb.x); r.qb[1] = static_cast<float>(qb.y); r.qb[2] = static_cast<float>(qb.z);
     r.qb[3] = static_cast<float>(2 * kPi / 256);
     d.add(r);
+    return true;
+}
+
+bool addPathRuns(LinesPoints& lp, render::LinesDraw& d, std::uint64_t key, const std::vector<Vec3>& pts, const std::vector<PathPart>& parts, double width, double dashOn, double dashOff) {
+    const int n = static_cast<int>(pts.size());
+    if (n < 2) return true;
+    render::LinesRun r;
+    if (!lp.list(key, pts, r)) return false;
+    r.kind = 0;
+    r.style[0] = static_cast<float>(width); r.style[1] = static_cast<float>(dashOn); r.style[2] = static_cast<float>(dashOff);
+    for (const PathPart& pp : parts) {
+        r.from = std::max(1, pp.from); r.to = std::min(n - 1, pp.to);
+        colourOf(r, pp.col);
+        d.add(r);                                        // (a part with no pieces adds nothing)
+    }
     return true;
 }
 

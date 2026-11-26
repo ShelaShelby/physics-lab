@@ -103,6 +103,16 @@ void glowCapExposure(const std::vector<GlowDot>& D, long cap, double base, const
 // the Cloud 3D glow dots (projectCloud, the atom view's depth size and weight) whose disc covers the point (X, Y): for glowCapExposure on the GPU path
 void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out,
                   std::vector<int>* indices = nullptr);   // 0.57.0: indices: each found dot's index (the card's jump: the processor then asks whether it is shown)
+// 0.90.0: glowDotsNear in its two parts. The first: the quick pass in single precision, its numbers (the card's pass, kGlowNearCS, is given the same ones)
+struct GlowNearPass { float ca = 1, sa = 0, cb = 1, sb = 0, k4 = 0, pxm = 0, dx0 = 0, dy0 = 0, lim = 0; };
+GlowNearPass glowNearPass(const CloudCamera& cam, double X, double Y);
+// the second: the full pass in double precision over the dots the quick pass kept (near, in increasing order): the same dots, in the same order, as
+// glowDotsNear over all of them
+// (glowDotsNearAt: the same with the dots' places given, dot k at xyz + 3 k, its number idx[k]: the card's copy of them, made with its pass)
+void glowDotsNearAt(const float* xyz, const std::vector<int>& idx, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out,
+                    std::vector<int>* indices = nullptr);
+void glowDotsNearOf(const float* pts, const std::vector<int>& kept, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out,
+                    std::vector<int>* indices = nullptr);
 
 // ---- Cloud 2D side view: one band; the dots are drawn group by group ----
 struct SideDot { float x, y; unsigned char g; };

@@ -206,11 +206,19 @@ bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molec
         if (vibKeyId != id || vibKeyMode != vibMode || vibKeyDots != nDots) { vibDots.assign(kVibLevels, {}); vibEpoch.assign(kVibLevels, 0); vibKeyId = id; vibKeyMode = vibMode; vibKeyDots = nDots; vibKeyS = 2; }
         // 0.57.1: meshVib in place of clearing meshId here: the still surface was made again in every frame of the swing only to be replaced (plain waste; the
         // same surfaces, colour scale and zoom as before)
-        if (vibS != vibKeyS || vibKeyIso != isoIdx || !meshVib) {
+        if (vibS != vibKeyS || vibKeyIso != isoIdx || !meshVib || meshMade != vibOnCard) {
+            if (vibOnCard) {                                       // 0.90.0: made on the card (the same blend, isovalue and stride); nothing made here
+                if (!meshMade || made.key == 0 || made.rho[1] != vm->plus.rho.data()) made.key = ++epochs;   // (new sources: this molecule and mode)
+                const std::uint64_t key = made.key;
+                made = surfaceMakeOf(*data, vm, vibS, kRealIso[isoIdx], key);
+                meshMade = true;
+            } else {
             dens::blendVib(*data, *vm, vibS, vibNow, false);   // (0.57.1: without the fine cubes, which the surface does not read)
             const double keepRange = potRange;
             dens::densitySurface(vibNow, kRealIso[isoIdx], 2, mesh);
             potRange = keepRange;                                  // (the still surface's scale: the colours do not jump as the cloud moves)
+            meshMade = false;
+            }
             vibKeyS = vibS; vibKeyIso = isoIdx; meshVib = true;    // (back to still: the still surface is made again)
             revision++;
             meshEpoch = ++epochs;
@@ -236,6 +244,9 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
     const Molecule& m = L.shown();                         // (0.24: the nuclei where a vibration has moved them)
     const double s = L.scale(), cx = L.cx(), cy = L.cy(), W = L.viewW, H = L.viewH;
     project(m, L.set.cam, Style::Realistic, cx, cy, s, proj_);
+    // 0.90.0: the card's say on the surface first (once a frame), so a vibrating surface it may make is not made here as well
+    const bool surfCard = L.set.realShow != 1 && surfaceOnCard(r);
+    L.real.vibOnCard = surfCard && surfaceMakeOnCard(r);
     if (!L.ensureReal()) return;
     const RealCache& rc = L.real;
     const double* R = L.set.cam.R;
@@ -317,13 +328,15 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
     const render::Color plain = light ? render::Color{0.62f, 0.68f, 0.78f, 1} : render::Color{0.80f, 0.84f, 0.90f, 1};
     const float aFront = light ? 0.62f : 0.60f, aBack = light ? 0.15f : 0.15f;   // translucent, so the cloud shows through; the far (inner) side fainter, so the near side reads as the surface
     stats_.surfaceCard = false;
-    if (surfaceOnCard(r)) {                                   // 0.68.0: turned, coloured, sorted and drawn by the card (molecule/surface_check.h); the surface sent once
+    if (surfCard) {                                           // 0.68.0: turned, coloured, sorted and drawn by the card (molecule/surface_check.h); the surface sent once
         render::SurfaceDraw d;
+        if (rc.meshVib && rc.meshMade) d.make = &rc.made;     // 0.90.0: the vibrating surface made there too
         d.mesh.rev = rc.meshEpoch; d.mesh.p = M.p.data(); d.mesh.nrm = M.n.data(); d.mesh.value = M.value.data(); d.mesh.tri = M.tri.data();
         d.mesh.nv = static_cast<int>(M.p.size() / 3); d.mesh.nt = static_cast<int>(nt);
         d.view = surfaceView(R, px, py, cx, cy, s, L.set.realPot, rc.potRange, plain, aFront, aBack);
-        if (r.surface(d)) { stats_.surfaceCard = true; stats_.triangles = static_cast<int>(nt); return; }
+        if (r.surface(d)) { stats_.surfaceCard = true; stats_.surfaceMade = d.make != nullptr; stats_.triangles = d.make ? -1 : static_cast<int>(nt); return; }
     }
+    if (rc.meshVib && rc.meshMade) { L.real.vibOnCard = false; return; }   // (0.90.0: the card did not take it this frame: the processor makes it from the next)
     const double cam[14] = {R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7], R[8], px, py, cx, cy, s};
     bool same = lastRev_ == rc.revision && surf_.sx.size() == M.p.size() / 3;
     for (int i = 0; i < 14 && same; i++) same = cam[i] == lastCam_[i];

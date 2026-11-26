@@ -946,6 +946,13 @@ static void starDots(render::Renderer2D& R, const std::string& dir) {
 
 // 0.85.2: each part's name printed (and flushed) before it runs, so a crash on a driver names the part it died in (stdout is unbuffered too)
 static void part(const char* name) { std::printf("PART %s\n", name); std::fflush(stdout); }
+// 0.90.0 (development): PL_VK_PART=<name>[,<name>] runs only those parts (a part of vulkanTwins by its name there: PL_VK_PART=vulkanTwins:surface)
+static bool want(const char* name) {
+    const char* e = std::getenv("PL_VK_PART");
+    if (!e || !*e) return true;
+    const std::string list = std::string(",") + e + ",";
+    return list.find(std::string(",") + name + ",") != std::string::npos || list.find(std::string(",") + name + ":") != std::string::npos;
+}
 
 int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);                          // 0.85.2: unbuffered (the owner's Radeon crashed it with the last lines still in the buffer)
@@ -968,24 +975,24 @@ int main(int argc, char** argv) {
     R.useVulkanCards(&cards, &cardsWhy);
     for (const std::string& w : cardsWhy) std::printf("card program not made: %s\n", w.c_str());
     std::printf("Vulkan renderer: %s, double precision in shaders: %s\n", d2.samplesText().c_str(), g_vk.f64 ? "yes" : "no");
-    part("swatches"); swatches(R, dir);
-    part("scenes"); scenes(R, dir);
-    part("glowDots"); glowDots(R, dir);
-    part("cloudBuffers"); cloudBuffers(R, dir);
-    part("gpuSuperScenes"); gpuSuperScenes(R, dir);
-    part("gpuJumpScenes"); gpuJumpScenes(R, dir);
-    part("gpuEdgeCases"); gpuEdgeCases(R);
-    part("gpuOutlineGrids"); gpuOutlineGrids(R);
-    part("gpuOutlinePipeline"); gpuOutlinePipeline(R);
-    part("gpuOutlineSlice"); gpuOutlineSlice(R);
-    part("gpuOutlinePictures"); gpuOutlinePictures(R, dir);
-    part("gpuRocks"); gpuRocks(R, dir);
-    part("gpuRocksPictures"); gpuRocksPictures(R, dir);
-    part("gpuGrains"); gpuGrains(R);   // 0.78.0
-    part("chartPictures"); chartPictures(R, dir);
-    part("chartShaderRules"); chartShaderRules(R);
-    part("starDots"); starDots(R, dir);   // 0.86.0
-    part("fallback33"); fallback33(dir);
+    if (want("swatches")) { part("swatches"); swatches(R, dir); }
+    if (want("scenes")) { part("scenes"); scenes(R, dir); }
+    if (want("glowDots")) { part("glowDots"); glowDots(R, dir); }
+    if (want("cloudBuffers")) { part("cloudBuffers"); cloudBuffers(R, dir); }
+    if (want("gpuSuperScenes")) { part("gpuSuperScenes"); gpuSuperScenes(R, dir); }
+    if (want("gpuJumpScenes")) { part("gpuJumpScenes"); gpuJumpScenes(R, dir); }
+    if (want("gpuEdgeCases")) { part("gpuEdgeCases"); gpuEdgeCases(R); }
+    if (want("gpuOutlineGrids")) { part("gpuOutlineGrids"); gpuOutlineGrids(R); }
+    if (want("gpuOutlinePipeline")) { part("gpuOutlinePipeline"); gpuOutlinePipeline(R); }
+    if (want("gpuOutlineSlice")) { part("gpuOutlineSlice"); gpuOutlineSlice(R); }
+    if (want("gpuOutlinePictures")) { part("gpuOutlinePictures"); gpuOutlinePictures(R, dir); }
+    if (want("gpuRocks")) { part("gpuRocks"); gpuRocks(R, dir); }
+    if (want("gpuRocksPictures")) { part("gpuRocksPictures"); gpuRocksPictures(R, dir); }
+    if (want("gpuGrains")) { part("gpuGrains"); gpuGrains(R); }   // 0.78.0
+    if (want("chartPictures")) { part("chartPictures"); chartPictures(R, dir); }
+    if (want("chartShaderRules")) { part("chartShaderRules"); chartShaderRules(R); }
+    if (want("starDots")) { part("starDots"); starDots(R, dir); }   // 0.86.0
+    if (want("fallback33")) { part("fallback33"); fallback33(dir); }
     vkDeviceWaitIdle(g_vk.dev);
     R.useVulkan(nullptr);                                              // (the card programs' objects deleted before the device)
     cards.collect();
@@ -993,7 +1000,7 @@ int main(int argc, char** argv) {
     d2.destroy();
     g_d2 = nullptr;
     vkt::stop(g_vk);
-    part("vulkanTwins"); vulkanTwins();                                                     // the card programs made one by one on a device of their own, against the processor
+    if (want("vulkanTwins")) { part("vulkanTwins"); vulkanTwins(); }                                                     // the card programs made one by one on a device of their own, against the processor
     std::printf("Vulkan validation: %d errors in all\n", vkt::g_errors);
     check("Vulkan: zero validation errors in the whole run", vkt::g_errors == 0);
     std::printf("%d Vulkan checks, %d failed\n", g_checks, g_failed);

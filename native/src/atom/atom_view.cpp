@@ -500,17 +500,36 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 static std::vector<GlowDot> nearCore;
                 static std::vector<std::array<double, 2>> core(1);
                 core[0] = {cx, cy};
-                if (!lightPage && jumpBuf) {                               // 0.57.0: the card made the groups: the few dots over the nucleus asked here whether they are shown
+                // 0.90.0: the quick pass over every dot on the card where it can (kGlowNearCS, read back with the grid); the full pass in double precision
+                // over the few it kept, here (glowDotsNearOf): the same dots as the processor's pass over all of them
+                const CloudCamera ccam{cx, cy, pxm, ca, sa, cb, sb, ext};
+                const long jn = jumpBuf ? lab.jumpDots() : 0;
+                const bool jumpCard = jumpBuf != 0;
+                const auto* labp = &lab;
+                // (0.90.0 Part C: the renderer may call this frame's finish in the next frame, with the dots and places this frame's pass kept, for the
+                // exposure of the grid of the frame before; never without them then, so PTS is read only in this frame)
+                const auto finish = [PTS, cnt, ccam, cx, cy, jumpCard, jn, labp](const render::Renderer2D::GlowNearDots* kept) {
                     static std::vector<int> nearIdx;
-                    glowDotsNear(PTS, cnt, nullptr, CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, cx, cy, nearCore, &nearIdx);
-                    const long jn = lab.jumpDots();
-                    std::size_t keep = 0;
+                    const unsigned char* gp = jumpCard ? nullptr : grp.data();
+                    if (kept) glowDotsNearAt(kept->xyz.data(), kept->idx, gp, ccam, cx, cy, nearCore, jumpCard ? &nearIdx : nullptr);
+                    else glowDotsNear(PTS, cnt, gp, ccam, cx, cy, nearCore, jumpCard ? &nearIdx : nullptr);
+                    if (!jumpCard) return;
+                    std::size_t keep = 0;                                  // 0.57.0: the card made the groups: the few dots over the nucleus asked here whether they are shown
                     for (std::size_t k = 0; k < nearCore.size(); k++) {
                         const int i = nearIdx[k], pop = i >= jn ? 1 : 0;
-                        if (lab.jumpShown(pop, i - pop * jn)) nearCore[keep++] = nearCore[k];
+                        if (labp->jumpShown(pop, i - pop * jn)) nearCore[keep++] = nearCore[k];
                     }
                     nearCore.resize(keep);
-                } else if (!lightPage) glowDotsNear(PTS, cnt, grp.data(), CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, cx, cy, nearCore); else nearCore.clear();
+                };
+                if (!lightPage && R.cloudNearGpuOk()) {
+                    const GlowNearPass q = glowNearPass(ccam, cx, cy);
+                    const float pass[9] = {q.ca, q.sa, q.cb, q.sb, q.k4, q.pxm, q.dx0, q.dy0, q.lim};
+                    std::copy(pass, pass + 9, cd.nearPass);
+                    cd.near = true;
+                    cd.nearFound = finish;
+                    nearCore.clear();
+                } else if (!lightPage) finish(nullptr);
+                else nearCore.clear();
                 cd.exposure = [ex, capL, lightPage](const std::vector<float>& g) {
                     if (!glowExposure(g, capL, lightPage, 1.0, *ex)) return -1.0;
                     if (!lightPage && !nearCore.empty()) glowCapExposure(nearCore, capL, 1.0, core, *ex);

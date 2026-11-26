@@ -35,6 +35,11 @@ vec3 srgbEncode(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * 
 void main() {
     int mode = int(vParam.x + 0.5);
     if (mode == 0) { fragColor = vColor; return; }
+    if (mode == 9) {                                         // 0.90.0: a dashed line (the Orbit Lab's lines on the card): vUV.x the place along the run (points), dashes of vParam.y every vParam.z
+        if (mod(vUV.x, vParam.z) >= vParam.y) discard;
+        fragColor = vColor;
+        return;
+    }
     float d = length(vUV);                                   // 0 in the middle, 1 at the edge
     float aa = max(fwidth(d), 1e-4);
     float edge = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, d);   // smooth edge, about one pixel wide
@@ -3584,6 +3589,26 @@ vec3 stepPoint(int r, int i, int k, int j) {
     vec3 v = pointOf(r, i - 1) + runs[r].pa.xyz * (-2.0 * sinM * s) + runs[r].qb.xyz * (2.0 * cosM * s);
     return camOf(v);
 }
+// the part of a-b on the picture with its margin (orbit/orbit_lines.h clipSeg, Liang-Barsky); 0.90.0: here, for the dashes' lengths too
+bool clipSeg(vec2 a, vec2 b, out vec2 o0, out vec2 o1) {
+    float xa = -uView.z, ya = -uView.z, xb = uView.x + uView.z, yb = uView.y + uView.z;
+    vec2 d = b - a;
+    o0 = a; o1 = b;
+    if (a.x >= xa && a.x <= xb && b.x >= xa && b.x <= xb && a.y >= ya && a.y <= yb && b.y >= ya && b.y <= yb) return true;
+    float t0 = 0.0, t1 = 1.0;
+    for (int k = 0; k < 4; k++) {
+        float p = k == 0 ? -d.x : k == 1 ? d.x : k == 2 ? -d.y : d.y;
+        float q = k == 0 ? a.x - xa : k == 1 ? xb - a.x : k == 2 ? a.y - ya : yb - a.y;
+        if (p == 0.0) { if (q < 0.0) return false; }
+        else {
+            float r = q / p;
+            if (p < 0.0) { if (r > t1) return false; if (r > t0) t0 = r; }
+            else { if (r < t0) return false; if (r < t1) t1 = r; }
+        }
+    }
+    o0 = a + t0 * d; o1 = a + t1 * d;
+    return true;
+}
 // step j's segment (step j - 1 to step j) cut at the near plane, on the picture; false: none of it is in front
 bool stepSeg(int r, int i, int k, int j, out vec2 P0, out vec2 P1) {
     vec3 a = vec3(0.0), b = vec3(0.0);
@@ -3619,6 +3644,12 @@ void main() {
         uint run = part[t] - sum;
         for (uint i = b0; i < b1; i++) { uint c = off[i]; off[i] = run; run += c; }
         if (t == 255u) { off[n] = part[255]; ind[0] = 6u * part[255]; ind[1] = 1u; ind[2] = 0u; ind[3] = 0u; }
+        // 0.90.0: each dashed run's pieces: where its dashes stand at each piece's start (the processor's LinePen carries it on over the drawn parts)
+        for (int r = int(t); r < uN.x; r += 256) {
+            if (!(runs[r].style.y > 0.0)) continue;
+            float at = 0.0;
+            for (int p = runs[r].b.w; p <= runs[r].b.w + runs[r].b.y - runs[r].b.x; p++) { scr[N + p].y = at; at += scr[N + p].x; }
+        }
         return;
     }
     int g = int(gl_GlobalInvocationID.x);
@@ -3629,9 +3660,14 @@ void main() {
         vec3 a = vec3(0.0), c = vec3(0.0);
         vec2 qa = vec2(-1.0e9), qc = vec2(-1.0e9);
         int k = 1;
-        if (cutNear(camOf(pointOf(r, i - 1)), camOf(pointOf(r, i)), a, c)) { qa = onPic(a); qc = onPic(c); k = steps(r, i, qa, qc); }
+        bool front = cutNear(camOf(pointOf(r, i - 1)), camOf(pointOf(r, i)), a, c);
+        if (front) { qa = onPic(a); qc = onPic(c); k = steps(r, i, qa, qc); }
         off[g] = uint(k);
         scr[g] = vec4(qa, qc);
+        // 0.90.0: a dashed run's piece (straight, one step): its length on the picture as drawn (cut to the picture with the margin), for the dashes' place
+        vec2 c0 = vec2(0.0), c1 = vec2(0.0);
+        float drawn = front && clipSeg(qa, qc, c0, c1) ? length(c1 - c0) : 0.0;
+        scr[N + g] = vec4(drawn, 0.0, 0.0, 0.0);
         return;
     }
     int k = int(off[g + 1] - off[g]);
@@ -3654,25 +3690,6 @@ out vec4 vColor;
 out vec4 vParam;
 )";
 static const char* const kLinesMainVSPart = R"(
-bool clipSeg(vec2 a, vec2 b, out vec2 o0, out vec2 o1) {
-    float xa = -uView.z, ya = -uView.z, xb = uView.x + uView.z, yb = uView.y + uView.z;
-    vec2 d = b - a;
-    o0 = a; o1 = b;
-    if (a.x >= xa && a.x <= xb && b.x >= xa && b.x <= xb && a.y >= ya && a.y <= yb && b.y >= ya && b.y <= yb) return true;
-    float t0 = 0.0, t1 = 1.0;
-    for (int k = 0; k < 4; k++) {
-        float p = k == 0 ? -d.x : k == 1 ? d.x : k == 2 ? -d.y : d.y;
-        float q = k == 0 ? a.x - xa : k == 1 ? xb - a.x : k == 2 ? a.y - ya : yb - a.y;
-        if (p == 0.0) { if (q < 0.0) return false; }
-        else {
-            float r = q / p;
-            if (p < 0.0) { if (r > t1) return false; if (r > t0) t0 = r; }
-            else { if (r < t0) return false; if (r < t1) t1 = r; }
-        }
-    }
-    o0 = a + t0 * d; o1 = a + t1 * d;
-    return true;
-}
 void main() {
     int v = gl_VertexIndex;
     int s = v / 6;
@@ -3700,6 +3717,12 @@ void main() {
         pos = (end1 ? P1 : P0) + (plus ? nrm : -nrm);
     }
     vUV = vec2(0.0); vColor = col; vParam = vec4(0.0);
+    if (runs[r].style.y > 0.0) {                 // 0.90.0: dashed (a straight run: one step a piece): its place along the run at each end (kFragmentShader mode 9)
+        bool end1 = corner == 1 || corner == 2 || corner == 4;
+        float s0 = scr[uN.y + g].y;
+        vUV = vec2(end1 ? s0 + len : s0, 0.0);
+        vParam = vec4(9.0, runs[r].style.y, runs[r].style.y + runs[r].style.z, 0.0);
+    }
     gl_Position = vec4(pos.x / uSize.x * 2.0 - 1.0, 1.0 - pos.y / uSize.y * 2.0, 0.0, 1.0);
 }
 )";
@@ -3715,6 +3738,7 @@ layout(std430, binding = 0) readonly buffer Mesh { vec4 mesh[]; };
 layout(std430, binding = 1) readonly buffer Tri { uint tri[]; };
 layout(std430, binding = 2) buffer Vert { vec4 vert[]; };
 layout(std430, binding = 3) buffer Keys { uvec2 keys[]; };
+layout(std430, binding = 4) readonly buffer Ind { uint ind[]; };
 uniform int uStep;
 uniform ivec4 uN;
 uniform ivec2 uKJ;
@@ -3754,12 +3778,24 @@ void localSort(int kFrom, int kTo, int jTop) {
     keys[base + t] = sk[t];
     keys[base + t + 256u] = sk[t + 256u];
 }
+// 0.90.0 (uN.w 1: the surface made on the card, kSurfaceMakeCS): its counts from ind[4] and ind[5], and the sort over the first power of two from 512 that
+// holds its triangles (uN.z is then the room's: the passes beyond that size, and the blocks past it, end at once; the part sorted holds every triangle
+// and is left as a sort of it alone would leave it, since the rest are all padding keys)
+int vertsN() { return uN.w != 0 ? int(ind[4]) : uN.x; }
+int trisN() { return uN.w != 0 ? int(ind[5]) : uN.y; }
+uint sortN() {
+    if (uN.w == 0) return uint(uN.z);
+    uint p = 512u;
+    while (p < uint(trisN()) && p < uint(uN.z)) p *= 2u;
+    return p;
+}
 void main() {
-    if (uStep == 2) { localSort(2, min(uN.z, 512), 0); return; }
-    if (uStep == 4) { localSort(uKJ.x, uKJ.x, 256); return; }
+    uint P = sortN();
+    if (uStep == 2) { if (gl_WorkGroupID.x * 512u >= P) return; localSort(2, min(int(P), 512), 0); return; }
+    if (uStep == 4) { if (gl_WorkGroupID.x * 512u >= P || uint(uKJ.x) > P) return; localSort(uKJ.x, uKJ.x, 256); return; }
     uint g = gl_GlobalInvocationID.x;
     if (uStep == 0) {
-        if (g >= uint(uN.x)) return;
+        if (g >= uint(vertsN())) return;
         vec4 p = mesh[2u * g], n = mesh[2u * g + 1u];
         float sx = uCam.z + (uR0.x * p.x + uR0.y * p.y + uR0.z * p.z + uCam.x) * uS.x;
         float sy = uCam.w - (uR1.x * p.x + uR1.y * p.y + uR1.z * p.z + uCam.y) * uS.x;
@@ -3774,8 +3810,8 @@ void main() {
         return;
     }
     if (uStep == 1) {
-        if (g >= uint(uN.z)) return;
-        if (g < uint(uN.y)) {
+        if (g >= P) return;
+        if (g < uint(trisN())) {
             float tz = vert[2u * tri[3u * g]].z + vert[2u * tri[3u * g + 1u]].z;
             tz = tz + vert[2u * tri[3u * g + 2u]].z;
             uint u = floatBitsToUint(tz);
@@ -3783,7 +3819,7 @@ void main() {
         } else keys[g] = uvec2(0xFFFFFFFFu, g);
         return;
     }
-    if (g >= uint(uN.z)) return;
+    if (g >= P || uint(uKJ.x) > P) return;
     uint l = g ^ uint(uKJ.y);
     if (l <= g) return;
     bool up = (g & uint(uKJ.x)) == 0u;
@@ -3816,6 +3852,277 @@ void main() {
     vec2 pos = vert[2u * me].xy;
     vUV = vec2(0.0); vColor = col; vParam = vec4(0.0);
     gl_Position = vec4(pos.x / uSize.x * 2.0 - 1.0, 1.0 - pos.y / uSize.y * 2.0, 0.0, 1.0);
+}
+)";
+
+// 0.90.0: the Glow core's dots on the card (atom/cloud_dots.h glowDotsNear's quick pass, the same single-precision numbers: GlowNearPass): every dot of
+// the cloud buffer projected as the processor's quick pass does, the ones within its reach of the core point kept (out[0] counts them, then four words
+// each: its number and its place's three floats, bit for bit, at most uN.y; their order is the card's, the processor sorts them). The processor's full pass in double precision then runs over these few
+// (glowDotsNearOf), so the dots it finds are the same as over all of them.
+static const char* const kGlowNearCS = R"(#version 430 core
+layout(local_size_x = 256) in;
+layout(std430, binding = 0) readonly buffer Pts { float pts[]; };
+layout(std430, binding = 1) buffer Out { uint outv[]; };
+uniform vec4 uTurn;
+uniform vec4 uPass;
+uniform float uLim;
+uniform ivec2 uN;
+void main() {
+    int i = int(gl_GlobalInvocationID.x);
+    if (i >= uN.x) return;
+    float x = pts[3 * i];
+    float y = pts[3 * i + 1];
+    float z = pts[3 * i + 2];
+    float x1 = x * uTurn.x - y * uTurn.y;
+    float y1 = x * uTurn.y + y * uTurn.x;
+    float dep = y1 * uTurn.z - z * uTurn.w;
+    float up = y1 * uTurn.w + z * uTurn.z;
+    float f = uPass.y / (1.0 + dep * uPass.x);
+    float ex = uPass.z + x1 * f;
+    float ey = uPass.w - up * f;
+    float d2 = ex * ex + ey * ey;
+    if (isnan(d2) || !(d2 >= uLim)) {
+        uint at = atomicAdd(outv[0], 1u);
+        if (at < uint(uN.y)) {
+            outv[1u + 4u * at] = uint(i);
+            outv[2u + 4u * at] = floatBitsToUint(x);
+            outv[3u + 4u * at] = floatBitsToUint(y);
+            outv[4u + 4u * at] = floatBitsToUint(z);
+        }
+    }
+}
+)";
+
+// 0.90.0: the vibrating Density surface made on the card (Vulkan; render/surface_card.h SurfaceMake), the processor's dens::blendVib and
+// dens::densitySurface step by step: the density blended at the phase (f0 + a (f+ - f-) + b (f+ + f- - 2 f0), never below 0), ln rho on every stride-th
+// grid point (step 0), each grid edge of the Kuhn split crossed or not (step 1: 8 slots a point, slot = the step to the edge's other end, x 1, y 2,
+// z 4, as dens::marchTets keys), their offsets (step 2: one workgroup's prefix sum; the vertices numbered by edge), each crossed edge's vertex at the
+// crossing, its normal from the gradient of ln rho (central differences, trilinear on the full grid) and its potential (step 3), each cube's triangles
+// counted (step 4), their offsets (step 5) and the triangles (step 6, the processor's order: cube by cube, tetrahedron by tetrahedron, each turned so its
+// normal points outward). ind: the draw's (3 nt, 1, 0, 0), then nv and nt (read by kSurfaceCS with uN.w 1). Single precision; the start-up check's
+// limits are molecule/surface_check.h's. A gradient of zero leaves the normal (0, 0, 0) (the processor keeps the faces' normal there; never on the
+// app's surfaces, where ln rho falls outward).
+static const char* const kSurfaceMakeCS = R"(#version 430 core
+layout(local_size_x = 256) in;
+layout(std430, binding = 0) readonly buffer Src { float src[]; };
+layout(std430, binding = 1) buffer Fld { float fld[]; };
+layout(std430, binding = 2) buffer Cnt { uint cnt[]; };
+layout(std430, binding = 3) buffer Mesh { vec4 mesh[]; };
+layout(std430, binding = 4) buffer Tri { uint tri[]; };
+layout(std430, binding = 5) buffer Ind { uint ind[]; };
+uniform int uStep;
+uniform ivec4 uG;
+uniform ivec4 uF;
+uniform vec4 uO;
+uniform ivec4 uP;
+uniform vec4 uPO;
+uniform vec4 uB;
+uniform ivec4 uCap;
+shared uint part[256];
+const int kTet[24] = int[24](0, 1, 3, 7, 0, 1, 5, 7, 0, 2, 3, 7, 0, 2, 6, 7, 0, 4, 5, 7, 0, 4, 6, 7);
+// src: the density's three (still, + end, - end; uF.w values each), then the potential's three (uP.w each)
+float rhoAt(int i) {
+    float f0 = src[i];
+    float fp = src[uF.w + i];
+    float fm = src[2 * uF.w + i];
+    return max(0.0, f0 + uB.x * (fp - fm) + uB.y * (fp + fm - 2.0 * f0));
+}
+float potAt(int i) {
+    int o = 3 * uF.w;
+    float f0 = src[o + i];
+    float fp = src[o + uP.w + i];
+    float fm = src[o + 2 * uP.w + i];
+    return f0 + uB.x * (fp - fm) + uB.y * (fp + fm - 2.0 * f0);
+}
+// dens::Grid::sample: trilinear, 0 outside
+float sampleRho(vec3 x) {
+    vec3 f = (x - uO.xyz) / uO.w;
+    if (!(f.x >= 0.0 && f.y >= 0.0 && f.z >= 0.0 && f.x <= float(uF.x - 1) && f.y <= float(uF.y - 1) && f.z <= float(uF.z - 1))) return 0.0;
+    int i = min(uF.x - 2, int(f.x));
+    int j = min(uF.y - 2, int(f.y));
+    int k = min(uF.z - 2, int(f.z));
+    vec3 t = f - vec3(float(i), float(j), float(k));
+    float s = 0.0;
+    for (int c = 0; c < 8; c++) {
+        int a = c & 1;
+        int b = (c >> 1) & 1;
+        int e = c >> 2;
+        int idx = ((k + e) * uF.y + (j + b)) * uF.x + (i + a);
+        s += rhoAt(idx) * (a == 1 ? t.x : 1.0 - t.x) * (b == 1 ? t.y : 1.0 - t.y) * (e == 1 ? t.z : 1.0 - t.z);
+    }
+    return s;
+}
+float samplePot(vec3 x) {
+    vec3 f = (x - uPO.xyz) / uPO.w;
+    if (!(f.x >= 0.0 && f.y >= 0.0 && f.z >= 0.0 && f.x <= float(uP.x - 1) && f.y <= float(uP.y - 1) && f.z <= float(uP.z - 1))) return 0.0;
+    int i = min(uP.x - 2, int(f.x));
+    int j = min(uP.y - 2, int(f.y));
+    int k = min(uP.z - 2, int(f.z));
+    vec3 t = f - vec3(float(i), float(j), float(k));
+    float s = 0.0;
+    for (int c = 0; c < 8; c++) {
+        int a = c & 1;
+        int b = (c >> 1) & 1;
+        int e = c >> 2;
+        int idx = ((k + e) * uP.y + (j + b)) * uP.x + (i + a);
+        s += potAt(idx) * (a == 1 ? t.x : 1.0 - t.x) * (b == 1 ? t.y : 1.0 - t.y) * (e == 1 ? t.z : 1.0 - t.z);
+    }
+    return s;
+}
+float lnRho(vec3 x) { return log(max(1.0e-30, sampleRho(x))); }
+ivec3 pointOf(int p) { return ivec3(p % uG.x, (p / uG.x) % uG.y, p / (uG.x * uG.y)); }
+int indexOf(ivec3 c) { return (c.z * uG.y + c.y) * uG.x + c.x; }
+ivec3 stepOf(int d) { return ivec3(d & 1, (d >> 1) & 1, d >> 2); }
+// the crossing on edge key (bohr), as dens::marchTets' vertexOn: t along the edge, kept off its ends
+vec3 edgePos(int key) {
+    int p = key / 8;
+    ivec3 lo = pointOf(p);
+    ivec3 hi = lo + stepOf(key - 8 * p);
+    float cl = fld[p];
+    float ch = fld[indexOf(hi)];
+    float t = clamp((uB.z - cl) / (ch - cl), 1.0e-4, 1.0 - 1.0e-4);
+    float H = uO.w * float(uG.w);
+    return uO.xyz + H * (vec3(lo) + t * vec3(hi - lo));
+}
+uint scanRange(uint s0, uint n) {
+    uint t = gl_LocalInvocationID.x;
+    uint per = (n + 255u) / 256u;
+    uint b0 = min(n, t * per);
+    uint b1 = min(n, b0 + per);
+    uint sum = 0u;
+    for (uint i = b0; i < b1; i++) sum += cnt[s0 + i];
+    part[t] = sum;
+    memoryBarrierShared();
+    barrier();
+    for (uint d = 1u; d < 256u; d <<= 1u) {
+        uint v = t >= d ? part[t - d] : 0u;
+        memoryBarrierShared();
+        barrier();
+        part[t] += v;
+        memoryBarrierShared();
+        barrier();
+    }
+    uint run = part[t] - sum;
+    for (uint i = b0; i < b1; i++) { uint c = cnt[s0 + i]; cnt[s0 + i] = run; run += c; }
+    if (t == 255u) cnt[s0 + n] = part[255];
+    return part[255];
+}
+void main() {
+    int NC = uG.x * uG.y * uG.z;
+    int NE = 8 * NC;
+    int nCube = (uG.x - 1) * (uG.y - 1) * (uG.z - 1);
+    int cubeAt = NE + 1;
+    if (uStep == 2) {
+        uint nv = scanRange(0u, uint(NE));
+        if (gl_LocalInvocationID.x == 0u) ind[4] = nv;
+        return;
+    }
+    if (uStep == 5) {
+        uint nt = scanRange(uint(cubeAt), uint(nCube));
+        if (gl_LocalInvocationID.x == 0u) {
+            bool fits = nt <= uint(uCap.y) && ind[4] <= uint(uCap.x);
+            if (!fits) { ind[4] = 0u; nt = 0u; }
+            ind[0] = 3u * nt; ind[1] = 1u; ind[2] = 0u; ind[3] = 0u;
+            ind[5] = nt;
+            // kSurfaceCS's workgroups, read by its indirect dispatches (vk_surface.cpp): from ind[8], three uints each: its vertices, the sort's 256- and
+            // 512-blocks of the first power of two from 512 that holds the triangles (P), then for each pass of the room's sort (k = 1024, 2048 .. uCap.z)
+            // its 256- and 512-blocks, or none where k > P (those passes leave the sorted part as it is)
+            uint P = 512u;
+            while (P < nt && P < uint(uCap.z)) P *= 2u;
+            uint w[3] = uint[3]((ind[4] + 255u) / 256u, P / 256u, P / 512u);
+            for (int e = 0; e < 3; e++) { ind[8 + 3 * e] = w[e]; ind[9 + 3 * e] = 1u; ind[10 + 3 * e] = 1u; }
+            int L = 0;
+            for (uint k = 1024u; k <= uint(uCap.z); k *= 2u) {
+                ind[17 + 6 * L] = k <= P ? P / 256u : 0u; ind[18 + 6 * L] = 1u; ind[19 + 6 * L] = 1u;
+                ind[20 + 6 * L] = k <= P ? P / 512u : 0u; ind[21 + 6 * L] = 1u; ind[22 + 6 * L] = 1u;
+                L++;
+            }
+        }
+        return;
+    }
+    int g = int(gl_GlobalInvocationID.x);
+    if (uStep == 0) {
+        if (g >= NC) return;
+        ivec3 c = pointOf(g) * uG.w;
+        fld[g] = log(max(rhoAt((c.z * uF.y + c.y) * uF.x + c.x), 1.0e-30));
+        return;
+    }
+    if (uStep == 1) {
+        if (g >= NE) return;
+        int p = g / 8;
+        int d = g - 8 * p;
+        ivec3 hi = pointOf(p) + stepOf(d);
+        bool on = d != 0 && hi.x < uG.x && hi.y < uG.y && hi.z < uG.z;
+        cnt[g] = on && ((fld[p] > uB.z) != (fld[indexOf(hi)] > uB.z)) ? 1u : 0u;
+        return;
+    }
+    if (uStep == 3) {
+        if (g >= NE) return;
+        uint v = cnt[g];
+        if (cnt[g + 1] == v || v >= uint(uCap.x)) return;
+        vec3 x = edgePos(g);
+        float e = uO.w;
+        vec3 gr = vec3(lnRho(x + vec3(e, 0.0, 0.0)) - lnRho(x - vec3(e, 0.0, 0.0)), lnRho(x + vec3(0.0, e, 0.0)) - lnRho(x - vec3(0.0, e, 0.0)),
+                       lnRho(x + vec3(0.0, 0.0, e)) - lnRho(x - vec3(0.0, 0.0, e)));
+        float gl = length(gr);
+        vec3 n = gl > 0.0 ? -gr / gl : vec3(0.0);
+        mesh[2u * v] = vec4(x * uB.w, samplePot(x));
+        mesh[2u * v + 1u] = vec4(n, 0.0);
+        return;
+    }
+    if (g >= nCube) return;
+    int cx = uG.x - 1;
+    int cy = uG.y - 1;
+    ivec3 base = ivec3(g % cx, (g / cx) % cy, g / (cx * cy));
+    int cidx[8];
+    bool inside[8];
+    for (int c = 0; c < 8; c++) { cidx[c] = indexOf(base + stepOf(c)); inside[c] = fld[cidx[c]] > uB.z; }
+    if (uStep == 4) {
+        uint n = 0u;
+        for (int T = 0; T < 6; T++) {
+            int ni = 0;
+            for (int q = 0; q < 4; q++) ni += inside[kTet[4 * T + q]] ? 1 : 0;
+            n += ni == 0 || ni == 4 ? 0u : ni == 2 ? 2u : 1u;
+        }
+        cnt[cubeAt + g] = n;
+        return;
+    }
+    uint at = cnt[cubeAt + g];
+    if (cnt[cubeAt + g + 1] == at) return;
+    for (int T = 0; T < 6; T++) {
+        int vin[4] = int[4](0, 0, 0, 0);
+        int vou[4] = int[4](0, 0, 0, 0);
+        int ni = 0;
+        int no = 0;
+        for (int q = 0; q < 4; q++) {
+            int c = kTet[4 * T + q];
+            if (inside[c]) { vin[ni] = c; ni++; } else { vou[no] = c; no++; }
+        }
+        if (ni == 0 || no == 0) continue;
+        vec3 dir = vec3(0.0);
+        for (int q = 0; q < no; q++) dir += vec3(stepOf(vou[q])) / float(no);
+        for (int q = 0; q < ni; q++) dir -= vec3(stepOf(vin[q])) / float(ni);
+        int m = ni == 2 ? 2 : 1;
+        for (int h = 0; h < m; h++) {
+            int ea0 = 0, eb0 = 0, ea1 = 0, eb1 = 0, ea2 = 0, eb2 = 0;   // the three edges (corner pairs), as marchTets emits them
+            if (ni == 1) { ea0 = vin[0]; eb0 = vou[0]; ea1 = vin[0]; eb1 = vou[1]; ea2 = vin[0]; eb2 = vou[2]; }
+            else if (ni == 3) { ea0 = vou[0]; eb0 = vin[0]; ea1 = vou[0]; eb1 = vin[1]; ea2 = vou[0]; eb2 = vin[2]; }
+            else if (h == 0) { ea0 = vin[0]; eb0 = vou[0]; ea1 = vin[0]; eb1 = vou[1]; ea2 = vin[1]; eb2 = vou[1]; }
+            else { ea0 = vin[0]; eb0 = vou[0]; ea1 = vin[1]; eb1 = vou[1]; ea2 = vin[1]; eb2 = vou[0]; }
+            int lo0 = (ea0 & eb0) == ea0 ? ea0 : eb0;
+            int lo1 = (ea1 & eb1) == ea1 ? ea1 : eb1;
+            int lo2 = (ea2 & eb2) == ea2 ? ea2 : eb2;
+            uint v0 = cnt[8 * cidx[lo0] + (ea0 ^ eb0)];
+            uint v1 = cnt[8 * cidx[lo1] + (ea1 ^ eb1)];
+            uint v2 = cnt[8 * cidx[lo2] + (ea2 ^ eb2)];
+            vec3 A = mesh[2u * v0].xyz;
+            vec3 B = mesh[2u * v1].xyz;
+            vec3 C = mesh[2u * v2].xyz;
+            if (dot(cross(B - A, C - A), dir) < 0.0) { uint s = v1; v1 = v2; v2 = s; }
+            if (at < uint(uCap.y)) { tri[3u * at] = v0; tri[3u * at + 1u] = v1; tri[3u * at + 2u] = v2; }
+            at++;
+        }
+    }
 }
 )";
 

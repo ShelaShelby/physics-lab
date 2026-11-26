@@ -52,6 +52,10 @@ struct RealCache {
     std::vector<std::uint64_t> vibEpoch;         // 0.57.1: each level's set number
     dens::Data vibNow;                           // the blended density (kept: no allocation per frame once grown)
     bool meshVib = false;                        // 0.57.1: mesh holds the vibrating surface (the still one is made again when the swing stops)
+    // 0.90.0: vibOnCard (set by the view each frame: the card may make the surface): a new phase is only made's phase, the card makes the surface
+    // (render/surface_card.h SurfaceMake); mesh then keeps the still surface, unused while made is drawn. made.key: a new number for each molecule and mode
+    bool vibOnCard = false, meshMade = false;
+    render::SurfaceMake made;
 };
 
 struct MoleculeLab {
@@ -214,7 +218,7 @@ struct MoleculeLab {
 
 render::Color realPotColour(double t);       // 0.21: the surface's potential colours (t = V / range, -1 red .. 0 white .. +1 blue), also for the panel's colour bar
 
-struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false, cloudCard = false, surfaceCard = false; const char* mode = "viewer"; };   // (0.57.1 cloudCard: the cloud was drawn by the card)   // (mode: viewer / realistic; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
+struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false, cloudCard = false, surfaceCard = false, surfaceMade = false; const char* mode = "viewer"; };   // (0.90.0 surfaceMade: the vibrating surface made by the card; triangles then -1: counted there)   // (0.57.1 cloudCard: the cloud was drawn by the card)   // (mode: viewer / realistic; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
 
 class MoleculeView {
 public:

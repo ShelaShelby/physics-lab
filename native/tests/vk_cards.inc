@@ -392,6 +392,24 @@ static void vkSurface(render::SurfaceCard& vk) {
     }
 }
 
+// 0.90.0: the surface made on the card (kSurfaceMakeCS) against the processor's dens::densitySurface (molecule/surface_check.h compareMade): water at
+// four phases of its vibrating mode, carbon dioxide and nitrogen (still: no vibrating density) at four phases each; the same triangles in the same order,
+// every vertex within its derived limit
+static void vkSurfaceMade(render::SurfaceCard& vk) {
+    std::string why;
+    check("Vulkan made surface: the program is made (" + why + ")", vk.buildMake(why));
+    const std::vector<molecule::MadeCase> cases = molecule::surfaceMadeCases(true);
+    check("Vulkan made surface: the 12 cases were made (the density files)", cases.size() == 12);
+    for (const molecule::MadeCase& c : cases) {
+        render::SurfaceMade got;
+        const int j = vk.beginMake(c.make);
+        const bool done = j > 0 && vkt::poll([&] { return vk.pollMake(j, got); }) == render::JobState::Done;
+        const molecule::MadeCompare k = molecule::compareMade(c, got);
+        std::printf("Vulkan made surface, %s: %s\n", c.name.c_str(), molecule::madeCompareText(k).c_str());
+        check("Vulkan made surface, " + c.name + ": the processor's triangles in its order, every vertex within its limit", done && k.ok());
+    }
+}
+
 // 0.65.0: as the app's frame does (renderer2d_vk.cpp): a program's first full use ends once its batch has finished, which gives the guards' turn back
 // (0.63.0's one-step-at-a-time rule). Without it the next program's first use waited for the turn for ever here (the outline's, rocks' and Glow grid's steps).
 static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOutlineCompute* o, render::IRockCompute* r, render::VkGlow* w) {
@@ -399,6 +417,130 @@ static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOu
     const int off = render::vkPollFirstUses(cards, g, o, r, w);
     check("Vulkan: the first full use ends (its guard's turn given back)", off == 0 && app::gpuGuardTurn().empty());
     if (!app::gpuGuardTurn().empty()) std::printf("Vulkan: the guards' turn is still held by %s\n", app::gpuGuardTurn().c_str());
+}
+
+// 0.90.0: the Glow core's dots found on the card (kGlowNearCS) against the processor's pass over every dot (atom/cloud_dots.h glowDotsNear): hydrogen,
+// sodium and uranium in the Glow Cloud 3D (Ultra, zoom 0), and radium's jump with every electron (the atom.jump_all set-up, its two populations, each dot
+// asked whether it is shown). The dots found are the same set, in the same order, with the same places, sizes and weights; the capped exposure (the
+// grid's exposure, glowExposure, then glowCapExposure at the core) from the card's grid and dots lies within the range its grid's float sums allow:
+// each cell within want (n + 6) 4 u of the processor's (n its dots, u = 2^-24; and a dot within rounding of a cell's edge as slack for the cells round
+// it, as vkGlowGrid), the exposure worked out from the grid lowered and raised by that much at every cell
+static void vkGlowNearCheck(render::VkCards& cards) {
+    std::string why;
+    render::VkGlow* g = render::makeVkGlow(cards, why);
+    check("Vulkan Glow core: the Glow program and its core pass are made (" + why + ")", g != nullptr && render::vkGlowNearOk(g));
+    if (!g || !render::vkGlowNearOk(g)) { if (g) render::dropVkGlow(g); return; }
+    const double w = 1040, h = 713;
+    for (int sc = 0; sc < 4; sc++) {
+        static AtomLab L;
+        const int Z = sc == 0 ? 1 : sc == 1 ? 11 : sc == 2 ? 92 : heaviestLevelAtom();
+        std::vector<float> both;
+        const float* pts = nullptr;
+        long cnt = 0, cap = 0, jn = 0;
+        std::vector<unsigned char> grp;
+        if (sc < 3) {
+            benchGlowAtom(L, Z, w, h);
+            cap = std::min<long>(L.cloudCap(), long(L.s.sg.size()));
+            cnt = std::min<long>(L.s.k, cap);
+            pts = L.s.pts.data();
+            grp.resize(std::size_t(cnt));
+            plainGroups(L.usesWheel(), L.s.ph.data(), L.s.sg.data(), cnt, grp.data());
+        } else {
+            benchSetup(L, kBenchJumpAll, w, h);
+            for (int f = 0; f < 4000 && !(L.jumpDrawn() && L.s.trans); f++) { benchFrame(L, kBenchJumpAll, f, f); L.step(1.0 / 60); }
+            benchFrame(L, kBenchJumpAll, 0, 0);
+            check("Vulkan Glow core: radium's jump is drawn", L.jumpDrawn());
+            if (!L.jumpDrawn()) continue;
+            jn = L.jumpDots();
+            both.assign(L.s.pts.begin(), L.s.pts.begin() + 3 * jn); both.insert(both.end(), L.s.jp.begin(), L.s.jp.begin() + 3 * jn);
+            pts = both.data(); cnt = 2 * jn; cap = cnt;
+        }
+        const char* name = sc == 0 ? "hydrogen" : sc == 1 ? "sodium" : sc == 2 ? "uranium" : "radium's jump";
+        const double m = std::min(w, h), pxm = L.pxPerM(m, L.s.szCur) * std::pow(10, L.p.zoom), ext = L.cloudExtM();
+        const CloudCamera cam{w / 2, h / 2, pxm, std::cos(L.s.yaw), std::sin(L.s.yaw), std::cos(L.s.pitch), std::sin(L.s.pitch), ext};
+        const unsigned char* gp = sc < 3 ? grp.data() : nullptr;
+        // the processor's
+        std::vector<GlowDot> cpuNear;
+        std::vector<int> cpuIdx;
+        glowDotsNear(pts, cnt, gp, cam, cam.cx, cam.cy, cpuNear, &cpuIdx);
+        // the card's
+        render::Renderer2D::CloudGpuDraw d;
+        std::vector<unsigned char> grpAll(std::size_t(cnt), 0);
+        d.pts = pts; d.cnt = cnt; d.cap = cap; d.epoch = 100 + std::uint64_t(sc); d.k = cnt; d.grp = gp ? gp : grpAll.data();
+        d.cx = float(cam.cx); d.cy = float(cam.cy); d.pxm = float(cam.pxm); d.ext = float(cam.ext); d.ca = float(cam.ca); d.sa = float(cam.sa); d.cb = float(cam.cb); d.sb = float(cam.sb); d.w = float(w); d.h = float(h);
+        const GlowNearPass q = glowNearPass(cam, cam.cx, cam.cy);
+        const float pass[9] = {q.ca, q.sa, q.cb, q.sb, q.k4, q.pxm, q.dx0, q.dy0, q.lim};
+        std::copy(pass, pass + 9, d.nearPass);
+        d.near = true;
+        long bytes = 0;
+        const int index = render::vkGlowRecord(g, d, VK_NULL_HANDLE, bytes);
+        const bool ran = index >= 0 && cards.flush(true) != 0 && !cards.failed();
+        render::Renderer2D::GlowNearDots kept;
+        const bool read = ran && render::vkGlowNear(g, render::vkGlowNearBank(g), kept);
+        bool placesSame = kept.xyz.size() == 3 * kept.idx.size();               // (the places the card copied, bit for bit)
+        for (std::size_t k = 0; placesSame && k < kept.idx.size(); k++)
+            for (int c = 0; c < 3; c++) placesSame = placesSame && std::memcmp(&kept.xyz[3 * k + std::size_t(c)], &pts[3 * std::size_t(kept.idx[k]) + std::size_t(c)], 4) == 0;
+        std::vector<GlowDot> gpuNear;
+        std::vector<int> gpuIdx;
+        glowDotsNearAt(kept.xyz.data(), kept.idx, gp, cam, cam.cx, cam.cy, gpuNear, &gpuIdx);
+        bool same = gpuIdx == cpuIdx && gpuNear.size() == cpuNear.size();
+        for (std::size_t k = 0; same && k < cpuNear.size(); k++)
+            same = gpuNear[k].x == cpuNear[k].x && gpuNear[k].y == cpuNear[k].y && gpuNear[k].r == cpuNear[k].r && gpuNear[k].wt == cpuNear[k].wt && gpuNear[k].g == cpuNear[k].g;
+        if (sc == 3) {                                                          // (the jump: each found dot asked whether it is shown, on both sides alike)
+            const auto shown = [&](std::vector<GlowDot>& D, const std::vector<int>& I) { std::size_t k2 = 0; for (std::size_t k = 0; k < D.size(); k++) { const int i = I[k], pop = i >= jn ? 1 : 0; if (L.jumpShown(pop, i - pop * jn)) D[k2++] = D[k]; } D.resize(k2); };
+            shown(cpuNear, cpuIdx); shown(gpuNear, gpuIdx);
+        }
+        std::printf("Vulkan Glow core, %s: %ld dots; the card kept %zu, the processor's pass found %zu, the card's list then %zu (%zu shown)\n", name, cnt, kept.idx.size(), cpuIdx.size(), gpuIdx.size(), gpuNear.size());
+        check(std::string("Vulkan Glow core, ") + name + ": the card's pass ran and was read back, each kept dot's place copied bit for bit", read && placesSame);
+        check(std::string("Vulkan Glow core, ") + name + ": the dots found are the processor's, the same set in the same order (not none)", same && !cpuIdx.empty());
+        // the exposure: the grid as the card sums it (kCloudGridVS), in double, with each cell's limit
+        const int gw = int(d.w / 8) + 2, gh = int(d.h / 8) + 2;
+        std::vector<double> want(std::size_t(gw * gh), 0.0), slack(want.size(), 0.0);
+        std::vector<long> count(want.size(), 0);
+        for (long i = 0; i < cnt; i++) {
+            if (d.grp[i] == 255) continue;
+            const double x = pts[3 * i], y = pts[3 * i + 1], zz = pts[3 * i + 2];
+            const double x1 = x * d.ca - y * d.sa, y1 = x * d.sa + y * d.ca, dep = y1 * d.cb - zz * d.sb, up = y1 * d.sb + zz * d.cb;
+            const double f = 1 / (1 + dep / (4 * double(d.ext))), X = d.cx + x1 * d.pxm * f, Y = d.cy - up * d.pxm * f, D = dep / d.ext;
+            if (X < 0 || X > d.w || Y < 0 || Y > d.h) continue;
+            const double t = std::max(-1.0, std::min(1.0, D)), nr = 0.5 - 0.5 * t, r = 4.6 * (0.8 + 0.4 * nr), wt = 0.3 + 0.9 * nr;
+            const int cx = std::max(0, std::min(gw - 1, int(X / 8))), cy = std::max(0, std::min(gh - 1, int(Y / 8)));
+            want[std::size_t(cy * gw + cx)] += wt * r * r * 0.785;
+            count[std::size_t(cy * gw + cx)]++;
+            const double fx = X / 8 - std::floor(X / 8), fy = Y / 8 - std::floor(Y / 8);
+            if (fx < 1e-4 || fx > 1 - 1e-4 || fy < 1e-4 || fy > 1 - 1e-4)
+                for (int ax = -1; ax <= 1; ax++) for (int ay = -1; ay <= 1; ay++) {
+                    const int qx = cx + ax, qy = cy + ay;
+                    if (qx >= 0 && qx < gw && qy >= 0 && qy < gh) slack[std::size_t(qy * gw + qx)] += wt * r * r * 0.785;
+                }
+        }
+        const float* cells = ran ? cards.cells(index) : nullptr;
+        if (!cells) { check(std::string("Vulkan Glow core, ") + name + ": the grid is read back", false); continue; }
+        std::vector<float> cardGrid(cells, cells + want.size()), lo(want.size()), hi(want.size());
+        for (std::size_t c = 0; c < want.size(); c++) {
+            // (glowExposure ranks the cells above 0, so an empty cell stays empty unless a dot within rounding of an edge may reach it: its slack; a cell
+            // with dots and no slack stays above 0)
+            const double lim = want[c] * (double(count[c]) + 6) * 5.96e-8 * 4 + slack[c];
+            lo[c] = float(slack[c] > 0 ? std::max(0.0, want[c] - lim) : want[c] - lim); hi[c] = float(want[c] + lim);
+            if (want[c] > 0 && slack[c] == 0) lo[c] = std::max(lo[c], std::nextafter(0.0f, 1.0f));
+        }
+        const std::vector<std::array<double, 2>> core{{cam.cx, cam.cy}};
+        const auto capped = [&](const std::vector<float>& grid, const std::vector<GlowDot>& D) { double e = 0; if (!glowExposure(grid, cap, false, 1.0, e)) return -1.0; if (!D.empty()) glowCapExposure(D, cap, 1.0, core, e); return e; };
+        const double eCard = capped(cardGrid, gpuNear), eLo = capped(hi, cpuNear), eHi = capped(lo, cpuNear);   // (a brighter grid: a lower exposure)
+        const double a = std::min(eLo, eHi) * (1 - 4 * 5.96e-8), b = std::max(eLo, eHi) * (1 + 4 * 5.96e-8);
+        std::printf("Vulkan Glow core, %s: the capped exposure from the card %.9g, allowed %.9g to %.9g\n", name, eCard, a, b);
+        check(std::string("Vulkan Glow core, ") + name + ": the capped exposure from the card is the processor's within its grid's float rounding", eCard > 0 && eCard >= a && eCard <= b);
+    }
+    settle(cards, nullptr, nullptr, nullptr, g);
+    render::dropVkGlow(g);
+}
+
+// 0.90.0 (development): PL_VK_PART=vulkanTwins:<name> runs only that program's checks here (vk_compare.cpp want)
+static bool twin(const char* name) {
+    const char* e = std::getenv("PL_VK_PART");
+    if (!e || !*e) return true;
+    const std::string list = std::string(",") + e + ",";
+    return list.find(",vulkanTwins,") != std::string::npos || list.find(std::string(",vulkanTwins:") + name + ",") != std::string::npos;
 }
 
 static void vulkanTwins() {
@@ -413,37 +555,39 @@ static void vulkanTwins() {
         check("Vulkan: the card programs' engine starts (" + why + ")", cards.init(h.c, nullptr, h.f64, why));
         render::IGroupCompute* g = render::makeVkGroupCompute(cards, why);
         check("Vulkan: the groups' program passes its start-up steps (" + why + ")", g != nullptr);
-        if (g) vkGroups(*g);
+        if (g && twin("groups")) vkGroups(*g);
         settle(cards, g, nullptr, nullptr, nullptr);
         render::IOutlineCompute* o = render::makeVkOutlineCompute(cards, why);
         check("Vulkan: the outline's programs pass their start-up steps (" + why + ")", o != nullptr);
-        if (o) vkOutline(*o);
+        if (o && twin("outline")) vkOutline(*o);
         settle(cards, nullptr, o, nullptr, nullptr);
         render::IRockCompute* r = render::makeVkRockCompute(cards, why);
         check("Vulkan: the rocks' program passes its start-up steps (double precision here: " + std::string(h.f64 ? "yes" : "no") + "; " + why + ")", r != nullptr || !h.f64);
-        if (r) vkRocks(*r);
+        if (r && twin("rocks")) vkRocks(*r);
         settle(cards, nullptr, nullptr, r, nullptr);
         render::AtomCard* a = render::makeVkAtomCard(cards);
-        vkSliceJump(*a);
+        if (twin("slicejump")) vkSliceJump(*a);
         render::MoleculeCard* m = render::makeVkMoleculeCard(cards);
-        vkMolCloud(*m);
-        vkGlowGrid(cards);
+        if (twin("molcloud")) vkMolCloud(*m);
+        if (twin("glowgrid")) vkGlowGrid(cards);
+        if (twin("glownear")) vkGlowNearCheck(cards);                         // 0.90.0
         render::RingCard* rc = render::makeVkRingCard(cards);                   // 0.64.0 (before the Black Hole Lab's, whose end can wait: ROADMAP)
-        vkRings(*rc);
+        if (twin("rings")) vkRings(*rc);
         delete rc;
         render::ClassicCard* cc = render::makeVkClassicCard(cards);             // 0.64.0
-        vkClassic(*cc);
+        if (twin("classic")) vkClassic(*cc);
         delete cc;
         render::NucDensCard* nd = render::makeVkNucDensCard(cards);             // 0.67.0
-        vkNucDens(*nd);
+        if (twin("nucdens")) vkNucDens(*nd);
         delete nd;
         render::LinesCard* ln = render::makeVkLinesCard(cards);                 // 0.68.0
-        vkLines(*ln);
+        if (twin("lines")) vkLines(*ln);
         delete ln;
         render::SurfaceCard* sf = render::makeVkSurfaceCard(cards);             // 0.68.0
-        vkSurface(*sf);
+        if (twin("surface")) vkSurface(*sf);
+        if (twin("surface")) vkSurfaceMade(*sf);                                                   // 0.90.0
         delete sf;
-        vkBlackHole(cards, h.f64);                                            // 0.62.0
+        if (twin("blackhole")) vkBlackHole(cards, h.f64);                                            // 0.62.0
         delete g; delete o; delete r; delete a; delete m;
         cards.collect();
     }

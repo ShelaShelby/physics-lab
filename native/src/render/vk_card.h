@@ -79,6 +79,9 @@ public:
     // the barrier after writes (by: VK_PIPELINE_STAGE_TRANSFER_BIT or COMPUTE_SHADER_BIT) to their consumers (Consumer bits)
     void barrier(VkPipelineStageFlags by, unsigned to);
     bool dispatch(Kernel& k, std::initializer_list<const Buf*> bufs, std::uint32_t gx, std::uint32_t gy = 1, std::uint32_t gz = 1);
+    // 0.90.0: the workgroup counts read by the card from args at byte at (3 uints, written by an earlier step: barrier(..., kToIndirect) after it);
+    // args needs VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+    bool dispatchIndirect(Kernel& k, std::initializer_list<const Buf*> bufs, const Buf& args, VkDeviceSize at);
     std::uint64_t pending() const { return open_ >= 0 ? nextTicket_ : 0; }   // the ticket the open batch will get (0: none open)
     // submits the open batch (wait: and waits for it); its ticket (> 0), or the last one when nothing was open; 0: it could not be submitted
     std::uint64_t flush(bool wait);
@@ -102,6 +105,9 @@ public:
     VkUniforms& gridUniforms(int which) { return gridU_[which & 1]; }
     int grid(int which, int gw, int gh, VkBuffer b0, VkBuffer b1, std::uint32_t points);
     const float* cells(int index) const;
+    // 0.90.0: the grids in three banks: a frame's (Renderer2D::vkCardsFrame, gridFrame(true) .. gridFrame(false)) in one of two by turns, so the frame
+    // after can read them while it records its own; any other run's (the start-up checks) in the third. An index names its bank.
+    void gridFrame(bool begin) { if (begin) { frameBank_ ^= 1; bank_ = frameBank_; } else bank_ = 2; }
 
     // ---- the guarded first use of a program (the step "... first full use" ends when the batch with its first real work has finished) ----
     struct FirstUse { app::GpuGuard* guard = nullptr; std::string step; std::uint64_t ticket = 0; double at = 0; int state = 0; };   // state 0 waiting, 1 begun, 2 done, -1 failed
@@ -122,6 +128,7 @@ private:
                   std::vector<Buf> spare; };
     struct Grid { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; Buf host; int w = 0, h = 0; };
     bool openSlot();
+    bool record(Kernel& k, std::initializer_list<const Buf*> bufs, const Buf* args, VkDeviceSize at, std::uint32_t gx, std::uint32_t gy, std::uint32_t gz);
     void readTimes();
     VkQueryPool tq_ = VK_NULL_HANDLE;
     bool timing_ = false;
@@ -149,6 +156,7 @@ private:
     VkUniforms gridU_[2];
     std::vector<Grid> grids_;
     int gridsUsed_ = 0;
+    int bank_ = 2, frameBank_ = 0;                           // 0.90.0 (gridFrame)
 };
 
 // the programs, each its own guarded steps (render/vk_card.cpp); null when it cannot be made (why says it)
@@ -182,6 +190,7 @@ class SurfaceCard; struct SurfaceDraw;
 SurfaceCard* makeVkSurfaceCard(VkCards& c);
 bool vkSurfaceRecord(SurfaceCard* c, const SurfaceDraw& d);
 bool vkSurfaceBuffers(SurfaceCard* c, VkBuffer bufs[4]);
+VkBuffer vkSurfaceIndirect(SurfaceCard* c);   // 0.90.0: the made surface's draw (null: the surface was sent, its count is the draw's)
 VkBuffer vkRockPositions(IRockCompute* r, int slot);         // the rocks' places on the card (VK_NULL_HANDLE: not a Vulkan object)
 VkBuffer vkJumpGroups(AtomCard* a);                          // the groups the jump's program made this frame
 // the Density cloud's frame: the dots made and the grid summed in the open batch (record), then, after the batch, the dots drawn (draw)
@@ -192,6 +201,9 @@ class VkGlow;
 VkGlow* makeVkGlow(VkCards& c, std::string& why);
 void dropVkGlow(VkGlow* g);
 int vkGlowRecord(VkGlow* g, const Renderer2D::CloudGpuDraw& d, VkBuffer jump, long& bytes);
+bool vkGlowNearOk(const VkGlow* g);                                    // 0.90.0: the core's dots can be found on the card (kGlowNearCS)
+int vkGlowNearBank(const VkGlow* g);                                   // the bank the last record wrote its core's dots into
+bool vkGlowNear(const VkGlow* g, int bank, Renderer2D::GlowNearDots& out);   // the dots a recorded pass kept, in increasing number, with their places (after its batch)
 VkBuffer vkGlowPlaces(VkGlow* g);
 VkBuffer vkGlowGroups(VkGlow* g);
 int vkPollFirstUses(VkCards& c, IGroupCompute* g, IOutlineCompute* o, IRockCompute* r, VkGlow* w);

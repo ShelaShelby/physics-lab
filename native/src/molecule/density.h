@@ -98,12 +98,15 @@ struct Mesh {
 // field: nx ny nz values at o + h (i, j, k), index (k ny + j) nx + i
 // 0.57.1: the crossed edges' vertices found in a table over the whole grid (8 slots a grid point) in place of a hash map: the same vertices in the same
 // order (hashEdges = true: the hash map, kept for grids too large for the table and as the tests' reference)
-void marchTets(const float* field, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out, bool hashEdges = false);
+// 0.90.0 keys: each vertex's grid edge, (k ny + j) nx + i of its lower corner times 8 plus the step to the other corner (x 1, y 2, z 4): the GPU's
+// surface (render/surface_card.h SurfaceMake) numbers its vertices by it, so the tests compare the two surfaces edge by edge
+void marchTets(const float* field, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out, bool hashEdges = false,
+               std::vector<long long>* keys = nullptr);
 double enclosedVolume(const Mesh& m);              // divergence theorem; > 0 for an outward-facing closed surface
 bool isClosed(const Mesh& m, std::string* why = nullptr);   // every edge in exactly two triangles, once each way
 
 // the density surface of a molecule, angstrom, coloured by the potential (au) at each vertex. The field is ln rho on every `stride`-th grid point (stride 2: 0.5 bohr)
-void densitySurface(const Data& d, double iso, int stride, Mesh& out);
+void densitySurface(const Data& d, double iso, int stride, Mesh& out, std::vector<long long>* keys = nullptr);   // (0.90.0 keys: marchTets)
 double potentialRange(const Mesh& m);
               // max |V| over the vertices: the symmetric colour scale is -range..+range
 

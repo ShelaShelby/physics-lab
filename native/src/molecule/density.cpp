@@ -318,8 +318,9 @@ void sampleDots(const Data& d, int n, std::uint64_t seed, std::vector<float>& ou
 }
 
 // ---- the surface ----
-void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out, bool hashEdges) {
+void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out, bool hashEdges, std::vector<long long>* keys) {
     out.p.clear(); out.n.clear(); out.tri.clear(); out.value.clear();
+    if (keys) keys->clear();
     if (nx < 2 || ny < 2 || nz < 2) return;
     static const int kTet[6][4] = {{0, 1, 3, 7}, {0, 1, 5, 7}, {0, 2, 3, 7}, {0, 2, 6, 7}, {0, 4, 5, 7}, {0, 4, 6, 7}};   // corner bits: x 1, y 2, z 4; each a path 0 -> 7 along the axes
     const long long slots = static_cast<long long>(nx) * ny * nz * 8;
@@ -345,6 +346,7 @@ void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, dou
             out.p.push_back(static_cast<float>(o + h * (ci[a][c] + t * (ci[b][c] - ci[a][c]))));
         }
         if (!hashEdges) table[static_cast<std::size_t>(key)] = v; else edgeVertex.emplace(key, v);
+        if (keys) keys->push_back(key);
         return v;
     };
     const auto emit = [&](int v0, int v1, int v2, const double dir[3]) {   // oriented so the normal points along dir (from inside to outside)
@@ -422,7 +424,7 @@ bool isClosed(const Mesh& m, std::string* why) {
     return true;
 }
 
-void densitySurface(const Data& d, double iso, int stride, Mesh& out) {
+void densitySurface(const Data& d, double iso, int stride, Mesh& out, std::vector<long long>* keys) {
     const Grid& g = d.rho;
     stride = std::max(1, stride);
     const int nx = (g.nx - 1) / stride + 1, ny = (g.ny - 1) / stride + 1, nz = (g.nz - 1) / stride + 1;
@@ -431,7 +433,7 @@ void densitySurface(const Data& d, double iso, int stride, Mesh& out) {
     for (int k = 0; k < nz; k++)
         for (int j = 0; j < ny; j++)
             for (int i = 0; i < nx; i++) f[(static_cast<std::size_t>(k) * ny + j) * nx + i] = std::log(std::max(g.at(i * stride, j * stride, k * stride), 1e-30f));   // ln rho: closer to linear between grid points
-    marchTets(f.data(), nx, ny, nz, g.ox, g.oy, g.oz, g.h * stride, std::log(iso), out);
+    marchTets(f.data(), nx, ny, nz, g.ox, g.oy, g.oz, g.h * stride, std::log(iso), out, false, keys);
     const double e = g.h;                                        // smooth normals: minus the gradient of ln rho (central differences on the full grid), not the faces' (grid-aligned) normals
     for (std::size_t v = 0; v < out.p.size(); v += 3) {
         const double x = out.p[v], y = out.p[v + 1], z = out.p[v + 2];

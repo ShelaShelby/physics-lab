@@ -376,10 +376,11 @@ SurfaceCard* Renderer2D::surfaceCard() {   // 0.68.0
 }
 
 bool Renderer2D::surface(const SurfaceDraw& d) {   // 0.68.0
-    if (!surfaceCard_ || !surfaceCard_->ready || d.mesh.nv <= 0 || d.mesh.nt <= 0) return false;
+    if (!surfaceCard_ || !surfaceCard_->ready) return false;
+    if (d.make ? !surfaceCard_->makeReady : (d.mesh.nv <= 0 || d.mesh.nt <= 0)) return false;   // (0.90.0 make: the card makes the surface, its counts stay there)
     closeTriangles();
     Segment sg{};
-    sg.kind = Kind::Surface; sg.slot = static_cast<int>(surfaceDraws_.size()); sg.count = d.mesh.nt;
+    sg.kind = Kind::Surface; sg.slot = static_cast<int>(surfaceDraws_.size()); sg.count = d.make ? 0 : d.mesh.nt;
     segments_.push_back(sg);
     surfaceDraws_.push_back(d);
     return true;

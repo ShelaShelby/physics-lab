@@ -151,7 +151,7 @@ public:
             if (!c_.done(j.ticket)) return JobState::Pending;
             const bool good = !c_.failed();
             if (good) {
-                ends.assign(static_cast<const float*>(j.seg.scr.map), static_cast<const float*>(j.seg.scr.map) + 4 * std::size_t(j.pieces));
+                ends.assign(static_cast<const float*>(j.seg.scr.map), static_cast<const float*>(j.seg.scr.map) + 8 * std::size_t(j.pieces));   // (0.90.0: the ends, then the dashes' numbers)
                 offsets.assign(static_cast<const std::uint32_t*>(j.seg.off.map), static_cast<const std::uint32_t*>(j.seg.off.map) + std::size_t(j.pieces) + 1);
                 const std::uint32_t n = std::min(offsets.back(), j.points);
                 points.assign(static_cast<const float*>(j.chk.map), static_cast<const float*>(j.chk.map) + 4 * std::size_t(n));   // 0.75.0: a step's segment cut at the near plane (4 floats)
@@ -241,7 +241,7 @@ private:
         const VkBufferUsageFlags st = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         const bool ok = c_.makeBuffer(VkDeviceSize(runN) * sizeof(LinesRun), st | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, s.runs, "the lines' runs") &&
                         c_.makeBuffer(VkDeviceSize(pieceN + 1) * 4u, st, host, s.off, "the lines' offsets") &&
-                        c_.makeBuffer(VkDeviceSize(pieceN) * 16u, st, host, s.scr, "the lines' ends") &&
+                        c_.makeBuffer(VkDeviceSize(2 * pieceN) * 16u, st, host, s.scr, "the lines' ends") &&   // (0.90.0: then each piece's drawn length and its dashes' place)
                         c_.makeBuffer(16u, st | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, false, s.ind, "the lines' draw");
         if (ok) { s.runN = runN; s.pieceN = pieceN; }
         return ok;

@@ -295,12 +295,15 @@ def cardsurface(binary, work):
         st = x.bpp
         return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
     for sc in ("molecule.density", "molecule.vib_density"):
-        env = {"PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
+        env = {"PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc, "PL_DRAWSTAT": "1"}   # (0.90.0 PL_DRAWSTAT: PLMOLSTAT made= says who made the vibrating surface)
         c = run_app(binary, work, "surf_card_" + sc, env, frames=60)
         p = run_app(binary, work, "surf_cpu_" + sc, dict(env, PL_NO_SURFACE_CARD="1"), frames=60)
         if sc == "molecule.density":
-            cases = [ln for ln in c.out.splitlines() if ln.startswith("PLSURFACECASE ")]
+            cases = [ln for ln in c.out.splitlines() if ln.startswith("PLSURFACECASE ") and not ln.startswith("PLSURFACECASE made")]
+            made = [ln for ln in c.out.splitlines() if ln.startswith("PLSURFACECASE made")]
             check("PLSURFACECARD state=1" in c.out and len(cases) == 3, f"surface: the start-up check passes, three cases ({cases})")
+            # 0.90.0: two more cases, the vibrating surface made on the card (water at -1 and 0.7 of its swing) against the processor's
+            check(len(made) == 2 and all(" 0 triangles missing, 0 extra, 0 out of order, 0 places over" in ln for ln in made), f"surface: the made surface's two cases pass ({made})")
             bad = run_app(binary, work, "surf_fail", dict(env, PL_SURFACE_CARDFAIL="1"), frames=60)
             check("PLSURFACECARD state=-1" in bad.out, "surface: a failed check leaves the processor's triangles")
             o2 = over(Bmp(bad.bmp), Bmp(p.bmp))
@@ -309,6 +312,41 @@ def cardsurface(binary, work):
         o = over(a, b)
         print(f"  {sc}: card against processor, {o} pixels over 8 levels ({100 * o / max(1, a.w * a.h):.3f} %)")
         check((a.w, a.h) == (b.w, b.h) and a.w > 0 and o <= 0.01 * a.w * a.h, f"surface, {sc}: the card's picture is the processor's within the limit ({o} pixels over 8 levels)")
+        if sc == "molecule.vib_density":
+            # 0.90.0: the vibrating surface made on the card (the run above: PLMOLSTAT made=1) against the processor's surface drawn by the card
+            # (PL_NO_SURFACE_MAKE), the same view: at most 1 % of the pixels more than 8 levels off
+            check(any(" made=1" in ln for ln in c.out.splitlines() if ln.startswith("PLMOLSTAT")), "surface, molecule.vib_density: the vibrating surface was made on the card (PLMOLSTAT made=1)")
+            q = run_app(binary, work, "surf_nomake_" + sc, dict(env, PL_NO_SURFACE_MAKE="1"), frames=60)
+            check(not any(" made=1" in ln for ln in q.out.splitlines() if ln.startswith("PLMOLSTAT")), "surface, molecule.vib_density: PL_NO_SURFACE_MAKE leaves it to the processor")
+            m = Bmp(q.bmp)
+            o3 = over(a, m)
+            print(f"  {sc}: made on the card against made by the processor (both drawn by the card), {o3} pixels over 8 levels ({100 * o3 / max(1, a.w * a.h):.3f} %)")
+            check((a.w, a.h) == (m.w, m.h) and o3 <= 0.01 * a.w * a.h, f"surface, {sc}: the made surface's picture is the processor's within the limit ({o3} pixels over 8 levels)")
+
+def gridlate(binary, work):
+    # 0.90.0: the Glow and Density clouds' exposure from the grid of the frame before (renderer2d_vk.cpp vkCardsFrame): a still view (molecule.density's
+    # set-up, and the Atom Lab's sodium in its Glow Cloud 3D; nothing turning) drawn so is the picture of the frame's own grid (PL_GRID_WAIT, as up to 0.89.0) after 60
+    # frames (150 for the atom): at most 1 % of the pixels more than 8 levels off; the frames used the grid of the frame before (PLGRIDSTATS late), the old way none
+    def over(x, y):
+        px, py = x.pixels(), y.pixels()
+        st = x.bpp
+        return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
+    def stats(r):
+        ln = [l for l in r.out.splitlines() if l.startswith("PLGRIDSTATS ")]
+        return dict(kv.split("=") for kv in ln[-1].split()[1:]) if ln else {}
+    for sc in ("molecule.density", "atom Na"):
+        env = {"PL_NO_MSAA": "1", "PL_GRIDSTATS": "1"}
+        env.update({"PL_BENCH_SETUP": sc} if sc.startswith("molecule") else {"PL_ATOM": "1", "PL_ATOM_SET": "Z=11"})   # (sodium: every electron, Glow, Cloud 3D)
+        fr = 60 if sc.startswith("molecule") else 150   # (the Atom Lab's Glow program takes its guarded steps first: on the card from about frame 40 here)
+        tag = sc.replace(" ", "_")
+        late = run_app(binary, work, "grid_late_" + tag, env, frames=fr)
+        own = run_app(binary, work, "grid_own_" + tag, dict(env, PL_GRID_WAIT="1"), frames=fr)
+        sl, so = stats(late), stats(own)
+        check(int(sl.get("late", 0)) > 0 and int(so.get("late", 1)) == 0 and int(so.get("own", 0)) > 0, f"grid, {sc}: the frames used the grid of the frame before ({sl}), PL_GRID_WAIT the frame's own ({so})")
+        a, b = Bmp(late.bmp), Bmp(own.bmp)
+        o = over(a, b)
+        print(f"  {sc}: the grid of the frame before against the frame's own, {o} pixels over 8 levels ({100 * o / max(1, a.w * a.h):.3f} %)")
+        check((a.w, a.h) == (b.w, b.h) and a.w > 0 and o <= 0.01 * a.w * a.h, f"grid, {sc}: the still view's picture is the old way's within the limit ({o} pixels over 8 levels)")
 
 def differ_ok(a, b):
     A, B = Bmp(a.bmp), Bmp(b.bmp)
@@ -327,6 +365,8 @@ if __name__ == "__main__":
         cardpics(binary, work, [("H2O", "dark"), ("C6H6", "dark")])
     elif len(sys.argv) > 3 and sys.argv[3] == "cardpiclight":
         cardpics(binary, work, [("H2O", "light")])   # (the light page: the darker dot colour, drawn over instead of added)
+    elif len(sys.argv) > 3 and sys.argv[3] == "gridlate":
+        gridlate(binary, work)
     elif len(sys.argv) > 3 and sys.argv[3] == "cardsurface":
         cardsurface(binary, work)
     else:

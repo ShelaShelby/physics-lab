@@ -53,6 +53,8 @@ double benchZoom(int which);                         // the scene's zoom (log10)
 // width, height: the picture's size in points.
 // Every scene starts from the Atom Lab's default settings (AtomParams{}), then applies its own.
 void benchSetup(AtomLab& L, int which, double width, double height);
+// 0.90.0 (tests): the atom Z in the Glow Cloud 3D at Ultra, zoom 0, its cloud filled: every electron (Shells enlarged), or hydrogen's one
+void benchGlowAtom(AtomLab& L, int Z, double width, double height);
 // "view Orbit, Orbit style Modern, quark style Accurate, ..." as the lab is now: put in the result so a wrong run is visible.
 std::string benchSettingsText(const AtomLab& L);
 // 0.56.1: the same in one short line ("Atom Lab: U-238, Cloud 3D, every electron, Whole atom, True scale, Glow, 240000 dots, zoom 0.15"), printed under each Atom Lab scene

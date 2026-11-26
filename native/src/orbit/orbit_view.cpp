@@ -565,6 +565,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     const bool cardLines = linesOnCard(R);                // their guarded steps advance here (orbit/lines_check.h); true: the card draws them this frame
     LinesPoints linesPts;
     linesPts.card = cardLines ? R.linesCard() : nullptr;
+    struct LinesDone { LinesPoints& p; ~LinesDone() { if (p.card) p.card->frameDone(); } } linesDone{linesPts};   // (0.90.0: at the end of the frame's lines, the moons' too)
 
     setPictureColours(set.sky != SkyMode::Off, set.theme);
     g_textScale = set.textScale;
@@ -800,14 +801,21 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             for (const Body* bp : vis) trailOf(*bp, false);
             if (set.orbits) for (const Body* bp : vis) if (!bp->comet) orbitOfBody(*bp, false);
         }
-        if (linesPts.card) linesPts.card->frameDone();
     }
-    for (const Body* bp : vis) if (bp->comet) {         // the comets' whole orbits, thin and dotted
-        const bool on = sel.kind == Selection::Body && sel.bodyId == bp->id;
-        cometLocalPath(*bp->comet, sys.julianDayTDB(), px, cpts);
-        LinePen pen{R, W, H, on ? 1.6 : 1.0, hexColor(bp->color, on ? 0.85f : 0.35f), 2, 4};
-        pen.cam = &cam;                                   // 0.75.0: cut at the near plane
-        for (const Vec3& p : cpts) pen.to(proj(p.x, p.y, p.z));
+    {                                                     // the comets' whole orbits, thin and dotted (0.90.0: on the card as dashed runs when its lines are on)
+        render::LinesDraw cl;
+        cl.cam = cardLines ? linesCamera(lcam) : render::LinesCamera{};
+        bool onCard = cardLines;
+        const auto cometOf = [&](const Body& b, bool card) {
+            const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
+            cometLocalPath(*b.comet, sys.julianDayTDB(), px, cpts);
+            const std::vector<PathPart> parts{{1, static_cast<int>(cpts.size()) - 1, hexColor(b.color, on ? 0.85f : 0.35f)}};
+            if (card) return addPathRuns(linesPts, cl, (std::uint64_t(5) << 56) | std::uint64_t(std::uint32_t(b.id)), cpts, parts, on ? 1.6 : 1.0, 2, 4);
+            drawPathCpu(R, lcam, cpts, parts, on ? 1.6 : 1.0, 2, 4);
+            return true;
+        };
+        for (const Body* bp : vis) if (bp->comet && onCard && !cometOf(*bp, true)) onCard = false;
+        if (!(onCard && (cl.runs.empty() || R.lines(cl)))) for (const Body* bp : vis) if (bp->comet) cometOf(*bp, false);
     }
 
     // ---- spin: how each planet is turned right now, seen on this screen ----
@@ -1009,12 +1017,18 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const double k = set.exaggerateWobble ? kSunWobbleScale : 1;
         const auto& tr = sys.sunTrail;
         const int n = static_cast<int>(tr.size());
-        for (int part = 0; part < 4 && n > 1; part++) {   // fades in 4 steps, oldest faintest, like the planets' trails
+        // fades in 4 steps, oldest faintest, like the planets' trails (0.90.0: on the card when its lines are on)
+        static std::vector<Vec3> sunPts;
+        sunPts.resize(std::size_t(n));
+        for (int i = 0; i < n; i++) sunPts[std::size_t(i)] = Vec3{bc.x + k * tr[i].x, bc.y + k * tr[i].y, bc.z + k * tr[i].z};
+        std::vector<PathPart> parts;
+        for (int part = 0; part < 4 && n > 1; part++) {   // (part i0 .. i1 - 1: its pieces i0 + 1 .. i1 - 1)
             const int i0 = part * n / 4, i1 = std::min(n, (part + 1) * n / 4 + 1);
-            LinePen pen{R, W, H, 1.5, sunCol.withAlpha(0.15f + 0.2f * part)};
-            pen.cam = &cam;
-            for (int i = i0; i < i1; i++) pen.to(proj(bc.x + k * tr[i].x, bc.y + k * tr[i].y, bc.z + k * tr[i].z));
+            parts.push_back({i0 + 1, i1 - 1, sunCol.withAlpha(0.15f + 0.2f * part)});
         }
+        render::LinesDraw sl;
+        sl.cam = cardLines ? linesCamera(lcam) : render::LinesCamera{};
+        if (!(cardLines && addPathRuns(linesPts, sl, std::uint64_t(6) << 56, sunPts, parts, 1.5, 0, 0) && (sl.runs.empty() || R.lines(sl)))) drawPathCpu(R, lcam, sunPts, parts, 1.5, 0, 0);
         if (set.exaggerateWobble) {                           // the Sun's place on the magnified path: a ring (the Sun itself is drawn at its true place)
             const Q sq = proj(bc.x * (1 - k), bc.y * (1 - k), bc.z * (1 - k));   // the Sun is at -bc from the barycentre: bc + k * (-bc)
             R.ring(sq.first, sq.second, 5, 1.6, sunCol.withAlpha(0.9f));
@@ -1186,36 +1200,51 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         double maxDisp = 0;
         for (std::size_t j = 0; j < b.moons.size(); j++) { disp.push_back(moonDisp(b, j, kf)); maxDisp = std::max(maxDisp, disp.back()); }
         const bool here = (sel.kind == Selection::Body || sel.kind == Selection::Moon) && sel.bodyId == b.id;
-        if (!here && maxDisp > 0.15 * distPx) continue;   // hidden while it would crowd the map: zoom in or click the planet (0.22 stage 6: 0.15, was 0.3: at the whole-system zoom Saturn's and Uranus's widened moon orbits drew rings a third of the way to the Sun)
+        if (!here && maxDisp > 0.15 * distPx) continue;
+        // 0.90.0: the moons' orbits as ellipses (orbit/orbit_lines.h LineEllipse: the circle about the planet, seen tilted, drawn finely enough where it reaches
+        // the picture as the planets' orbits are), all of this planet's in one draw on the card before its moons, else each by the processor before its moon
+        const auto moonEllipse = [&](const MoonPlace& pl) {
+            LineEllipse el;
+            el.F = b.pos;
+            if (pl.realP) { el.P = pl.rh; el.Q = pl.ph; el.a = el.b = pl.dW2; }
+            else { el.P = Vec3{1, 0, 0}; el.Q = Vec3{0, pl.ct, pl.st}; el.a = el.b = pl.dW; }
+            el.e = 0; el.dashed = false;
+            return el;
+        };
+        const auto moonPass = [&](std::size_t j, int pass, double& width) {
+            const bool on = sel.kind == Selection::Moon && sel.bodyId == b.id && sel.moon == static_cast<int>(j);
+            width = pass ? 3.0 : 1.0;
+            return pass ? (on ? kHL : hexColor(b.color)).withAlpha(0.55f) : hexColor(b.color, on ? 0.55f : 0.28f);
+        };
+        bool moonsCard = false;
+        if (cardLines) {
+            render::LinesDraw ml;
+            ml.cam = linesCamera(lcam);
+            bool ok = true;
+            for (std::size_t j = 0; j < b.moons.size() && ok; j++) {
+                const MoonPlace pl = moonAt(b, j, kf);
+                const LineEllipse el = moonEllipse(pl);
+                for (int pass = 0; pass < (pl.fast ? 2 : 1) && ok; pass++) {
+                    double wd = 1;
+                    const Color c = moonPass(j, pass, wd);
+                    ok = addEllipseRuns(linesPts, ml, (std::uint64_t(4) << 56) | (std::uint64_t(std::uint32_t(b.id)) << 16) | std::uint64_t(j), el, wd, c, cpts);
+                }
+            }
+            moonsCard = ok && (ml.runs.empty() || R.lines(ml));
+        }   // hidden while it would crowd the map: zoom in or click the planet (0.22 stage 6: 0.15, was 0.3: at the whole-system zoom Saturn's and Uranus's widened moon orbits drew rings a third of the way to the Sun)
         for (std::size_t j = 0; j < b.moons.size(); j++) {
             const MoonData& m = *b.moons[j].data;
             const MoonPlace pl0 = moonAt(b, j, kf);        // the same place the follow block centres on
-            const double aM = pl0.aM, dW = pl0.dW, dW2 = pl0.dW2, ct = pl0.ct, st = pl0.st, xr = pl0.xr, yr = pl0.yr, sgn = pl0.sgn;
-            const bool fast = pl0.fast, realM = pl0.realM, realS = pl0.realS, realP = pl0.realP;
-            const Vec3 rh = pl0.rh, ph = pl0.ph, sp = pl0.sp;
+            const double aM = pl0.aM, dW = pl0.dW, ct = pl0.ct, st = pl0.st, xr = pl0.xr, yr = pl0.yr, sgn = pl0.sgn;   // (0.90.0: dW2, realP and ph only in moonEllipse)
+            const bool fast = pl0.fast, realM = pl0.realM, realS = pl0.realS;
+            const Vec3 rh = pl0.rh, sp = pl0.sp;
             const bool on = sel.kind == Selection::Moon && sel.bodyId == b.id && sel.moon == static_cast<int>(j);
-            {   // the orbit (seen from above, the tilted circle looks like an ellipse)
-                const double rPx = dW2 * px;
-                double t0 = 0, t1 = 2 * kPi;
-                int NN = static_cast<int>(std::min(720.0, std::max(48.0, std::ceil(rPx / 4))));
-                bool drawIt = true;
-                if (!d3 && !realP && bigR(W, H, rPx)) {   // a giant flat orbit: only the visible stretch is worked out (not for the real Moon's ring: its plane is not the ecliptic)
-                    double a0, a1;
-                    const Win w = circWin(W, H, pc.first, pc.second, rPx, a0, a1);
-                    if (w != Win::Arc) drawIt = false;
-                    else { t0 = -a1; t1 = -a0; NN = static_cast<int>(std::min(400.0, std::max(8.0, std::ceil((t1 - t0) * rPx / 6)))); }
-                }
-                if (drawIt) {
-                    for (int pass = 0; pass < (fast ? 2 : 1); pass++) {
-                        const Color c = pass ? (on ? kHL : hexColor(b.color)).withAlpha(0.55f) : hexColor(b.color, on ? 0.55f : 0.28f);
-                        LinePen pen{R, W, H, pass ? 3.0 : 1.0, c};
-                        pen.cam = &cam;                   // 0.75.0: cut at the near plane
-                        for (int i = 0; i <= NN; i++) {
-                            const double t = t0 + (t1 - t0) * i / NN, Y = dW * std::sin(t);
-                            const Vec3 P = realP ? b.pos + (rh * std::cos(t) + ph * std::sin(t)) * dW2 : Vec3{b.pos.x + dW * std::cos(t), b.pos.y + Y * ct, b.pos.z + Y * st};
-                            pen.to(proj(P.x, P.y, P.z));
-                        }
-                    }
+            if (!moonsCard) {   // the orbit (seen from above, the tilted circle looks like an ellipse), by the processor
+                const LineEllipse el = moonEllipse(pl0);
+                for (int pass = 0; pass < (fast ? 2 : 1); pass++) {
+                    double wd = 1;
+                    const Color c = moonPass(j, pass, wd);
+                    drawEllipseCpu(R, lcam, el, wd, c, cpts);
                 }
             }
             const Q mp = proj(pl0.pos.x, pl0.pos.y, pl0.pos.z);

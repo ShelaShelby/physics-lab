@@ -1,6 +1,8 @@
 #include "molecule/surface_check.h"
 
 #include <algorithm>
+#include <array>
+#include <iterator>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -116,6 +118,147 @@ std::string surfaceCompareText(const SurfaceCompare& k) {
     return b;
 }
 
+// ---- 0.90.0: the surface made on the card ----
+render::SurfaceMake surfaceMakeOf(const dens::Data& d, const dens::VibDensityMode* vm, double s, double iso, std::uint64_t key) {
+    render::SurfaceMake m;
+    m.key = key;
+    s = std::clamp(s, -1.0, 1.0);
+    m.rho[0] = d.rho.v.data(); m.pot[0] = d.pot.v.data();
+    m.rho[1] = vm ? vm->plus.rho.data() : m.rho[0]; m.rho[2] = vm ? vm->minus.rho.data() : m.rho[0];
+    m.pot[1] = vm ? vm->plus.pot.data() : m.pot[0]; m.pot[2] = vm ? vm->minus.pot.data() : m.pot[0];
+    m.n[0] = d.rho.nx; m.n[1] = d.rho.ny; m.n[2] = d.rho.nz;
+    m.pn[0] = d.pot.nx; m.pn[1] = d.pot.ny; m.pn[2] = d.pot.nz;
+    m.o[0] = static_cast<float>(d.rho.ox); m.o[1] = static_cast<float>(d.rho.oy); m.o[2] = static_cast<float>(d.rho.oz); m.h = static_cast<float>(d.rho.h);
+    m.po[0] = static_cast<float>(d.pot.ox); m.po[1] = static_cast<float>(d.pot.oy); m.po[2] = static_cast<float>(d.pot.oz); m.ph = static_cast<float>(d.pot.h);
+    m.stride = 2;
+    m.iso = static_cast<float>(std::log(iso));
+    m.a = vm ? static_cast<float>(s / 2) : 0.0f;          // (as blendVib: a = s / 2, b = s^2 / 2)
+    m.b = vm ? static_cast<float>(s * s / 2) : 0.0f;
+    return m;
+}
+
+std::vector<MadeCase> surfaceMadeCases(bool full) {
+    std::vector<MadeCase> v;
+    const double iso = kRealIso[2];
+    const auto add = [&](const std::string& name, const char* id, bool vib, double phase) {
+        const dens::Data* d = dens::get(id);
+        if (!d) return;
+        const dens::VibDensityMode* vm = nullptr;
+        int mode = -1;
+        if (vib) {
+            for (int k = 0; k < int(vib::modes(id).size()) && !vm; k++) if ((vm = dens::vibDensity(id, k)) != nullptr) mode = k;
+            if (!vm) return;
+        }
+        MadeCase c;
+        c.name = name; c.id = id; c.mode = mode; c.phase = phase;
+        if (vm) dens::blendVib(*d, *vm, phase, c.at, false); else c.at = *d;
+        dens::densitySurface(c.at, iso, 2, c.mesh, &c.keys);
+        if (c.mesh.tri.empty()) return;
+        c.make = surfaceMakeOf(*d, vm, phase, iso, 1000 + v.size());
+        v.push_back(std::move(c));
+    };
+    if (full) {
+        for (const double s : {-1.0, -0.35, 0.4, 1.0}) { char b[96]; std::snprintf(b, sizeof b, "water (H2O) vibrating at %.2f of its swing", s); add(b, "H2O", true, s); }
+        for (const double s : {-1.0, -0.35, 0.4, 1.0}) { char b[120]; std::snprintf(b, sizeof b, "carbon dioxide (CO2), still (no vibrating density; phase %.2f)", s); add(b, "CO2", false, s); }
+        for (const double s : {-1.0, -0.35, 0.4, 1.0}) { char b[120]; std::snprintf(b, sizeof b, "nitrogen (N2), still (no vibrating density; phase %.2f)", s); add(b, "N2", false, s); }
+    } else {
+        add("water (H2O) vibrating at -1 of its swing", "H2O", true, -1.0);
+        add("water (H2O) vibrating at 0.7 of its swing", "H2O", true, 0.7);
+    }
+    return v;
+}
+
+namespace {
+double ulpOf(double x) { const double a = std::fabs(x); return a > 0 ? std::ldexp(1.0, std::ilogb(a) - 23) : std::ldexp(1.0, -149); }
+}  // namespace
+
+MadeCompare compareMade(const MadeCase& c, const render::SurfaceMade& g) {
+    MadeCompare k;
+    const double u = std::ldexp(1.0, -24);
+    const dens::Grid& R = c.at.rho;
+    const int s = c.make.stride, nx = (R.nx - 1) / s + 1, ny = (R.ny - 1) / s + 1, nz = (R.nz - 1) / s + 1;
+    const std::size_t nc = std::size_t(nx) * ny * nz;
+    const double isoD = std::log(kRealIso[2]), eIso = std::fabs(double(c.make.iso) - isoD);
+    const double a = c.make.a, b = c.make.b;
+    std::vector<float> f(nc);
+    std::vector<double> e(nc);
+    for (int kk = 0; kk < nz; kk++)
+        for (int j = 0; j < ny; j++)
+            for (int i = 0; i < nx; i++) {
+                const std::size_t full = (std::size_t(kk) * s * R.ny + std::size_t(j) * s) * R.nx + std::size_t(i) * s, q = (std::size_t(kk) * ny + j) * nx + i;
+                const double f0 = c.make.rho[0][full], fp = c.make.rho[1][full], fm = c.make.rho[2][full];
+                const double M = std::fabs(f0) + std::fabs(a) * (std::fabs(fp) + std::fabs(fm)) + std::fabs(b) * (std::fabs(fp) + std::fabs(fm) + 2 * std::fabs(f0));
+                const double rho = R.v[full];
+                f[q] = std::log(std::max(R.v[full], 1e-30f));
+                // the card's density lies within eRho of the processor's; both are then raised to 1e-30 (dens::densitySurface), so ln rho lies between these two
+                const double eRho = 8 * u * M + u * rho, arg = std::max(rho, 1e-30);
+                const double lnLo = std::log(std::max(rho - eRho, 1e-30)), lnHi = std::log(std::max(rho + eRho, 1e-30));
+                const double eLn = std::max(double(f[q]) - lnLo, lnHi - double(f[q])) + (arg >= 0.5 && arg <= 2 ? std::ldexp(1.0, -21) : 3 * ulpOf(f[q])) + ulpOf(f[q]);
+                e[q] = eLn;
+                if (std::fabs(double(f[q]) - isoD) <= eLn + eIso) k.nearCorners++;
+            }
+    k.vertices = long(c.mesh.p.size() / 3); k.triangles = long(c.mesh.tri.size() / 3);
+    k.cardVertices = g.nv; k.cardTriangles = g.nt;
+    if (g.verts.size() != 8 * std::size_t(g.nv) || g.keys.size() != std::size_t(g.nv) || g.tri.size() != 3 * std::size_t(g.nt)) { k.missing = k.triangles; return k; }
+    // the card's vertex of each key (the card numbers its vertices by key, in increasing order)
+    std::vector<std::pair<long long, long>> ck(std::size_t(g.nv));
+    for (long v = 0; v < g.nv; v++) ck[std::size_t(v)] = {g.keys[std::size_t(v)], v};
+    std::sort(ck.begin(), ck.end());
+    const auto cardOf = [&](long long key) -> long {
+        auto it = std::lower_bound(ck.begin(), ck.end(), std::make_pair(key, -1L));
+        return it != ck.end() && it->first == key ? it->second : -1;
+    };
+    const double H = R.h * s, A0 = dens::kA0Angstrom;
+    const double org[3] = {R.ox, R.oy, R.oz};
+    for (long v = 0; v < k.vertices; v++) {
+        const long long key = c.keys[std::size_t(v)];
+        const long gv = cardOf(key);
+        if (gv < 0) { k.posOver++; continue; }
+        const long long pnt = key / 8;
+        const int dir = int(key % 8);
+        const int ci[3] = {int(pnt % nx), int((pnt / nx) % ny), int(pnt / (static_cast<long long>(nx) * ny))};
+        const int hi[3] = {ci[0] + (dir & 1), ci[1] + ((dir >> 1) & 1), ci[2] + (dir >> 2)};
+        const std::size_t qlo = std::size_t(pnt), qhi = (std::size_t(hi[2]) * ny + hi[1]) * nx + hi[0];
+        const double clo = f[qlo], chi = f[qhi], D = std::fabs(chi - clo);
+        const double t = std::clamp((isoD - clo) / (chi - clo), 1e-4, 1 - 1e-4);
+        const double dt = ((1 - t) * e[qlo] + t * e[qhi] + eIso) / D + 3 * u * t;
+        for (int ax = 0; ax < 3; ax++) {
+            const double x = c.mesh.p[3 * std::size_t(v) + ax] / A0;                                      // bohr
+            const double step = ((dir >> ax) & 1) ? 1.0 : 0.0;
+            const double bohr = H * dt * step + 4 * u * (std::fabs(org[ax]) + H * (ci[ax] + 1)) + u * std::fabs(org[ax]) + u * std::fabs(x);
+            const double lim = A0 * bohr + 3 * u * std::fabs(x) * A0;
+            const double diff = std::fabs(double(g.verts[8 * std::size_t(gv) + std::size_t(ax)]) - c.mesh.p[3 * std::size_t(v) + ax]);
+            k.posWorst = std::max(k.posWorst, diff);
+            k.limitWorst = std::max(k.limitWorst, lim); k.limitLeast = std::min(k.limitLeast, lim);
+            if (!(diff <= lim)) { k.posOver++; break; }
+        }
+    }
+    // the triangles as cycles of three keys, each started at its smallest key (the way round kept)
+    using T3 = std::array<long long, 3>;
+    const auto norm = [](T3 t) { while (!(t[0] <= t[1] && t[0] <= t[2])) t = {t[1], t[2], t[0]}; return t; };
+    std::vector<T3> cpu(std::size_t(k.triangles)), card(std::size_t(g.nt));
+    for (long t = 0; t < k.triangles; t++) cpu[std::size_t(t)] = norm({c.keys[std::size_t(c.mesh.tri[3 * t])], c.keys[std::size_t(c.mesh.tri[3 * t + 1])], c.keys[std::size_t(c.mesh.tri[3 * t + 2])]});
+    for (long t = 0; t < g.nt; t++) {
+        const std::uint32_t* q = &g.tri[3 * std::size_t(t)];
+        const bool in = q[0] < std::uint32_t(g.nv) && q[1] < std::uint32_t(g.nv) && q[2] < std::uint32_t(g.nv);
+        card[std::size_t(t)] = in ? norm({g.keys[q[0]], g.keys[q[1]], g.keys[q[2]]}) : T3{-1, -1, -1};
+    }
+    // the same order too: the card makes them cube by cube, tetrahedron by tetrahedron, as the processor does (so the depth sort's ties fall alike)
+    if (cpu.size() == card.size()) for (std::size_t t = 0; t < cpu.size(); t++) k.outOfOrder += cpu[t] != card[t] ? 1 : 0;
+    std::sort(cpu.begin(), cpu.end()); std::sort(card.begin(), card.end());
+    std::vector<T3> d;
+    std::set_difference(cpu.begin(), cpu.end(), card.begin(), card.end(), std::back_inserter(d)); k.missing = long(d.size()); d.clear();
+    std::set_difference(card.begin(), card.end(), cpu.begin(), cpu.end(), std::back_inserter(d)); k.extra = long(d.size());
+    return k;
+}
+
+std::string madeCompareText(const MadeCompare& k) {
+    char b[360];
+    std::snprintf(b, sizeof b, "%ld vertices and %ld triangles (the card: %ld and %ld): %ld triangles missing, %ld extra, %ld out of order, %ld places over their limits (the largest difference %.1e angstrom, limits %.1e to %.1e), %ld corners within rounding of the isovalue",
+                  k.vertices, k.triangles, k.cardVertices, k.cardTriangles, k.missing, k.extra, k.outOfOrder, k.posOver, k.posWorst, k.limitLeast > 1e299 ? 0.0 : k.limitLeast, k.limitWorst, k.nearCorners);
+    return b;
+}
+
 namespace {
 double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 struct Path {
@@ -127,6 +270,10 @@ struct Path {
     std::vector<float> verts[3];
     std::vector<std::uint32_t> order[3];
     std::string why, check;
+    int make = 0;                  // 0.90.0: the surface made on the card: 1 its check passed, -1 off (makeWhy), 0 not decided
+    int makeJobs[2] = {0, 0};
+    render::SurfaceMade made[2];
+    std::string makeWhy;
     bool asked = false;            // (0.68.0: asked this frame)
 };
 Path g_p;
@@ -151,20 +298,29 @@ void advance(render::Renderer2D& R) {
         std::string why;
         const double t0 = nowS();
         if (!C->build(why) || !R.surfaceProgram(why)) { G.end(kPipe, "FAILED: " + why); G.finished(false, "its pipelines could not be made: " + why); off("its pipelines could not be made: " + why); return; }
-        char b[120];
-        std::snprintf(b, sizeof b, "kSurfaceCS and kSurfaceVS as SPIR-V, made after %.0f ms", 1000 * (nowS() - t0));
+        std::string mw;
+        if (!C->buildMake(mw)) { g_p.make = -1; g_p.makeWhy = "its pipeline could not be made: " + mw; }   // (0.90.0: the vibrating surface then made by the processor)
+        char b[200];
+        std::snprintf(b, sizeof b, "kSurfaceCS and kSurfaceVS as SPIR-V%s, made after %.0f ms", g_p.make < 0 ? " (kSurfaceMakeCS could not be made)" : ", kSurfaceMakeCS too", 1000 * (nowS() - t0));
         G.end(kPipe, b);
         g_p.step = 1;
         return;
     }
     static std::vector<SurfaceCase> cases;
     if (cases.empty()) cases = surfaceCheckCases();
+    static std::vector<MadeCase> madeCases;                // 0.90.0
+    if (madeCases.empty() && g_p.make == 0) madeCases = surfaceMadeCases(false);
     if (cases.size() != 3) { G.begin(kCheck); G.end(kCheck, "its cases could not be made"); G.finished(false, "the surface's check cases could not be made"); off("the surface's check cases could not be made (the density files)"); return; }
     if (g_p.step == 1) {
         G.begin(kCheck);
         for (int i = 0; i < 3; i++) {
             g_p.jobs[i] = C->beginCheck(surfaceDrawOf(cases[std::size_t(i)]));
             if (!g_p.jobs[i]) { for (int k = 0; k < i; k++) C->cancel(g_p.jobs[k]); G.end(kCheck, "could not be started"); G.finished(false, "the surface's check could not be started"); off("the surface's check could not be started"); return; }
+        }
+        if (g_p.make == 0) {                               // 0.90.0: the made surface's cases in the same batch
+            if (madeCases.size() != 2) { g_p.make = -1; g_p.makeWhy = "its check cases could not be made (the density files)"; }
+            for (int i = 0; i < 2 && g_p.make == 0; i++)
+                if (!(g_p.makeJobs[i] = C->beginMake(madeCases[std::size_t(i)].make))) { g_p.make = -1; g_p.makeWhy = "its check could not be started"; }
         }
         g_p.stepAt = now; g_p.step = 2;
         return;
@@ -178,8 +334,15 @@ void advance(render::Renderer2D& R) {
             g_p.jobs[i] = 0;
             if (st == render::JobState::Failed) { g_p.verts[i].clear(); g_p.order[i].clear(); }
         }
+        for (int i = 0; i < 2; i++) {                      // 0.90.0
+            if (!g_p.makeJobs[i]) continue;
+            const render::JobState st = C->pollMake(g_p.makeJobs[i], g_p.made[i]);
+            if (st == render::JobState::Pending) { pending = true; continue; }
+            g_p.makeJobs[i] = 0;
+            if (st == render::JobState::Failed) g_p.made[i] = render::SurfaceMade();
+        }
         if (pending) {
-            if (now - g_p.stepAt > 10) { for (int& j : g_p.jobs) if (j) { C->cancel(j); j = 0; } G.timedOut(kCheck); off("a step of the surface on the card did not finish in time (the check)"); }
+            if (now - g_p.stepAt > 10) { for (int& j : g_p.jobs) if (j) { C->cancel(j); j = 0; } for (int& j : g_p.makeJobs) j = 0; G.timedOut(kCheck); off("a step of the surface on the card did not finish in time (the check)"); }
             return;
         }
         bool ok = true;
@@ -193,6 +356,22 @@ void advance(render::Renderer2D& R) {
             std::printf("PLSURFACECASE %d %s\n", i, t.c_str());
         }
         for (int i = 0; i < 3; i++) { g_p.verts[i].clear(); g_p.verts[i].shrink_to_fit(); g_p.order[i].clear(); g_p.order[i].shrink_to_fit(); }
+        if (g_p.make == 0) {                               // 0.90.0: the made surface (its failure leaves the rest of the surface on the card)
+            bool mk = true;
+            for (int i = 0; i < 2; i++) {
+                const MadeCase& c = madeCases[std::size_t(i)];
+                const MadeCompare k = compareMade(c, g_p.made[i]);
+                mk = mk && k.ok();
+                const std::string t = "made on the card, " + c.name + ": " + madeCompareText(k);
+                text += "; " + t;
+                std::printf("PLSURFACECASE made%d %s\n", i, t.c_str());
+                g_p.made[i] = render::SurfaceMade();
+            }
+            static const bool forcedMake = std::getenv("PL_SURFACEMAKE_FAIL") != nullptr;   // (tests: as if the made surface's check had failed)
+            if (forcedMake) mk = false;
+            g_p.make = mk ? 1 : -1;
+            if (!mk) g_p.makeWhy = forcedMake ? "the check was made to fail (test switch PL_SURFACEMAKE_FAIL)" : "its start-up check against the processor failed";
+        }
         static const bool forced = std::getenv("PL_SURFACE_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
         if (forced) ok = false;
         char t[96];
@@ -240,10 +419,19 @@ bool surfaceOnCard(render::Renderer2D& R) {
 
 int surfaceCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
+bool surfaceMakeOnCard(render::Renderer2D& R) {   // 0.90.0 (after surfaceOnCard said yes this frame)
+    static const bool never = std::getenv("PL_NO_SURFACE_MAKE") != nullptr;   // (tests: the processor's vibrating surface, drawn by the card, to compare)
+    render::SurfaceCard* C = R.surfaceCard();
+    if (C) C->makeReady = !never && g_p.state == 1 && g_p.make == 1 && C->ready && C->madeBuilt();
+    return C && C->makeReady;
+}
+
 std::string surfaceCardPathText(bool vulkan) {
     if (!vulkan) return "the surface: the processor (no Vulkan renderer)";
     if (std::getenv("PL_NO_SURFACE_CARD")) return "the surface: the processor (PL_NO_SURFACE_CARD)";
-    if (g_p.state == 1) return "the surface: the graphics card (Vulkan; turned, coloured, sorted and drawn there, sent once for each new surface; its start-up check passed: " + g_p.check + ")";
+    if (g_p.state == 1) return "the surface: the graphics card (Vulkan; turned, coloured, sorted and drawn there, sent once for each new surface; " +
+                               std::string(g_p.make == 1 ? "a vibrating surface made there for each new phase" : "a vibrating surface made by the processor, because " + (g_p.makeWhy.empty() ? std::string("its check has not finished") : g_p.makeWhy)) +
+                               "; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "the surface: the processor, because " + g_p.why;
     return "the surface: the graphics card once its start-up check has passed (made when the surface is first shown)";
 }

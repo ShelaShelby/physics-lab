@@ -197,6 +197,7 @@ public:
     // on the GPU and read back (kCloudGridVS), so no CPU pass over the dots is left but the colour groups. Draw it between beginCloudLayer and endCloudLayer. The picture is the same
     // as glowBlobs + blobsPalette (tests/check_cloud_gpu.py compares them pixel by pixel). `exposure` gets the grid's cells (every cell, empty ones too) and returns uLight
     // (base x exposure x 12,000 / dots), or a negative number for "draw nothing" (as glowBlobs returning false); it runs inside endVulkan().
+    struct GlowNearDots { std::vector<int> idx; std::vector<float> xyz; };   // 0.90.0: the dots kept, in increasing number, and their places (x, y, z)
     struct CloudGpuDraw {
         const float* pts = nullptr; long cnt = 0, cap = 0;          // places (m, x y z), dots shown (0 .. cnt), the ring's size
         std::uint64_t epoch = 0; long k = 0;                        // which cloud (a new number when its dots were changed other than by being added) and dots recorded so far
@@ -207,8 +208,15 @@ public:
         bool additive = true;
         PhasePalette pal;
         std::function<double(const std::vector<float>&)> exposure;
+        // 0.90.0: the Glow core's dots found on the card (kGlowNearCS, atom/cloud_dots.h glowDotsNear's quick pass at nearPass): nearFound gets the
+        // numbers of the dots it kept, in increasing order, with their places then, before exposure runs (null: the card could not: the caller's own
+        // pass over the dots of this frame). With the grid of the frame before (Part C of 0.90.0) it is that frame's nearFound, with that frame's dots.
+        bool near = false;
+        float nearPass[9] = {1, 0, 1, 0, 0, 0, 0, 0, 0};             // GlowNearPass: ca, sa, cb, sb, k4, pxm, dx0, dy0, lim
+        std::function<void(const GlowNearDots*)> nearFound;
     };
     bool cloudGpuOk() const { return vk_ && vkGlow_ != nullptr; }
+    bool cloudNearGpuOk() const;                                    // 0.90.0: the Glow core's dots can be found on the card
     // 0.57.1: the Molecule Lab's Density cloud from the card (render/molecule_card.h): its dots made, summed into the exposure's grid and drawn there, in the
     // order of the other shapes; the same picture as glowBlobs + blobsPaletteTake up to float rounding. False (nothing added): the card's programs are not ready.
     bool molCloud(const MolCloudDraw& d);
@@ -472,6 +480,16 @@ private:
     std::string rocksWhy_;
     std::vector<int> vkGrid_;                       // 0.61.0: this frame's grids (by segment), their lights
     std::vector<double> vkLight_;
+    // 0.90.0: the grids of the frame before (the Glow and Density clouds, by kind and number in the frame): this frame's exposure is worked out from them,
+    // so the frame does not wait for its own grid (renderer2d_vk.cpp vkCardsFrame)
+    struct PrevGrid { int kind = 0, nth = 0, index = -1, gw = 0, gh = 0, nearBank = -1; std::uint64_t ticket = 0; long frame = -1; CloudGpuDraw draw; };
+    std::vector<PrevGrid> prevGrids_;
+    long cardsFrame_ = 0;
+public:
+    struct GridStats { long late = 0, waited = 0, own = 0; double waitMs = 0; };   // frames' grids: from the frame before, waited for (that frame's batch not done yet), the frame's own (waited)
+    const GridStats& gridStats() const { return gridStats_; }
+private:
+    GridStats gridStats_;
     std::vector<char> vkRocks_;
     bool vkCardsFrame(bool forShot, int fbW, int fbH);
     bool vkMap_[static_cast<int>(Map::Count)] = {};

@@ -22,7 +22,7 @@ struct LinesRun {
     std::int32_t from = 0, to = -1, kind = 0, first = 0; // pieces from .. to (piece i joins point i - 1 to point i); 0 straight, 1 a trail, 2 an orbit; its first piece among all
     std::int32_t circle = 0, pad0 = 0, pad1 = 0, pad2 = 0;   // an orbit: the slot of the unit circle's corners
     float colour[4] = {1, 1, 1, 1};
-    float style[4] = {1, 0, 0, 0};                       // the width (points)
+    float style[4] = {1, 0, 0, 0};                       // the width (points); 0.90.0: y, z the dashes' on and off lengths (points; y 0: solid; a straight run only)
     float tailHi[4] = {0, 0, 0, 0}, tailLo[4] = {0, 0, 0, 0};   // a trail: point n, the body itself (m; high and low floats)
     float pa[4] = {0, 0, 0, 0}, qb[4] = {0, 0, 0, 0};   // an orbit: P a and Q b (m), qb[3] the step of E between corners
 };
@@ -64,7 +64,8 @@ public:
     virtual void frameDone() = 0;                        // the end of a frame that used the store: keys unused for 120 frames are freed
     // ---- the start-up check and the tests: steps 0, 1 and 2 on d's own points, read back (never waits) ----
     virtual int beginCheck(const LinesDraw& d) = 0;
-    // per piece its two ends on the picture (4 floats) and the offsets (pieces + 1), then every step's point (2 floats)
+    // per piece its two ends on the picture (4 floats), then (0.90.0) per piece its drawn length and its dashes' place at its start (4 floats: 2 used),
+    // and the offsets (pieces + 1), then every step's point (2 floats)
     virtual JobState pollCheck(int job, std::vector<float>& ends, std::vector<std::uint32_t>& offsets, std::vector<float>& points) = 0;
     virtual void cancel(int job) = 0;
     virtual long uploadedPoints() const { return 0; }    // (tests and the report) points sent to the card since the start

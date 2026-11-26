@@ -68,6 +68,12 @@ void ellipsePath(const LineEllipse& el, double E0, double E1, int n, std::vector
 void drawEllipseCpu(render::Renderer2D& R, const LineCam& cam, const LineEllipse& el, double width, render::Color col, std::vector<Vec3>& cpts,
                     std::vector<std::vector<double>>* rec = nullptr);
 
+// 0.90.0: a path through pts (straight pieces; piece i joins point i - 1 to point i) in parts (pieces from .. to, each its colour), optionally dashed
+// (dashOn, dashOff points; the dashes carried on over the drawn parts, as LinePen): the comets' dotted orbits and the Sun's path in Real
+struct PathPart { int from = 1, to = 0; render::Color col; };
+void drawPathCpu(render::Renderer2D& R, const LineCam& cam, const std::vector<Vec3>& pts, const std::vector<PathPart>& parts, double width, double dashOn, double dashOff,
+                 std::vector<std::vector<double>>* rec = nullptr);
+
 // ---- the card's runs ----
 // where a run's points go: the card's store (the frame) or the check's own list (LinesDraw::checkPts)
 struct LinesPoints {
@@ -85,6 +91,7 @@ bool addRingRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, cons
 bool addTrailRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const std::deque<Vec3>& tr, const Vec3& pos, int st0, double width, const render::Color cols[4]);
 bool addOrbitRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const Body& b, double width, render::Color col, std::vector<Vec3>& cpts);
 bool addEllipseRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const LineEllipse& el, double width, render::Color col, std::vector<Vec3>& cpts);   // 0.73.0
+bool addPathRuns(LinesPoints& lp, render::LinesDraw& d, std::uint64_t key, const std::vector<Vec3>& pts, const std::vector<PathPart>& parts, double width, double dashOn, double dashOff);   // 0.90.0
 
 // ---- inline: the processor's per-point work ----
 inline bool clipSeg(double x0, double y0, double x1, double y1, double xa, double ya, double xb, double yb, double out[4]) {

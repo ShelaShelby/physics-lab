@@ -180,13 +180,17 @@ void glowCapExposure(const std::vector<GlowDot>& D, long cap, double base, const
         expo /= top;
     }
 }
+GlowNearPass glowNearPass(const CloudCamera& cam, double X, double Y) {
+    GlowNearPass q;
+    q.ca = float(cam.ca); q.sa = float(cam.sa); q.cb = float(cam.cb); q.sb = float(cam.sb); q.k4 = float(1 / (4 * cam.ext)); q.pxm = float(cam.pxm);
+    q.dx0 = float(cam.cx - X); q.dy0 = float(cam.cy - Y); q.lim = (4.6f * 1.2f + 1.f) * (4.6f * 1.2f + 1.f);
+    return q;
+}
 void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out, std::vector<int>* indices) {
-    out.clear();
-    if (indices) indices->clear();
     // 0.57.0: a quick pass in single precision first, which can only leave out dots at least a point farther from (X, Y) than the largest disc (5.52 points):
     // its rounding is about 1e-3 of a point on any picture, so the dots kept below are exactly those of the full pass (tested); a NaN goes on to the full pass
-    const float ca = float(cam.ca), sa = float(cam.sa), cb = float(cam.cb), sb = float(cam.sb), k4 = float(1 / (4 * cam.ext)), pxm = float(cam.pxm);
-    const float dx0 = float(cam.cx - X), dy0 = float(cam.cy - Y), lim = (4.6f * 1.2f + 1.f) * (4.6f * 1.2f + 1.f);
+    const GlowNearPass Q = glowNearPass(cam, X, Y);
+    const float ca = Q.ca, sa = Q.sa, cb = Q.cb, sb = Q.sb, k4 = Q.k4, pxm = Q.pxm, dx0 = Q.dx0, dy0 = Q.dy0, lim = Q.lim;
     static std::vector<int> near;
     near.clear();
     constexpr long kBlock = 1024;
@@ -203,9 +207,18 @@ void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const Cl
         }
         for (long j = 0; j < nb; j++) if (keep[j]) near.push_back(int(b0 + j));
     }
-    for (const int i : near) {
+    glowDotsNearOf(pts, near, grp, cam, X, Y, out, indices);
+}
+namespace {
+// the full pass: dot k (of n) at xyz + 3 k, its number num(k) (its group, the indices)
+template <class Num>
+void nearFull(const float* xyz, long n, Num num, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out, std::vector<int>* indices) {
+    out.clear();
+    if (indices) indices->clear();
+    for (long k = 0; k < n; k++) {
+        const int i = num(k);
         if (grp && grp[i] == 255) continue;
-        const double x = pts[3 * i], y = pts[3 * i + 1], z = pts[3 * i + 2];
+        const double x = xyz[3 * k], y = xyz[3 * k + 1], z = xyz[3 * k + 2];
         const double x1 = x * cam.ca - y * cam.sa, y1 = x * cam.sa + y * cam.ca, dep = y1 * cam.cb - z * cam.sb, up = y1 * cam.sb + z * cam.cb;   // as projectCloud
         const double f = 1 / (1 + dep / (4 * cam.ext));
         const float px = float(cam.cx + x1 * cam.pxm * f), py = float(cam.cy - up * cam.pxm * f);
@@ -213,6 +226,16 @@ void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const Cl
         const float r = 4.6f * (0.8f + 0.4f * near);
         if ((px - X) * (px - X) + (py - Y) * (py - Y) < double(r) * r) { out.push_back({px, py, r, 0.3f + 0.9f * near, grp ? grp[i] : (unsigned char)0}); if (indices) indices->push_back(i); }
     }
+}
+}  // namespace
+void glowDotsNearOf(const float* pts, const std::vector<int>& kept, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out, std::vector<int>* indices) {
+    static std::vector<float> xyz;
+    xyz.resize(3 * kept.size());
+    for (std::size_t k = 0; k < kept.size(); k++) for (int c = 0; c < 3; c++) xyz[3 * k + std::size_t(c)] = pts[3 * std::size_t(kept[k]) + std::size_t(c)];
+    nearFull(xyz.data(), long(kept.size()), [&](long k) { return kept[std::size_t(k)]; }, grp, cam, X, Y, out, indices);
+}
+void glowDotsNearAt(const float* xyz, const std::vector<int>& idx, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out, std::vector<int>* indices) {
+    nearFull(xyz, long(idx.size()), [&](long k) { return idx[std::size_t(k)]; }, grp, cam, X, Y, out, indices);
 }
 bool glowBlobs(const std::vector<GlowDot>& D, long cap, bool light, DotColours& dc, bool darken, double base, double w, double h, double& expo, std::vector<Blob>& B,
                const std::vector<std::array<double, 2>>* cores) {

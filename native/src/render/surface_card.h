@@ -32,7 +32,24 @@ struct SurfaceView {
     float plain[4] = {1, 1, 1, 1};
     float aFront = 0.6f, aBack = 0.15f;
 };
-struct SurfaceDraw { SurfaceMesh mesh; SurfaceView view; };
+// 0.90.0: the vibrating surface made on the card (kSurfaceMakeCS) in place of the processor's dens::densitySurface: the density blended at the phase
+// (dens::blendVib's quadratic), ln rho on every stride-th grid point, marching tetrahedra (the Kuhn split, dens::marchTets) at ln iso, each vertex's
+// normal from the gradient of ln rho and its potential, as densitySurface does. The vertices are numbered by their grid edge (dens::marchTets keys), the
+// triangles come in the processor's order (cube by cube, tetrahedron by tetrahedron). The sources are sent once for each key; a new phase is a few numbers.
+struct SurfaceMake {
+    std::uint64_t key = 0;                               // a new number for new sources (the molecule and its mode)
+    const float* rho[3] = {nullptr, nullptr, nullptr};   // the density on its grid (e/bohr^3): still, the + end, the - end (not vibrating: still three times)
+    const float* pot[3] = {nullptr, nullptr, nullptr};   // the potential on its own grid (au), the same three
+    int n[3] = {0, 0, 0}, pn[3] = {0, 0, 0};             // the two grids' points along x, y, z
+    float o[3] = {0, 0, 0}, h = 0, po[3] = {0, 0, 0}, ph = 0;   // their first points and steps (bohr)
+    int stride = 2;
+    float iso = 0;                                       // ln of the isovalue
+    float a = 0, b = 0;                                  // the phase s: a = s / 2, b = s^2 / 2 (dens::blendVib)
+};
+// what the card made, read back (the start-up check and the tests): per vertex x, y, z (angstrom), the potential, the normal, 0; the triangles; each
+// vertex's grid edge
+struct SurfaceMade { std::vector<float> verts; std::vector<std::uint32_t> tri; std::vector<long long> keys; long nv = 0, nt = 0; };
+struct SurfaceDraw { SurfaceMesh mesh; SurfaceView view; const SurfaceMake* make = nullptr; };   // (0.90.0 make: the card makes the surface, mesh unused)
 
 class SurfaceCard {
 public:
@@ -45,7 +62,14 @@ public:
     virtual int beginCheck(const SurfaceDraw& d) = 0;
     virtual JobState pollCheck(int job, std::vector<float>& verts, std::vector<std::uint32_t>& order) = 0;
     virtual void cancel(int job) = 0;
+    // 0.90.0: the surface made on the card (kSurfaceMakeCS): its pipeline, and the check's run read back (never waits)
+    virtual bool buildMake(std::string& why) { why = "not on this renderer"; return false; }
+    virtual bool madeBuilt() const { return false; }
+    virtual int beginMake(const SurfaceMake& m) { (void)m; return 0; }
+    virtual JobState pollMake(int job, SurfaceMade& out) { (void)job; out = SurfaceMade(); return JobState::Failed; }
+    virtual long makes() const { return 0; }             // (tests) how many surfaces the card made in frames
     bool ready = false;                                  // its start-up check passed: Renderer2D::surface draws with it
+    bool makeReady = false;                              // 0.90.0: the made surface's check passed too: a draw with make is made on the card
 };
 
 }  // namespace render

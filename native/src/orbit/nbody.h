@@ -159,6 +159,13 @@ public:
     long long stepsTaken() const { return steps_; }            // for tests: how many steps were computed so far (a background stretch counts when it is used)
     std::size_t checkpoints() const { return cp_.size(); }
     void setPrefetch(bool on) { prefetch_ = on; }              // for tests: the background stretch can be switched off (on by default)
+    // 0.90.0: up to kAhead stretches made ahead in the direction of travel, one after the other on workers, each from the end of the one before it (the
+    // checkpoint the drawing thread would start from: the same states bit for bit). At the fastest time a frame uses several stretches: with only the
+    // next one made ahead the frame waited for each in turn (orbit.real_fast: 26 ms a frame on the build machine) while the worker sat idle the rest of it.
+    static constexpr int kAhead = 8;
+    int ahead() const { return static_cast<int>(ahead_.size()); }   // (tests) stretches being made ahead or made and not yet used
+    long waits() const { return waits_; }                      // (tests) times the drawing thread waited for a stretch made ahead that was not finished
+    bool aheadReady() const;                                   // (tests) every stretch ahead finished
     // 0.67.0: a jump far from every kept checkpoint (1850 from 2026: about 64,000 steps, 1.8 s on the owner's PC) walked on a worker, so the frame does not stop.
     // needsWalk: stateAt(tau) would walk from a checkpoint more than a stretch away. prepare(tau): start that walk and tau's stretch on a worker (one walk at a
     // time; a later prepare waits its turn). prepared(): called on the drawing thread; true once the walk for the last prepare is finished and taken in (its
@@ -183,8 +190,11 @@ private:
     std::map<long, Stretch> seg_;
     std::map<long, long long> segUse_;                    // when each kept stretch was last used
     long long useClock_ = 0;
-    std::shared_future<Stretch> pending_;                 // the stretch being made in the background, and its index
-    long pendingJ_ = 0;
+    struct Ahead { long j = 0; std::shared_future<Stretch> f; };
+    std::deque<Ahead> ahead_;                             // 0.90.0: the stretches being made ahead (kAhead)
+    std::vector<std::shared_future<Stretch>> dropped_;    // ones no longer wanted (time turned back), kept until finished (std::async's future waits when it goes)
+    long waits_ = 0;
+    void topUp(long j, int dir);
     NBodyState s0_, s1_;                                  // the states at grid steps k_ and k_ + 1
     Vec3 a0_[kNBodyMax], a1_[kNBodyMax];                  // 0.36 stage 4: their accelerations (the order of the accurate step: nine, Pluto, the four test particles)
     long k_ = 0; bool have_ = false;

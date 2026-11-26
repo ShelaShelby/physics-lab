@@ -28,11 +28,10 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Atoms in fields: hydrogen's Stark effect, Breit-Rabi at low fields, a broadened synthetic spectrum, a Boltzmann-plot temperature, the cloud of one M sublevel.
 - Data tables: <r>, <1/r>, <r²>, P(r), Q(r) of the DHF orbitals (**source needed**: Desclaux's tables), higher alkali Rydberg levels (new ASD fetch), Q-values (AME2020).
 - Labels drawn in depth order (needs a renderer change).
-- Still on the CPU in atom.jump_all: the Glow core's pass over every dot (glowDotsNear) and the exposure grid read back each frame.
 - Benchmark: atom.bfield_drag was dropped in 0.83.0. The field slider remakes nothing heavy (only the readout, the spectrum's lines and the Zeeman tables).
 
 ## Molecule Lab
-- The Density surface: the vibrating surface is rebuilt on the CPU for each new phase (water about 1 ms). Each new level's 60,000 dots are sampled once. The exposure grid is read back each frame.
+- The Density surface: each new level's 60,000 dots are sampled once on the CPU.
 - **fix**: the Density cloud alone (Show: cloud) clips the nuclei's cores white. **source needed**: Bader et al. 1987 (JACS 109, 7968) for the surface's cut-off.
 - **source needed**: HCl's reference dipole 1.093 D looks like mu_e (mu_0 is 1.1086 D). Check what CCCBDB means.
 - **source needed**: measured band origins of H2, N2, O2 for Birge-Sponer and levels above the fitted range (O2: Creek & Nicholls 1975).
@@ -60,7 +59,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **source needed**: the comets' 4 AU dust switch-on (a choice since 0.78.0; a distance where water ice starts to sublimate), Haumea's shape, the belt cards' counts and masses, the Sun card's frost line and lifetime, comets active far out (Hale-Bopp, C/2017 K2).
 - **source needed**: ring spectra, Pluto, the grey moons and their maps, McEwen 1996's lunar phase polynomial, Uranus's and Neptune's limb darkening in numbers (Irwin et al. 2021, 2022 give figures only; Jupiter's and Saturn's are saved, PLAN_REVIEW.md R14), photometric functions for Mercury and Pluto.
 - **source needed**: the full papers for the rotation periods (Lamy et al. 2025 Uranus, Karkoschka 2011 Neptune: only abstract or news saved).
-- Speed: comets' dotted orbits, the Sun's path in Real, moons' orbits and spin axes are still drawn by the CPU's LinePen. In real_fast the frame thread waits for the integrator (NBodyClock::ensure).
+- Spin axes and 3D drop lines are still drawn by the CPU's LinePen (about 0.006 ms a frame). They are drawn between the balls, so the GPU needs about 20 more draws.
 - Saturn close up, the night sky as a retained GPU mesh, Delta T after the last leap second and UT1 - UTC.
 - Eclipses: **source needed** a check against NASA's Five Millennium Canon. The red eclipsed Moon, shadows on and of moons, the giants' flattened shadows.
 - Earth's air: multiple scattering, the glow beyond the edge, twilight. Ozone and aerosol (sources saved: PLAN_REVIEW.md R13). **source needed**: a measured ocean colour, a standard ozone column and profile.
@@ -103,7 +102,6 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **fix**: vk_compare_tests on the owner's Radeon: Glow soft dots, Wheel, dark page (additive) differ by 2 levels (585 of 200,000 pixels; the limit is 1). The rocks' regression guard (llvmpipe's measured 0.00357 points + 1 %) is exceeded there: 0.00578 points in scenes 1 and 6 (the stated bound kRockPx 0.01 holds).
 - **owner decides**: the benchmark's lag is the age of the shown picture (blackhole_view.h lagMs), not behindWorst. behindWorst counts from the first frame behind and grows for the whole movement (REPORT 0.83.0).
 - A GPU timing of the Black Hole sky pass alone (timestamps around one pass), if needed again.
-- The Glow and Density clouds' exposure grid is read back in the frame that draws it. A grid one frame late would remove the wait.
 - The crash-safe helper: the sky's, lens's and light paths' first runs still happen in the app first. The sky's helper also makes the lens's and table pass's pipelines.
 - The owner's slowest scenes (0.56.1 run, the newer runs decide): atom.slice_drag, atom.jump_all, molecule.vib_density, molecule.density, atom.nucleus_zoom, atom.nucleon, atom.all_enlarged, atom.uranium_true. Move scenes far above 255 Hz to All scenes.
 - Graphics quality presets, Low to Ultra, for older PCs.

@@ -62,6 +62,23 @@ std::vector<LinesCase> linesCheckCases() {
         b.pos = pts.back();
     }
     base.rings = {1 * kAU, 2 * kAU, 5 * kAU, 10 * kAU, 20 * kAU, 50 * kAU};
+    {   // 0.90.0: a comet-like orbit (q 0.6 AU, e 0.9, 30 degrees tilted), 400 points about its perihelion, dotted; the Sun's path, a loop of 2 million km about the barycentre
+        LinesCase::Path cm;
+        const Body cb = ellipseBody(9, 6.0, 0.9, 30.0, 40.0, 120.0);
+        std::vector<Vec3> cp;
+        orbitPath(cb, -2.6, 2.6, 400, cp);
+        cm.pts = cp; cm.parts = {{1, int(cp.size()) - 1, render::Color{0.6f, 0.8f, 1.0f, 0.35f}}}; cm.width = 1.0; cm.on = 2; cm.off = 4;
+        base.paths.push_back(cm);
+        LinesCase::Path sp;
+        for (int i = 0; i < 300; i++) { const double t = 0.021 * i; sp.pts.push_back(Vec3{1.1e9 + 2e9 * std::cos(t) * (1 - 0.001 * i), -0.7e9 + 2e9 * std::sin(t) * (1 - 0.001 * i), 1e8 * std::sin(3 * t)}); }
+        const int n = int(sp.pts.size());
+        for (int part = 0; part < 4; part++) { const int i0 = part * n / 4, i1 = std::min(n, (part + 1) * n / 4 + 1); sp.parts.push_back({i0 + 1, i1 - 1, render::Color{1, 0.8f, 0.3f, 0.15f + 0.2f * part}}); }
+        sp.width = 1.5;
+        base.paths.push_back(sp);
+        // a moon's orbit as orbit_view.cpp draws it (0.90.0: a LineEllipse): a circle of 0.04 AU about the 5.2 AU body, tilted 25 degrees
+        const double ti = 25 * kPi / 180;
+        base.ellipses.push_back(LineEllipse{base.bodies[2].pos, Vec3{1, 0, 0}, Vec3{0, std::cos(ti), std::sin(ti)}, 0.04 * kAU, 0, 0.04 * kAU, false});
+    }
     const Vec3 bc{1.1e9, -0.7e9, 2.0e7};               // (the Sun's wobble: the barycentre off the origin)
     std::vector<LinesCase> v;
     LinesCase a = base;
@@ -120,6 +137,7 @@ void linesCpu(const LinesCase& c, std::vector<std::vector<double>>& pens) {
     std::vector<Vec3> cpts;
     for (const Body& b : c.bodies) drawOrbitCpu(none, c.cam, b, 1.0, kOrbitCol, cpts, &pens);
     for (const LineEllipse& el : c.ellipses) drawEllipseCpu(none, c.cam, el, 1.0, kOrbitCol, cpts, &pens);
+    for (const LinesCase::Path& p : c.paths) drawPathCpu(none, c.cam, p.pts, p.parts, p.width, p.on, p.off, &pens);   // 0.90.0
 }
 
 render::LinesDraw linesDrawOf(const LinesCase& c) {
@@ -134,13 +152,14 @@ render::LinesDraw linesDrawOf(const LinesCase& c) {
     std::vector<Vec3> cpts;
     for (const Body& b : c.bodies) addOrbitRuns(pts, d, key++, b, 1.0, kOrbitCol, cpts);
     for (const LineEllipse& el : c.ellipses) addEllipseRuns(pts, d, key++, el, 1.0, kOrbitCol, cpts);
+    for (const LinesCase::Path& p : c.paths) addPathRuns(pts, d, key++, p.pts, p.parts, p.width, p.on, p.off);   // 0.90.0
     return d;
 }
 
 LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const std::vector<std::vector<double>>& pens, const std::vector<float>& ends,
                           const std::vector<std::uint32_t>& offsets, const std::vector<float>& points) {
     LinesCompare k;
-    if (offsets.size() != std::size_t(d.pieces) + 1 || ends.size() != 4 * std::size_t(d.pieces)) return k;
+    if (offsets.size() != std::size_t(d.pieces) + 1 || ends.size() != 8 * std::size_t(d.pieces)) return k;   // (0.90.0: the ends, then the dashes' numbers)
     const double Cx = double(d.cam.cHi[0]) + double(d.cam.cLo[0]), Cy = double(d.cam.cHi[1]) + double(d.cam.cLo[1]), Cz = double(d.cam.cHi[2]) + double(d.cam.cLo[2]);
     std::size_t r = 0;
     for (const std::vector<double>& pen : pens) {
@@ -156,6 +175,30 @@ LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const 
             for (std::uint32_t j = offsets[std::size_t(g)]; j < offsets[std::size_t(g) + 1] && 4 * std::size_t(j) + 3 < points.size(); j++)
                 for (int q = 0; q < 4; q++) card.push_back(points[4 * std::size_t(j) + std::size_t(q)]);
         if (card.size() != 4 * (n - 1)) { k.runsBad++; continue; }
+        if (run.style[1] > 0) {                       // 0.90.0: a dashed run: where its dashes stand at each piece's start, the processor's LinePen way
+            double at = 0, lim = 0, sum = 0;
+            const auto endLim = [&](const Q& q, const double* X) {
+                const double s = c.cam.px * std::max(1.0, q.f), dist = std::sqrt((X[0] - Cx) * (X[0] - Cx) + (X[1] - Cy) * (X[1] - Cy) + (X[2] - Cz) * (X[2] - Cz));
+                return 0.01 + 4e-6 * s * dist;
+            };
+            for (std::size_t i = 1; i < n; i++) {
+                const int g = first + int(i) - 1;
+                const double got = ends[4 * (std::size_t(d.pieces) + std::size_t(g)) + 1];
+                const double allowed = lim + 4 * 5.96e-8 * sum + 1e-6;
+                k.dashes++;
+                k.dashWorst = std::max(k.dashWorst, std::fabs(got - at) / allowed);
+                if (!(std::fabs(got - at) <= allowed)) { k.dashOver++; if (std::getenv("PL_LINES_DEBUG") && k.dashOver < 8) std::printf("PLLINESDBG run %zu piece %zu dash %.4f card %.4f limit %.3g\n", r - 1, i, at, got, allowed); }
+                const double* pa = &pen[5 * (i - 1) + 2];
+                const double* pb = &pen[5 * i + 2];
+                const Q qa = c.cam.proj(pa[0], pa[1], pa[2]), qb = c.cam.proj(pb[0], pb[1], pb[2]);
+                Q a2{0, 0, 0, 0}, b2{0, 0, 0, 0};
+                double cl[4];
+                if (!clipNear(c.cam, qa, qb, a2, b2) || !clipSeg(a2.first, a2.second, b2.first, b2.second, -20, -20, c.cam.W + 20, c.cam.H + 20, cl)) continue;
+                const double len = std::hypot(cl[2] - cl[0], cl[3] - cl[1]);
+                at += len; sum += len;
+                lim += 2 * (endLim(qa, pa) + endLim(qb, pb));
+            }
+        }
         // the length scale of the run's curve steps: an orbit's P a and Q b times the step of E; a trail's longest piece (times 2: the curve's neighbours)
         double scale = 0;
         if (run.kind == 2) scale = 1e-6 * (std::sqrt(double(run.pa[0]) * run.pa[0] + double(run.pa[1]) * run.pa[1] + double(run.pa[2]) * run.pa[2]) +
@@ -199,6 +242,10 @@ LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const 
             const bool cpuShown = clipNear(c.cam, qa, qb, a2, b2);
             const double* cs = &card[4 * (i - 1)];
             const bool cardShown = cs[0] > -1e37;           // (the card's -1e38: none of it in front)
+            if (cpuShown != cardShown && c.cam.d3) {   // 0.90.0: an end within the card's depth rounding of the near plane (4e-6 of its distance from C) may fall either side
+                const auto dC = [&](const double* X) { return std::sqrt((X[0] - Cx) * (X[0] - Cx) + (X[1] - Cy) * (X[1] - Cy) + (X[2] - Cz) * (X[2] - Cz)); };
+                if (std::fabs(qa.Z - c.cam.zNear) <= 4e-6 * dC(pa) || std::fabs(qb.Z - c.cam.zNear) <= 4e-6 * dC(pb)) { k.nearEdge++; continue; }
+            }
             if (cpuShown != cardShown) {               // one shows the segment and the other does not: over its limit
                 k.points++; k.over++; k.worst = std::max(k.worst, 1e9);
                 if (std::getenv("PL_LINES_DEBUG")) std::printf("PLLINESDBG run %zu seg %zu shown cpu %d card %d (Z %.6g %.6g near %.6g)\n", r - 1, i, int(cpuShown), int(cardShown), qa.Z, qb.Z, c.cam.zNear);
@@ -237,9 +284,9 @@ LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const 
 }
 
 std::string linesCompareText(const LinesCompare& k) {
-    char b[260];
-    std::snprintf(b, sizeof b, "%ld runs, %ld points: %ld over the limit, %ld runs with another number of points; the largest difference %.2g of its limit (%.2g point); %ld pieces cut at the near plane, %ld behind it",
-                  k.runs, k.points, k.over, k.runsBad, k.worst, k.worstPt, k.cut, k.behind);
+    char b[360];
+    std::snprintf(b, sizeof b, "%ld runs, %ld points: %ld over the limit, %ld runs with another number of points; the largest difference %.2g of its limit (%.2g point); %ld pieces cut at the near plane, %ld behind it, %ld on its edge; %ld dashed pieces, %ld over their limit (the largest %.2g of it)",
+                  k.runs, k.points, k.over, k.runsBad, k.worst, k.worstPt, k.cut, k.behind, k.nearEdge, k.dashes, k.dashOver, k.dashWorst);
     return b;
 }
 

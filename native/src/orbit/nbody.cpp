@@ -1,5 +1,6 @@
 #include "nbody.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 
@@ -430,7 +431,8 @@ void NBodyClock::addStretch(long j, Stretch&& sg) {
 
 bool NBodyClock::needsWalk(double tau) const {
     const long j = stretchOf(stepOf(tau));
-    if (seg_.count(j) || (pending_.valid() && pendingJ_ == j)) return false;
+    if (seg_.count(j)) return false;
+    for (const Ahead& e : ahead_) if (e.j == j) return false;
     const long a = j >= 0 ? j : j + 1;                                       // the stretch's anchor (checkpoint() walks to it)
     if (knownCheckpoint(a)) return false;
     // the walk from the nearest known checkpoint: at most one stretch's steps is not a walk worth a worker
@@ -490,10 +492,13 @@ void NBodyClock::ensure(long k) {
     auto it = seg_.find(j);
     if (it == seg_.end()) {
         Stretch sg;
-        if (pending_.valid() && pendingJ_ == j) sg = pending_.get();          // made in the background (waits if it is not finished yet)
-        else sg = makeStretch(j >= 0 ? checkpoint(j) : checkpoint(j + 1), j, kEvery, h_, gr_);
+        auto e = std::find_if(ahead_.begin(), ahead_.end(), [j](const Ahead& a) { return a.j == j; });
+        if (e != ahead_.end()) {                                               // made ahead (waits if it is not finished yet)
+            if (e->f.wait_for(std::chrono::seconds(0)) != std::future_status::ready) waits_++;
+            sg = e->f.get();
+            ahead_.erase(e);
+        } else sg = makeStretch(j >= 0 ? checkpoint(j) : checkpoint(j + 1), j, kEvery, h_, gr_);
         steps_ += kEvery;
-        if (pending_.valid() && pendingJ_ == j) pending_ = {};
         addStretch(j, std::move(sg));
         it = seg_.find(j);
     }
@@ -503,15 +508,38 @@ void NBodyClock::ensure(long k) {
     s0_ = g0.s; s1_ = g1.s;
     for (int b = 0; b < kNBodyMax; b++) { a0_[b] = g0.a[b]; a1_[b] = g1.a[b]; }
     k_ = k; have_ = true;
-    // the next stretch in the direction of travel, in the background, if its anchor is known and it is not made or being made already
-    const long next = j + dir;
-    if (prefetch_ && !seg_.count(next) && !(pending_.valid() && pendingJ_ == next)) {
-        if (const NBodyState* anchor = knownCheckpoint(next >= 0 ? next : next + 1)) {
-            if (pending_.valid()) pending_.wait();                              // (one at a time)
-            pendingJ_ = next;
-            pending_ = std::async(std::launch::async, makeStretch, *anchor, next, kEvery, h_, gr_).share();
-        }
+    if (prefetch_) topUp(j, dir);                                              // 0.90.0: the stretches ahead in the direction of travel
+}
+
+// 0.90.0: keeps the kAhead stretches after j in the direction dir being made: each from a kept checkpoint where there is one, else from the end of the
+// stretch before it as it comes out of its worker (after the epoch going forwards its last state, before it going backwards its first: the checkpoint
+// addStretch keeps, so the states are those of a stretch made from that checkpoint, bit for bit). Stretches no longer ahead are dropped.
+void NBodyClock::topUp(long j, int dir) {
+    for (auto e = ahead_.begin(); e != ahead_.end();) {
+        const long m = (e->j - j) * dir;
+        if (m < 1 || m > kAhead) { dropped_.push_back(e->f); e = ahead_.erase(e); } else ++e;
     }
+    dropped_.erase(std::remove_if(dropped_.begin(), dropped_.end(), [](const std::shared_future<Stretch>& f) { return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }), dropped_.end());
+    std::shared_future<Stretch> prev;                                         // the stretch before J being made ahead (none: made, or not chained)
+    const double h = h_; const bool gr = gr_;
+    for (int m = 1; m <= kAhead; m++) {
+        const long J = j + m * dir;
+        if (seg_.count(J)) { prev = {}; continue; }
+        auto e = std::find_if(ahead_.begin(), ahead_.end(), [J](const Ahead& a) { return a.j == J; });
+        if (e != ahead_.end()) { prev = e->f; continue; }
+        std::shared_future<Stretch> f;
+        if (const NBodyState* anchor = knownCheckpoint(J >= 0 ? J : J + 1)) f = std::async(std::launch::async, makeStretch, *anchor, J, kEvery, h, gr).share();
+        else if (prev.valid() && ((dir > 0 && J >= 0) || (dir < 0 && J < 0)))
+            f = std::async(std::launch::async, [prev, J, h, gr, dir] { const Stretch& p = prev.get(); return makeStretch(dir > 0 ? p.back().s : p.front().s, J, kEvery, h, gr); }).share();
+        else break;                                                            // (its anchor is not known yet: the rest wait for a later frame)
+        ahead_.push_back({J, f});
+        prev = f;
+    }
+}
+
+bool NBodyClock::aheadReady() const {
+    for (const Ahead& e : ahead_) if (e.f.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return false;
+    return true;
 }
 
 void NBodyClock::stateAt(double tau, Vec3* x, Vec3* v, Vec3* plutoX, Vec3* plutoV, Vec3* dwarfX, Vec3* dwarfV) {
