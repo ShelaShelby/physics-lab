@@ -1,0 +1,14 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/maps/usgs_pluto_new_horizons_lorri_mvic_global_mosaic_300m_2026-11-23.html
+# Reference: USGS Astrogeology Science Center, product page "Pluto New Horizons LORRI MVIC Global Mosaic 300m", Process Description
+# URL: https://astrogeology.usgs.gov/search/map/pluto_new_horizons_lorri_mvic_global_mosaic_300m
+# Date read: 2026-11-23
+# sha256 of the original: f0709123139bb04a18bf8dffcbad8e69fb34b951e280ef84cb87bbcd8a3f8a6c
+# Place in the original: the Process Description line: the map's 8-bit values are a LINEAR stretch of the measured 32-bit values (so a byte is not sRGB).
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/render/planet_maps.cpp (MapInfo::linear for Pluto, 0.88.0), tools/map_albedo_scale.py, tests/test_orbit.cpp testPlutoLinear088.
+#--- begin the process description
+    The original 32bit pixel values were linearly stretched to 8bit (1-255) using the input range of 0.03344 to 0.99981.
+    </dd>
+#--- end

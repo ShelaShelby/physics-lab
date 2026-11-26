@@ -36,7 +36,9 @@ const MapInfo kInfo[] = {
     {Map::Saturn, "saturn", 180, 2048, 1024},
     {Map::Uranus, "uranus", 180, 2048, 1024},
     {Map::Neptune, "neptune", 180, 2048, 1024},
-    {Map::Pluto, "pluto", 180, 2048, 1024},
+    // 0.88.0: Pluto's bytes are linear light: USGS's page for the mosaic says "The original 32bit pixel values were linearly stretched to 8bit (1-255) using the input range of
+    // 0.03344 to 0.99981" (saved data/maps/usgs_pluto_new_horizons_lorri_mvic_global_mosaic_300m_2026-11-23.html). Until 0.87.x they were decoded as sRGB.
+    {Map::Pluto, "pluto", 180, 2048, 1024, true},
     // 0.50: the moons, 1024 x 512, black and white (tools/map_moon.py; assets/maps/README.md). Rhea's mosaic starts at 0 degrees, so its middle is 180 E.
     {Map::Io, "io", 0, 1024, 512},
     {Map::Europa, "europa", 0, 1024, 512},
@@ -53,6 +55,12 @@ const MapInfo kInfo[] = {
 const MapInfo& mapInfo(Map m) {
     const int i = static_cast<int>(m);
     return kInfo[(i >= 0 && i < static_cast<int>(Map::Count)) ? i : 0];
+}
+
+double mapDecode(Map m, int byte) {
+    const double c = byte / 255.0;
+    if (mapInfo(m).linear) return c;   // 0.88.0: Pluto (USGS: "linearly stretched to 8bit"): the byte is proportional to the measured value
+    return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);   // IEC 61966-2-1, as render/shading.h srgbDecode
 }
 
 Map mapForBody(const std::string& name) {
@@ -75,7 +83,7 @@ const MapAlbedo* mapAlbedo(Map m) {
         {Map::Uranus, {0.488, 1.2779, 0.4880, true, "Mallama et al. 2017, Table 7, V"}},
         {Map::Neptune, {0.442, 1.2897, 0.4338, false, "Mallama et al. 2017, Table 7, V"}},
         {Map::Moon, {0.12, 0.2488, 0.1200, true, "NSSDC Moon fact sheet"}},
-        {Map::Pluto, {0.52, 7.6678, 0.5200, true, "NSSDC Pluto fact sheet"}},
+        {Map::Pluto, {0.52, 2.1411, 0.5200, true, "NSSDC Pluto fact sheet"}},   // 0.88.0: 7.6678 with the bytes decoded as sRGB (mean 0.161); linear: mean 0.397
         {Map::Charon, {0.42, 2.7341, 0.4200, true, "NSSDC Pluto fact sheet (Charon)"}},
         {Map::Io, {0.62, 7.5682, 0.6200, true, "NSSDC Jovian satellite fact sheet"}},
         {Map::Europa, {0.68, 3.2629, 0.5827, false, "NSSDC Jovian satellite fact sheet"}},

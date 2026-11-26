@@ -18,11 +18,11 @@
 
 namespace {
 struct Level { int w = 0, h = 0; std::vector<float> rgb; };   // 4 floats a texel: linear r, g, b and the alpha (Earth's cloud cover)
-std::vector<Level> mips(const render::MapImage& im) {
+std::vector<Level> mips(render::Map map, const render::MapImage& im) {
     std::vector<Level> L(1);
     L[0].w = im.w; L[0].h = im.h; L[0].rgb.resize(std::size_t(im.w) * im.h * 4);
     for (std::size_t i = 0; i < std::size_t(im.w) * im.h; i++)
-        { for (int c = 0; c < 3; c++) L[0].rgb[4 * i + c] = static_cast<float>(render::srgbDecode(im.rgba[4 * i + c] / 255.0)); L[0].rgb[4 * i + 3] = static_cast<float>(im.rgba[4 * i + 3] / 255.0); }
+        { for (int c = 0; c < 3; c++) L[0].rgb[4 * i + c] = static_cast<float>(render::mapDecode(map, im.rgba[4 * i + c])); L[0].rgb[4 * i + 3] = static_cast<float>(im.rgba[4 * i + 3] / 255.0); }
     while (L.back().w > 1 || L.back().h > 1) {
         const Level& a = L.back();
         Level b; b.w = std::max(1, a.w / 2); b.h = std::max(1, a.h / 2); b.rgb.resize(std::size_t(b.w) * b.h * 4);
@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
     for (double& c : L) c /= ll;
     render::MapImage im;
     if (!render::decodeMap(map, im)) { std::fprintf(stderr, "no map %d\n", static_cast<int>(map)); return 1; }
-    const auto lv = mips(im);
+    const auto lv = mips(map, im);
     const double lon0 = render::mapInfo(map).lonCentreDeg * 3.14159265358979323846 / 180;
     const float tw = static_cast<float>(im.w);
     const double uLod = std::max(0.0f, std::log2(tw / (3.14159f * std::max(2.0f * static_cast<float>(R), 1.0f))));   // renderer2d_vk.cpp's uLod

@@ -1,7 +1,9 @@
 #include "moon_sats.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace orbit {
 namespace {
@@ -61,6 +63,101 @@ bool satState(const std::string& moon, double jd, Vec3& pos, Vec3& vel) {
     const double h = 1e-3;   // days
     vel = (satPos(*s, jd + h) - satPos(*s, jd - h)) * (0.5 / h);
     return true;
+}
+
+namespace {
+// ---- 0.88.0: JPL's table of mean elements, on any date -------------------------------------------------------------------------------------
+// The rows (moon_jpl_elements.inc) are JPL's printed numbers at J2000. They become the same precessing ellipse satPos draws: the periapsis longitude (omega + node) turns by
+// 2 pi / P apsis, the node by 2 pi / P node (years of 365.25 days), and the mean longitude by 2 pi / P (kind 'S') or by 2 pi / P plus both precession rates (kind 'A', where P is the
+// period of the mean anomaly). The reference plane is the table's Laplace pole; JPL gives none for the equatorial frames (Titania, Oberon, Triton, Charon), where it is the
+// planet's IAU 2015 pole, as in the 0.27 fit (moon_sats_data.inc).
+const SatTableRow kRows[] = {
+#include "moon_jpl_elements.inc"
+};
+constexpr double kPi = 3.14159265358979323846, kYear = 365.25;
+
+const SatTableRow* findRow(const std::string& moon) {
+    for (const SatTableRow& r : kRows)
+        if (moon == r.name) return &r;
+    return nullptr;
+}
+
+double rate(const char* periodYears, int sign) { const double P = std::atof(periodYears); return P > 0 ? sign * 2 * kPi / (P * kYear) : 0.0; }   // rad/day; "0.000" or "-": no precession
+
+SatEl meanElements(const SatTableRow& r) {
+    const SatEl* fit = find(r.name);   // pole of the equatorial frames, and the Horizons mean longitude of the four rows marked longitudeFromFit
+    constexpr double d = kPi / 180;
+    SatEl s{};
+    s.name = r.name; s.id = fit ? fit->id : 0;
+    s.ra = r.ra[0] ? std::atof(r.ra) : fit->ra;
+    s.dec = r.ra[0] ? std::atof(r.dec) : fit->dec;
+    s.a = std::atof(r.a); s.e = std::atof(r.e); s.inc = std::atof(r.i) * d;
+    const double om = std::atof(r.w) * d, M0 = std::atof(r.M) * d, O0 = std::atof(r.node) * d;
+    const double wd = rate(r.Pw, r.apsisSign), Od = rate(r.Pn, r.nodeSign);
+    s.w0 = om + O0; s.wdot = wd + Od;      // longitude of periapsis = argument + node
+    s.O0 = O0; s.Odot = Od;
+    s.n = 2 * kPi / std::atof(r.P) + (r.kind == 'A' ? wd + Od : 0.0);
+    s.L0 = r.longitudeFromFit ? fit->L0 : M0 + om + O0;
+    s.ndot = 0;
+    return s;
+}
+
+const SatEl* meanFind(const std::string& moon) {
+    static const std::vector<SatEl> all = [] { std::vector<SatEl> v; for (const SatTableRow& r : kRows) v.push_back(meanElements(r)); return v; }();
+    for (const SatEl& s : all)
+        if (moon == s.name) return &s;
+    return nullptr;
+}
+
+}  // namespace
+
+bool satMeanState(const std::string& moon, double jd, Vec3& pos, Vec3& vel) {
+    const SatEl* s = meanFind(moon);
+    if (!s) return false;
+    pos = satPos(*s, jd);
+    const double h = 1e-3;   // days
+    vel = (satPos(*s, jd + h) - satPos(*s, jd - h)) * (0.5 / h);
+    return true;
+}
+
+bool satPlace(const std::string& moon, double jd, Vec3& pos, Vec3& vel, bool* real) {
+    if (satState(moon, jd, pos, vel)) { if (real) *real = true; return true; }
+    if (real) *real = false;
+    return satMeanState(moon, jd, pos, vel);
+}
+
+const SatTableRow* satTableRow(const std::string& moon) { return findRow(moon); }
+double satTableNumber(const char* printed) { return std::atof(printed); }
+double satTableHalfUnit(const char* printed) {
+    const char* dot = std::strchr(printed, '.');
+    return 0.5 * std::pow(10.0, -(dot ? static_cast<int>(std::strlen(dot + 1)) : 0));
+}
+
+double satMeanPeriodDays(const std::string& moon) {
+    const SatTableRow* r = findRow(moon);
+    const SatEl* s = meanFind(moon);
+    if (!r || !s) return 0;
+    return 2 * kPi / (r->kind == 'A' ? s->n - s->wdot : s->n);   // wdot is the periapsis longitude's rate: omega's plus the node's
+}
+bool satMeanPole(const std::string& moon, double& raDeg, double& decDeg) {
+    const SatEl* s = meanFind(moon);
+    if (!s) return false;
+    raDeg = s->ra; decDeg = s->dec;
+    return true;
+}
+double satFitMeanMotion(const std::string& moon) { const SatEl* s = find(moon); return s ? s->n : 0; }
+double satFitLongitudeJ2000(const std::string& moon) { const SatEl* s = find(moon); return s ? s->L0 : 0; }
+
+double satMeanDriftYears(const std::string& moon) {
+    const SatTableRow* r = findRow(moon);
+    if (!r) return 0;
+    const double P = std::atof(r->P), Pw = std::atof(r->Pw), Pn = std::atof(r->Pn);
+    double d = 2 * kPi * satTableHalfUnit(r->P) / (P * P);   // rad/day the mean longitude's rate can be off by, from the rounding of P ...
+    if (r->kind == 'A') {                                    // ... and, where P is the mean anomaly's, of the two precession periods
+        if (Pw > 0) d += 2 * kPi * satTableHalfUnit(r->Pw) * kYear / ((Pw * kYear) * (Pw * kYear));
+        if (Pn > 0) d += 2 * kPi * satTableHalfUnit(r->Pn) * kYear / ((Pn * kYear) * (Pn * kYear));
+    }
+    return 2 * kPi / d / kYear;
 }
 
 }  // namespace orbit

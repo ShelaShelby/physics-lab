@@ -138,14 +138,19 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const double ex = opt.moonExaggeration;
         if (ex > 1.3) c.lines.push_back("Orbit drawn about " + fmt::commas(ex >= 100 ? std::round(ex / 10) * 10 : std::round(ex)) + "× too wide, so you can see it");
         Vec3 sp, sv;
-        if (satState(m.name, sys.julianDayTDB(), sp, sv))   // 0.27: the 13 big moons at their real places (orbit/moon_sats.h)
-            c.lines.push_back("Its place is the real one: an orbit fitted to JPL Horizons, within " + fmt::km(satWorstErrKm(m.name)) + " of it from 1800 to 2100");
-        else if (!(b->name == "Earth" && sel.moon == 0))   // any moon outside 1800-2100 rides a fixed Kepler ellipse from a made-up start; our Moon's own lines below say what it is (0.46.3: real in Simple too)
-        {
-            c.lines.push_back("Its place on the orbit is not the real one: it starts at a made-up angle");
-            // 0.75.2 (outside review): the fallback ellipse is tilted about the spring-equinox direction by the planet's tilt, not about the planet's Laplace plane with JPL's node and inclination, so its plane is only roughly right (Triton: 157.3° to Neptune's equator in JPL's mean elements); ROADMAP
-            for (auto& l : wrapWords("Its orbit's plane is only roughly right too: JPL's mean elements for its tilt and node are not used yet", 56)) c.lines.push_back(l);
+        bool realPlace = false;
+        if (satPlace(m.name, sys.julianDayTDB(), sp, sv, &realPlace)) {   // 0.27: the 13 big moons at their real places (orbit/moon_sats.h); 0.88.0: outside 1800-2100 on JPL's mean elements
+            if (realPlace)
+                c.lines.push_back("Its place is the real one: an orbit fitted to JPL Horizons, within " + fmt::km(satWorstErrKm(m.name)) + " of it from 1800 to 2100");
+            else {
+                // 0.88.0: the table's numbers are rounded (a period to 4 to 7 digits), which turns the angle along the orbit by a full turn after satMeanDriftYears; the size, shape, tilt and period stay JPL's
+                const double yrs = satMeanDriftYears(m.name), mag = std::pow(10.0, std::floor(std::log10(yrs)) - 1);
+                const double shown = yrs < 10 ? std::round(yrs * 10) / 10 : std::round(yrs / mag) * mag;
+                for (auto& l : wrapWords("Outside 1800 to 1 Jan 2100 its orbit is JPL’s table of mean elements at J2000: the size, shape, tilt, plane and period are JPL’s. Where it is on the orbit is not the real place: the table’s periods are rounded, which alone turns the angle by a full turn after about " + (yrs < 10 ? fmt::fixed(shown, 1) : fmt::commas(shown)) + " years", 56)) c.lines.push_back(l);
+            }
         }
+        else if (!(b->name == "Earth" && sel.moon == 0))   // a moon without data rides a fixed Kepler ellipse from a made-up start; our Moon's own lines below say what it is (0.46.3: real in Simple too)
+            c.lines.push_back("Its place on the orbit is not the real one: it starts at a made-up angle");
         if (!(b->name == "Earth" && sel.moon == 0)) {   // 0.50 (review item 10): how its ball is drawn
             Vec3 ax[3];
             if (iauBodyAxes(m.name, sys.julianDayTDB(), ax))

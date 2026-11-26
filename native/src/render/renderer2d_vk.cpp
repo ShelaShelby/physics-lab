@@ -177,11 +177,11 @@ double Renderer2D::skyWhiteWait() { if (!vkbh_) return 0; const double w = vkbh_
 bool Renderer2D::loadMapsVulkan(std::string& why) {
     if (!vk_) { why = "no Vulkan"; return false; }
     // as init(): a map that cannot be read is left out (that body is drawn as a plain ball, the sky without the photo); the planets' maps are sRGB (decoded
-    // to linear light by the card), the sky's is not
+    // to linear light by the card; Pluto's is linear since 0.88.0), the sky's is not
     for (int m = 1; m < static_cast<int>(Map::Count); m++) {
         MapImage img;
         if (!decodeMap(static_cast<Map>(m), img)) { std::fprintf(stderr, "map %s missing\n", mapInfo(static_cast<Map>(m)).file); continue; }
-        if (!vk_->upload(m, img.w, img.h, img.rgba, m != static_cast<int>(Map::Sky), why)) return false;
+        if (!vk_->upload(m, img.w, img.h, img.rgba, m != static_cast<int>(Map::Sky) && !mapInfo(static_cast<Map>(m)).linear, why)) return false;   // 0.88.0: a linear map (Pluto) is a UNORM texture: the card reads byte / 255, as mapDecode
         vkMap_[m] = true;
         texW_[m] = img.w;
     }

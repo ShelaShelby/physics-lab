@@ -7,7 +7,7 @@ Saturn        0.5586     0.499  lambert   1.3399   1.3606   0.4990        15.31 
 Uranus        0.5729     0.488  lambert   1.2777   1.2779   0.4880         3.18    0.500  Mallama et al. 2017 Table 7 V
 Neptune       0.5141     0.442  lambert   1.2897   1.2897   0.4338        76.46    0.437  Mallama et al. 2017 Table 7 V
 Moon          0.4822     0.120  lunar     0.2488   0.2488   0.1200         0.00    0.950  NSSDC Moon fact sheet
-Pluto         0.1606     0.520  lambert   4.8558   7.6678   0.5200        75.93    0.666  NSSDC Pluto fact sheet
+Pluto         0.3970     0.520  lambert   1.9650   2.1411   0.5200        36.28    0.666  NSSDC Pluto fact sheet
 Charon        0.2506     0.420  lambert   2.5135   2.7341   0.4200        10.46    0.666  NSSDC Pluto fact sheet (Charon)
 Io            0.1534     0.620  lambert   6.0620   7.5682   0.6200        58.07    0.667  NSSDC Jovian satellite fact sheet
 Europa        0.3126     0.680  lambert   3.2629   3.2629   0.5827        52.17    0.667  NSSDC Jovian satellite fact sheet

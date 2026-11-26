@@ -1,0 +1,647 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/jpl/sats_mean_elements_2026-11-23.html
+# Reference: JPL Solar System Dynamics, "Planetary Satellite Mean Elements" (the main table; mar099, jup365, sat441, ura182, nep098, plu060 ephemerides; frames Laplace and equatorial)
+# URL: https://ssd.jpl.nasa.gov/sats/elem/
+# Date read: 2026-11-23
+# sha256 of the original: 52c7f383c284bc9300fd151758d1df80c43993e3d1b1a1143554430c80032ed5
+# Place in the original: the warning, the definition of "mean elements", the column list, and one table row per moon (Earth's Moon, the 13 big moons); each row is its <td> cells: Satellite, Code, Ephemeris, Frame, Epoch, a (km), e, omega, M, i, node, P, P apsis, P node, R.A., Dec., Tilt, Ref.
+# JPL states NO numerical error for these elements: only the warning below (a table of rounded numbers "not intended for ephemeris computation").
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/orbit/moon_jpl_elements.inc (0.88.0), tests/test_orbit.cpp testMoonMeanElements.
+#--- begin the warning
+  These mean orbital parameters are <b>not intended for ephemeris computation</b>.
+#--- end
+#--- begin what mean elements are
+<p>Mean elements, in this context, are simply the elements of a precessing ellipse
+which has been fit in a least squares sense to the numerically integrated orbit.
+Please see the warning above.</p>
+#--- end
+#--- begin column node
+        <tr>
+          <th>node</th>
+          <td>longitude of the ascending node measured from the node of the reference plane on the ICRF equator</td>
+        </tr>
+#--- end
+#--- begin column P
+        <tr>
+          <th>P</th>
+          <td>sidereal period</td>
+        </tr>
+#--- end
+#--- begin row Moon
+      <td>Moon</td>
+
+      <td>301</td>
+
+      <td class="text-center">
+
+        DE405/LE405
+
+      </td>
+      <td class="text-center">
+        <a href="#EC" ng-click="$event.preventDefault();open('#EC')">
+          ecliptic
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">384400.</td>
+
+      <td class="text-center">0.0554</td>
+
+      <td class="text-center">318.15</td>
+
+      <td class="text-center">135.27</td>
+
+      <td class="text-center">5.16</td>
+
+      <td class="text-center">125.08</td>
+
+      <td class="text-center">27.322</td>
+
+      <td class="text-center">5.997</td>
+
+      <td class="text-center">18.600</td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+
+      <td class="text-center">n/a</td>
+#--- end
+#--- begin row Phobos
+      <td>Phobos</td>
+
+      <td>401</td>
+
+      <td class="text-center">
+
+        <a href="#MAR099" ng-click="$event.preventDefault();open('#MAR099')">MAR099</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">9375.</td>
+
+      <td class="text-center">0.015</td>
+
+      <td class="text-center">216.3</td>
+
+      <td class="text-center">189.7</td>
+
+      <td class="text-center">1.1</td>
+
+      <td class="text-center">169.2</td>
+
+      <td class="text-center">0.3187</td>
+
+      <td class="text-center">1.1</td>
+
+      <td class="text-center">2.3</td>
+
+      <td class="text-center">317.7</td>
+
+      <td class="text-center">52.9</td>
+
+      <td class="text-center">0.0</td>
+
+
+      <td class="text-center"><a href="#refs">7</a></td>
+#--- end
+#--- begin row Deimos
+      <td>Deimos</td>
+
+      <td>402</td>
+
+      <td class="text-center">
+
+        <a href="#MAR099" ng-click="$event.preventDefault();open('#MAR099')">MAR099</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">23457.</td>
+
+      <td class="text-center">0.000</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">205.0</td>
+
+      <td class="text-center">1.8</td>
+
+      <td class="text-center">54.3</td>
+
+      <td class="text-center">1.2625</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">56.2</td>
+
+      <td class="text-center">316.6</td>
+
+      <td class="text-center">53.5</td>
+
+      <td class="text-center">0.9</td>
+
+
+      <td class="text-center"><a href="#refs">7</a></td>
+#--- end
+#--- begin row Io
+      <td>Io</td>
+
+      <td>501</td>
+
+      <td class="text-center">
+
+        <a href="#JUP365" ng-click="$event.preventDefault();open('#JUP365')">JUP365</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">421800.</td>
+
+      <td class="text-center">0.004</td>
+
+      <td class="text-center">49.1</td>
+
+      <td class="text-center">330.9</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">1.762732</td>
+
+      <td class="text-center">1.333</td>
+
+      <td class="text-center">0.000</td>
+
+      <td class="text-center">268.1</td>
+
+      <td class="text-center">64.5</td>
+
+      <td class="text-center">0.0</td>
+
+
+      <td class="text-center"><a href="#refs">29</a></td>
+#--- end
+#--- begin row Europa
+      <td>Europa</td>
+
+      <td>502</td>
+
+      <td class="text-center">
+
+        <a href="#JUP365" ng-click="$event.preventDefault();open('#JUP365')">JUP365</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">671100.</td>
+
+      <td class="text-center">0.009</td>
+
+      <td class="text-center">45.0</td>
+
+      <td class="text-center">345.4</td>
+
+      <td class="text-center">0.5</td>
+
+      <td class="text-center">184.0</td>
+
+      <td class="text-center">3.525463</td>
+
+      <td class="text-center">1.394</td>
+
+      <td class="text-center">30.202</td>
+
+      <td class="text-center">268.1</td>
+
+      <td class="text-center">64.5</td>
+
+      <td class="text-center">0.0</td>
+
+
+      <td class="text-center"><a href="#refs">29</a></td>
+#--- end
+#--- begin row Ganymede
+      <td>Ganymede</td>
+
+      <td>503</td>
+
+      <td class="text-center">
+
+        <a href="#JUP365" ng-click="$event.preventDefault();open('#JUP365')">JUP365</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">1070400.</td>
+
+      <td class="text-center">0.001</td>
+
+      <td class="text-center">198.3</td>
+
+      <td class="text-center">324.8</td>
+
+      <td class="text-center">0.2</td>
+
+      <td class="text-center">58.5</td>
+
+      <td class="text-center">7.155588</td>
+
+      <td class="text-center">68.301</td>
+
+      <td class="text-center">137.812</td>
+
+      <td class="text-center">268.2</td>
+
+      <td class="text-center">64.6</td>
+
+      <td class="text-center">0.1</td>
+
+
+      <td class="text-center"><a href="#refs">29</a></td>
+#--- end
+#--- begin row Callisto
+      <td>Callisto</td>
+
+      <td>504</td>
+
+      <td class="text-center">
+
+        <a href="#JUP365" ng-click="$event.preventDefault();open('#JUP365')">JUP365</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">1882700.</td>
+
+      <td class="text-center">0.007</td>
+
+      <td class="text-center">43.8</td>
+
+      <td class="text-center">87.4</td>
+
+      <td class="text-center">0.3</td>
+
+      <td class="text-center">309.1</td>
+
+      <td class="text-center">16.690440</td>
+
+      <td class="text-center">277.921</td>
+
+      <td class="text-center">577.264</td>
+
+      <td class="text-center">268.7</td>
+
+      <td class="text-center">64.8</td>
+
+      <td class="text-center">0.4</td>
+
+
+      <td class="text-center"><a href="#refs">29</a></td>
+#--- end
+#--- begin row Enceladus
+      <td>Enceladus</td>
+
+      <td>602</td>
+
+      <td class="text-center">
+
+        <a href="#SAT441" ng-click="$event.preventDefault();open('#SAT441')">SAT441</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">238400.</td>
+
+      <td class="text-center">0.005</td>
+
+      <td class="text-center">119.5</td>
+
+      <td class="text-center">57.0</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">1.370218</td>
+
+      <td class="text-center">2.916</td>
+
+      <td class="text-center">0.000</td>
+
+      <td class="text-center">40.6</td>
+
+      <td class="text-center">83.5</td>
+
+      <td class="text-center">0.0</td>
+
+
+      <td class="text-center"><a href="#refs">36</a></td>
+#--- end
+#--- begin row Rhea
+      <td>Rhea</td>
+
+      <td>605</td>
+
+      <td class="text-center">
+
+        <a href="#SAT441" ng-click="$event.preventDefault();open('#SAT441')">SAT441</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">527200.</td>
+
+      <td class="text-center">0.001</td>
+
+      <td class="text-center">44.3</td>
+
+      <td class="text-center">31.5</td>
+
+      <td class="text-center">0.3</td>
+
+      <td class="text-center">133.7</td>
+
+      <td class="text-center">4.517503</td>
+
+      <td class="text-center">33.939</td>
+
+      <td class="text-center">35.775</td>
+
+      <td class="text-center">40.6</td>
+
+      <td class="text-center">83.5</td>
+
+      <td class="text-center">0.0</td>
+
+
+      <td class="text-center"><a href="#refs">36</a></td>
+#--- end
+#--- begin row Titan
+      <td>Titan</td>
+
+      <td>606</td>
+
+      <td class="text-center">
+
+        <a href="#SAT441" ng-click="$event.preventDefault();open('#SAT441')">SAT441</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#LP" ng-click="$event.preventDefault();open('#LP')">
+          Laplace
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">1221900.</td>
+
+      <td class="text-center">0.029</td>
+
+      <td class="text-center">78.3</td>
+
+      <td class="text-center">11.7</td>
+
+      <td class="text-center">0.3</td>
+
+      <td class="text-center">78.6</td>
+
+      <td class="text-center">15.945448</td>
+
+      <td class="text-center">346.680</td>
+
+      <td class="text-center">687.370</td>
+
+      <td class="text-center">36.4</td>
+
+      <td class="text-center">84.0</td>
+
+      <td class="text-center">0.6</td>
+
+
+      <td class="text-center"><a href="#refs">36</a></td>
+#--- end
+#--- begin row Titania
+      <td>Titania</td>
+
+      <td>703</td>
+
+      <td class="text-center">
+
+        <a href="#URA182" ng-click="$event.preventDefault();open('#URA182')">URA182</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#EQ" ng-click="$event.preventDefault();open('#EQ')">
+          equatorial
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">436298.</td>
+
+      <td class="text-center">0.002</td>
+
+      <td class="text-center">184.0</td>
+
+      <td class="text-center">68.1</td>
+
+      <td class="text-center">0.1</td>
+
+      <td class="text-center">29.5</td>
+
+      <td class="text-center">8.705869</td>
+
+      <td class="text-center">579.928</td>
+
+      <td class="text-center">1644.649</td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+
+      <td class="text-center"><a href="#refs">45</a></td>
+#--- end
+#--- begin row Oberon
+      <td>Oberon</td>
+
+      <td>704</td>
+
+      <td class="text-center">
+
+        <a href="#URA182" ng-click="$event.preventDefault();open('#URA182')">URA182</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#EQ" ng-click="$event.preventDefault();open('#EQ')">
+          equatorial
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">583511.</td>
+
+      <td class="text-center">0.002</td>
+
+      <td class="text-center">132.2</td>
+
+      <td class="text-center">143.6</td>
+
+      <td class="text-center">0.1</td>
+
+      <td class="text-center">76.8</td>
+
+      <td class="text-center">13.463237</td>
+
+      <td class="text-center">158.604</td>
+
+      <td class="text-center">192.798</td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+
+      <td class="text-center"><a href="#refs">45</a></td>
+#--- end
+#--- begin row Triton
+      <td>Triton</td>
+
+      <td>801</td>
+
+      <td class="text-center">
+
+        <a href="#NEP098" ng-click="$event.preventDefault();open('#NEP098')">NEP098</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#EQ" ng-click="$event.preventDefault();open('#EQ')">
+          equatorial
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">354800.</td>
+
+      <td class="text-center">0.000</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">63.0</td>
+
+      <td class="text-center">157.3</td>
+
+      <td class="text-center">177.7</td>
+
+      <td class="text-center">5.8792</td>
+
+      <td class="text-center">675.2</td>
+
+      <td class="text-center">299.4</td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+
+      <td class="text-center"><a href="#refs">53</a></td>
+#--- end
+#--- begin row Charon
+      <td>Charon</td>
+
+      <td>901</td>
+
+      <td class="text-center">
+
+        <a href="#PLU060" ng-click="$event.preventDefault();open('#PLU060')">PLU060</a>
+
+      </td>
+      <td class="text-center">
+        <a href="#EQ" ng-click="$event.preventDefault();open('#EQ')">
+          equatorial
+        </a>
+      </td>
+      <td class="text-nowrap">2000-01-01.5</td>
+
+      <td class="text-center">19600.</td>
+
+      <td class="text-center">0.000</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">304.1</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">0.0</td>
+
+      <td class="text-center">6.387222</td>
+
+      <td class="text-center">-</td>
+
+      <td class="text-center">-</td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+      <td class="text-center"></td>
+
+
+      <td class="text-center"><a href="#refs">6</a></td>
+#--- end

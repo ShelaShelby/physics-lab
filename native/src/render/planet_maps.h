@@ -20,8 +20,12 @@ struct MapInfo {
     const char* file;        // assets/maps/<file>.jpg
     double lonCentreDeg;     // the longitude of the map's middle column (planets: east longitude)
     int w, h;                // the expected size, checked when decoded
+    bool linear = false;     // 0.88.0: the bytes are linear light (proportional to the measured value), not sRGB: Pluto (USGS: "linearly stretched to 8bit")
 };
 const MapInfo& mapInfo(Map m);
+// 0.88.0: the linear light (0..1) of one byte (0..255) of a map's colour: byte / 255 for a linear map (MapInfo::linear), else the sRGB decode (IEC 61966-2-1). The GPU's
+// texture format is chosen the same way (renderer2d_vk.cpp), so the card and its CPU twin read a map alike.
+double mapDecode(Map m, int byte);
 
 // The map of a body by its name ("Earth", "Moon", ...); Map::None for a body without one (Venus: no true-colour
 // map exists; its clouds have no visible markings). Those are drawn in their measured colour (below).

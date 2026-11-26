@@ -43,7 +43,9 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 
 ## Orbit Lab
 - **fix**: the Orbit Lab at rest drew its picture anew every frame on the owner's PC (0.75.0: rest.orbit 766 drawings in 3 s). The build machine does not reproduce it. Read the changed key part (main.cpp orbitFrameKey) in his next benchmark, then fix it.
-- **fix**: outside 1800-2100 the moons start at made-up angles and planes. Use JPL's mean elements (saved: data/jpl/sats_mean_elements_2026-11-23.html) and their reference planes.
+- **fix**: JPL's moon table has a row for our Moon (ecliptic frame, no pole) but states no error, so its mean ellipse cannot be tested. Outside ELP2000's 1800-2100 the Moon stays a simple ellipse with a made-up angle. Fit a precessing ellipse to the Moon as moon_sats does, measure its worst error, then use it.
+- **source needed**: JPL's table (read 2026-11-23) is far from Horizons for Rhea and Titan (mean longitude 157 deg, node 134 and 54 deg), Enceladus (mean longitude 5.9 deg), Triton (inclination 0.5 deg, period 5.8792 d against 5.8766) and Deimos (period 1.2625 d against 1.262441). Check against a newer table or the SAT and URA kernels. Details in REPORT 0.88.0.
+- Outside 1800-2100 the big moons cast no shadow on their planet (satState has none there): add them from satPlace.
 - **fix**: Saturn's ring optical depths are the fact sheet's, lower than Cassini's for the B ring and the Cassini Division. Check against Colwell et al. 2010.
 - A Field of view setting for the 3D camera (45 degrees now, orbit/camera.h). A pick of a closer body lowers the zoom to its cap at once.
 - Alpha Centauri (PLAN_ALPHACEN.md): the Sun's pick looking back in 2D, A and B seen from Proxima b, Fit planets with the card open, Proxima's orbit time on its card and a faster time choice, A and B as one label when close.
@@ -57,7 +59,6 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Earth's air: multiple scattering, the glow beyond the edge, twilight. **source needed**: a measured ocean colour.
 - **fix**: Earth fully lit is drawn at 0.21 of the measured 0.434 (0.77.0: the ground 0.06, clouds as white cover, single-scattering air). Missing: the clouds' own measured albedo and depth, multiple scattering. **source needed**: a cloud albedo or optical-depth map.
 - **source needed**: calibrated reflectance maps for the moons, Pluto and the Moon (the USGS mosaics and the Moon Kit are display pictures: only their mean brightness is measured since 0.77.0) and phase functions with the opposition surge (Europa, Rhea and Triton are brighter than any matte ball can be).
-- **fix**: Pluto's map bytes are a linear stretch of the measured values (its USGS page), decoded as sRGB: decode them linearly (its contrast changes).
 - The far markers are hidden by balls and rings since 0.77.0, but drawn over the orbit lines and trails in front of them.
 - Celestial mechanics in the Data panel: ephemeris tables, an integrator drift check, Lagrange points, Kirkwood gaps, a Lambert solver with porkchop plots.
 
