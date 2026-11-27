@@ -114,6 +114,10 @@ bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels
 bool pSlider(Panel& p, const char* id, float* v, float lo, float hi);
 bool pButton(Panel& p, const char* id, const std::string& label, Face face = Face::Secondary, bool selected = false);   // as wide as the panel
 bool pRow(Panel& p, const char* id, const std::string& label, bool selected = false, const char* dotHex = nullptr);
+// 0.94.1: part of a row, from x to x + w in the content (0 to p.w is a whole pRow), with pRow's inset where it meets the content's edges. Does not move down: the caller
+// ends the row with pRowEnd.
+bool pRowPart(Panel& p, const char* id, float x, float w, const std::string& label, bool selected = false, const char* dotHex = nullptr);
+void pRowEnd(Panel& p);
 void pRule(Panel& p);                                                          // a hairline between list rows
 
 }  // namespace ui::sh

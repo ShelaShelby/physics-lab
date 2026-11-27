@@ -68,7 +68,9 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "a companion star (Abramowicz and Fragile 2013; Yuan and Narayan 2014).") +
         p("<b>What is calculated.</b> How bright each ring of the disc is (Page and Thorne's formula: nothing at the inner edge, brightest at 9.55 GM/c², falling off far "
           "out), its temperature (each face a black body), the light's shift on the way to you from the gas's speed and from gravity (Luminet 1979), and where every "
-          "pixel's light path meets the disc: over the hole, under it (the disc's underside, bent into view) and in thin rings closer to the shadow. A black body seen "
+          "pixel's light path meets the disc: over the hole, under it (the disc's underside, bent into view) and in thin rings closer to the shadow. Seen from near the "
+          "disc's plane, those rings are thinner than a pixel: one ring along the shadow's edge then looks like a faint dotted curve that ends on the disc's straight edge. "
+          "It is real: light that went round the hole once or more before reaching you (it is in the double-precision reference too). A black body seen "
           "shifted is still a black body, at the shifted temperature (Riazuelo 2019); with spin the shift is Cunningham 1975's; its colour and visible brightness come from the CIE 1931 eye, the same rule as "
           "the stars' colours. The side coming towards you is brighter. The picture is checked pixel by pixel against the double-precision reference.") +
         p("<b>The inner edge</b> is the innermost stable orbit, 6 GM/c² without spin (2.32 at spin 0.9): inside it the gas falls in and gives no light here. The <b>outer edge</b> is your choice: the "

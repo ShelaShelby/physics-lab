@@ -2,6 +2,7 @@
 # 0.16 stage 2 and 0.56.1: the Benchmark window, in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU). tests/TESTS.md lists the parts kept and why.
 #   bench:        the Benchmark window with both extra-scene boxes ticked stays inside 92 % of the window height, Start in view
 #   benchrest:    a lab made busy on purpose (PL_BENCH_BUSY) is said to be busy at rest
+#   benchporkchop: 0.94.1, the owner's 0.93.0 run: the two Orbit Lab waits after orbit.porkchop finish (they waited for a grid the closed Data panel never took)
 #   benchrestore: after the run every lab, page and panel is as it was (0.83.0: and the window ui.resize_blackhole resized)
 #   check_6b.py <PhysicsLab binary> <work folder> bench|benchrest|benchrestore
 import os, re, sys
@@ -63,6 +64,15 @@ def part_benchrest(binary, work):
     t = report(r)
     check("AT REST" in t and "rest.molecule  busy" in t, "the report's rest table says busy")
 
+def part_benchporkchop(binary, work):
+    ids = "orbit.porkchop,response.lab_switch.blackhole_orbit,response.sunspot_table"
+    r = run_app(binary, work, "b_porkchop", dict(BENCH, PL_BENCH_ONLY=ids), frames=100000, size="880x560", timeout=900)
+    w = [l.split() for l in r.out.splitlines() if l.startswith("PLBENCH-WAIT ")]
+    for name in ("response.lab_switch.blackhole_orbit", "response.sunspot_table"):
+        ms = [float(x[2]) for x in w if x[1] == name]
+        # the cap is 15,000 ms; 0.93.0 hit it every time, 0.94.1 takes 2-110 ms here. 5,000 ms leaves room for a slow build machine.
+        check(len(ms) == 3 and max(ms) < 5000 and not any("capped" in " ".join(x) for x in w if x[1] == name), f"{name} finishes after orbit.porkchop ({ms} ms)")
+
 def part_benchrestore(binary, work):
     ids = "ui.settings_open,ui.data_plot,ui.guide_scroll,molecule.vib_density,atom.jump_all,orbit.journey,orbit.earth,blackhole.extreme,ui.resize_blackhole,response.lab_switch.orbit_atom,rest.blackhole_glare"
     r = run_app(binary, work, "b_restore", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.2", PL_BENCH_MEASURE="0.4", PL_OPEN="settings"), frames=100000, size="880x560", timeout=1200)
@@ -77,6 +87,6 @@ def part_benchrestore(binary, work):
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"bench": part_bench, "benchrest": part_benchrest, "benchrestore": part_benchrestore}[part](binary, work)
+    {"bench": part_bench, "benchrest": part_benchrest, "benchporkchop": part_benchporkchop, "benchrestore": part_benchrestore}[part](binary, work)
     print(f"check_6b {part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

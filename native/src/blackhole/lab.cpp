@@ -79,6 +79,7 @@ bool applyPreset(Settings& s, const std::string& key) {
         s.expEV = 0;                                                    // 0.70.0: the manual exposure starts from automatic again
         s.gasRateAuto = true;                                           // 0.72.0: the moving gas's automatic rate again
         resetView(s);                                                   // 0.70.0: the starting view (lab.h)
+        keepOutsideDisc(s);                                             // 0.94.1 (the starting view is far above the surface: no change)
         return true;
     }
     const Preset* p = preset(key.c_str());
@@ -139,12 +140,50 @@ void paperView(Settings& s) {
     const FilmChoices& c = filmChoices();
     setDistance(s, c.camR);                                             // J15 Figure 13's caption p. 24
     s.pitch = std::clamp(c.camTheta, kPitchMin, kPitchMax);             // the lab's pitch is the camera's angle from the spin axis (theta), as J15's theta_c
+    keepOutsideDisc(s);                                                 // 0.94.1
 }
-void setDistance(Settings& s, double d) { s.dist = std::clamp(d, kDistMin, kDistMax); }
+void setDistance(Settings& s, double d) { s.dist = std::clamp(d, kDistMin, kDistMax); keepOutsideDisc(s); }
 void setFov(Settings& s, double f) { s.fovDeg = std::clamp(f, kFovMin, kFovMax); }
 void turn(Settings& s, double dy, double dp) {
     s.yaw = std::remainder(s.yaw + dy, 2 * kPi);
+    const double p0 = s.pitch;
     s.pitch = std::clamp(s.pitch + dp, kPitchMin, kPitchMax);
+    const int side = p0 < kPi / 2 ? 1 : p0 > kPi / 2 ? -1 : (dp < 0 ? 1 : -1);   // the side it came from (in the plane, beyond the disc: the way it moves)
+    if (camDiscPitch(s, s.dist, side) != kPi / 2) {
+        if (side > 0) s.pitch = std::min(s.pitch, camDiscPitch(s, s.dist, 1));
+        else s.pitch = std::max(s.pitch, camDiscPitch(s, s.dist, -1));
+    }
+}
+
+// 0.94.1: the camera outside the disc's thickness (lab.h)
+double camDiscPitch(const Settings& s, double dist, int side) {
+    const Settings v = shown(s);
+    if (!v.disc || side == 0) return kPi / 2;
+    const DiscGeom g = discGeom(v);
+    const bool thick = v.look == Look::Real && heightOn(v.spin);
+    DiscPhys dp; dp.massSun = v.massSun; dp.lEdd = v.feed; dp.aSigned = v.spin;   // (as discPhys, without the returning light's table: h does not use it)
+    const auto h = [&](double R) { return thick ? dp.height(R) : 0.0; };
+    // |cos(pitch)| = (h(R) + margin) / dist with R = dist sin(pitch): a fixed point (h changes slowly with R: 6 steps are far below a pixel)
+    double c = std::min(1.0, (h(dist) + kCamDiscMargin) / dist);
+    for (int i = 0; i < 6; i++) c = std::min(1.0, (h(dist * std::sqrt(std::max(0.0, 1 - c * c))) + kCamDiscMargin) / dist);
+    const double R = dist * std::sqrt(std::max(0.0, 1 - c * c));
+    if (R < g.rIn || R > g.rOut) return kPi / 2;                        // beyond the disc's edges: nothing stops the camera
+    const double th = std::acos(c);
+    return side > 0 ? std::max(kPitchMin, th) : std::min(kPitchMax, kPi - th);
+}
+bool keepOutsideDisc(Settings& s, int side) {
+    if (side == 0) side = s.pitch > kPi / 2 ? -1 : 1;
+    const double lim = camDiscPitch(s, s.dist, side);
+    if (lim == kPi / 2) return false;
+    const double p = side > 0 ? std::min(s.pitch, lim) : std::max(s.pitch, lim);
+    if (p == s.pitch) return false;
+    s.pitch = p;
+    return true;
+}
+bool cameraAtDisc(const Settings& s) {
+    const int side = s.pitch > kPi / 2 ? -1 : 1;
+    const double lim = camDiscPitch(s, s.dist, side);
+    return lim != kPi / 2 && std::fabs(s.pitch - lim) < 1e-9;
 }
 
 // 0.82.0: the camera's motion (lab.h CameraMotion), as orbit_view.cpp's drag, grab, release and tick
@@ -186,6 +225,8 @@ void cameraTick(Settings& s, CameraMotion& m, double dt, bool reduceMotion) {
             if (m.zoomS >= 1) m.zoomOn = false;
         }
     }
+    keepOutsideDisc(s);                                                  // 0.94.1: whatever else moved the disc or the camera this frame (a setting that grows or
+                                                                         // thickens the disc, the spin, the look, a preset): out to the surface on the side it is on
     m.heldYaw = s.yaw; m.heldPitch = s.pitch;
 }
 
@@ -245,6 +286,7 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (const auto it = in.find("gasrate"); it != in.end() && it->second == "auto") s.gasRateAuto = true;
     else if (num(in, "gasrate", kGasRateMin, kGasRateMax, v)) { s.gasRate = v; s.gasRateAuto = false; }
     if (num(in, "gasclumpr", 1, kGasClumpRMax, v)) s.gasClumpR = v;
+    keepOutsideDisc(s);                                                 // 0.94.1: a saved or typed pitch inside the disc's thickness goes out to its surface
     return s;
 }
 

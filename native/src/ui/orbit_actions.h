@@ -5,20 +5,17 @@
 #include <string>
 #include <vector>
 
+#include "orbit/pick_list.h"
 #include "ui/orbit_panel.h"
 
 namespace ui {
 
 // ---- Pick a body (the old "Go to" tiles, and the new toolbar's list) ----
-struct PickItem {
-    std::string name;
-    const char* color = "#ffffff";       // the dot's colour (the body's own: a planet's, its moons' use their planet's)
-    orbit::Selection sel;
-    std::string tip;                     // "Moon · moon of Earth" for a moon, else empty
-    double beltZoom = 0;                 // belts only: the zoom that shows all of it
-};
-struct PickGroup { const char* title; std::vector<PickItem> items; };
-// The groups in the order of the old panel: Star and planets, Dwarf planets, Famous comets, Moons, Belts and the far edge, Far away.
+// 0.94.1: the list itself is orbit/pick_list.h (no app state there, so the unit tests read it)
+using orbit::PickItem;
+using orbit::PickGroup;
+using orbit::PickRow;
+using orbit::pickRows;
 std::vector<PickGroup> pickGroups(const AppState& app);
 // A click on an item: select it and fly there (the selected one again lets go), switch on what it needs (Dwarf planets, Comets, Moons, Belts, Far-away things).
 void pickItem(AppState& app, const PickItem& item);

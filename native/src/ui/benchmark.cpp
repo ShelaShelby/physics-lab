@@ -1007,6 +1007,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
             if (m < 0) break;
             blackhole::turn(app.blackhole, 0.3 * dt, 0.0);
             app.blackhole.pitch = kPi / 2 + 12 * kPi / 180 * std::sin(1.3 * m);
+            blackhole::keepOutsideDisc(app.blackhole);                       // 0.94.1: the camera stays outside the disc's thickness (it now jumps it at the plane)
             break;
         }
         case K::UiGuideScroll: {

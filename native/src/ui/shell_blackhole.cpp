@@ -387,6 +387,11 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                     "a little. The wheel or + − move you closer or farther.");
         if (shownSpin > 0) pCaption(p, "The camera is held at each place you put it and carried round by the turning space: it is not falling or orbiting (a moving camera sees a different sky).");
         else pCaption(p, "The camera hovers at each place you put it: it is not falling or orbiting (a moving camera sees a different sky).");
+        // 0.94.1 (the owner's decision, 27 Nov 2026): the camera stops at the disc's surface (lab.h keepOutsideDisc)
+        if (blackhole::cameraAtDisc(s)) {
+            pCaption(p, "The camera stops at the disc's surface: the gas is opaque, and the lab has no model of the view from inside it.", false);
+            if (shellLogOn()) auditNote("bhcamdisc 1");
+        }
     }
     if (section("disc", "Gas disc (model)", true)) {                       // 0.55.1
         int on = (s.disc || film) ? 1 : 0;

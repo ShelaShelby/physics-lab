@@ -276,8 +276,7 @@ void drawTransfer(sh::Panel& p, AppState& app) {
     slider("cm.tr.side", "Grid: cells on a side", &C.side, 16, float(celestialPorkchopMaxSide()), num(std::round(C.side), 4) + " × " + num(std::round(C.side), 4) + " = " + commas(std::round(C.side) * std::round(C.side)) + " cells");
     sh::pSegmented(p, "cm.tr.show", {"C3 at departure", "v∞ at arrival"}, &C.trShow);
     if (changed || !C.have) { C.have = true; remake(app); C.selI = -1; selectCell(app, -1, -1); }
-    orbit::lambert::PorkchopGrid g;
-    if (porkchopRunner().poll(app, g)) { C.grid = std::move(g); }
+    // (0.94.1: the finished grid is taken by celestialTick each frame, before the panel draws)
     const auto& G = C.grid;
     if (porkchopRunner().busy() && G.c3.empty()) sh::pCaption(p, "Solving the grid…");
     if (G.nDep == 0) return;
@@ -515,6 +514,12 @@ void celestialLeave(AppState& app) {
 
 int celestialPorkchopMaxSide() { return 256; }
 bool celestialBusy() { return porkchopRunner().busy(); }
+void celestialTick(AppState& app) {
+    PorkchopRunner& r = porkchopRunner();
+    if (!r.busy() && !r.stepping()) return;
+    orbit::lambert::PorkchopGrid g;
+    if (r.poll(app, g)) C.grid = std::move(g);
+}
 
 namespace {
 struct Kept { int dep, arr; float depOff, depSpan, arrOff, arrSpan, side; bool have; } g_kept{};

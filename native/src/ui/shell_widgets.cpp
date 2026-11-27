@@ -633,6 +633,12 @@ bool pSlider(Panel& p, const char* id, float* v, float lo, float hi) { const boo
 bool pButton(Panel& p, const char* id, const std::string& label, Face face, bool selected) { const bool r = button(id, here(p), ImVec2(p.w, static_cast<float>(g_f.m.control)), label, face, selected); p.y += g_f.m.control + g_f.m.s4; p.gap = g_f.m.s4; return r; }
 bool pRow(Panel& p, const char* id, const std::string& label, bool selected, const char* dotHex) { const float in = g_bodyFloor ? static_cast<float>(g_f.m.s8) : 0.0f;   // (stage 5c.1: in the Controls panel its words sit on the content's left edge; the hover runs into the padding)
     const bool r = row(id, ImVec2(here(p).x - in, here(p).y), p.w + 2 * in, label, selected, dotHex); p.y += g_f.m.row; p.gap = 0; return r; }
+bool pRowPart(Panel& p, const char* id, float x, float w, const std::string& label, bool selected, const char* dotHex) {
+    const float in = g_bodyFloor ? static_cast<float>(g_f.m.s8) : 0.0f;
+    const float l = x <= 0 ? in : 0.0f, r = x + w >= p.w ? in : 0.0f;
+    return row(id, ImVec2(here(p).x + x - l, here(p).y), w + l + r, label, selected, dotHex);
+}
+void pRowEnd(Panel& p) { p.y += g_f.m.row; p.gap = 0; }
 void pRule(Panel& p) { const ImVec2 a = here(p); p.dl->AddLine(ImVec2(a.x, a.y + g_f.m.s4), ImVec2(a.x + p.w, a.y + g_f.m.s4), cHair()); p.y += 2 * g_f.m.s4 + 1; p.gap = 0; }
 
 }  // namespace ui::sh

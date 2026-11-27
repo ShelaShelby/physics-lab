@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "orbit/alphacen.h"
+#include "orbit/pick_list.h"
 #include "orbit/belts.h"
 #include "orbit/card_text.h"
 #include "orbit/date_text.h"
@@ -1300,12 +1301,105 @@ static void testAlbedo077() {
 // the gas tail points along the solar wind as the comet meets it. References: conservation of energy and angular momentum, the elliptic Kepler solution
 // (orbit::keplerState, which has its own tests against JPL), the first terms of the Taylor series (1/2 beta g t^2) and the vector sum of two speeds.
 // (Before 0.78.0 there was no grain motion at all: the tails were two straight triangles of a drawing length, CometData::tail.)
+static void checkStr094(const std::string& got, const std::string& want, const std::string& what) { check(got == want, what + " (got " + got + ")"); }
 static void checkSay(bool ok, const std::string& what) {   // (0.78.0: a check whose numbers are printed too, for REPORT.md)
     check(ok, what);
     std::printf("   %s\n", what.c_str());
 }
 
 static std::string sci(double v) { char b[32]; std::snprintf(b, sizeof b, "%.2e", v); return b; }
+
+// 0.94.1: the Pick a body list (the owner's wish, 27 Nov 2026): no "Moons" group; each planet's and dwarf planet's moons under it, in the lab's own order,
+// behind a fold arrow with the count; the filter shows a matching moon under its body and a matching body folded. pick_list.h is new: this does not build on 0.94.0.
+static void testPickList094() {
+    using namespace orbit;
+    SolarSystem sys; sys.loadAt(ref::kEpochMs);
+    const std::vector<PickGroup> G = pickList(sys, false);
+    bool moonsGroup = false;
+    for (const PickGroup& g : G) moonsGroup = moonsGroup || std::string(g.title) == "Moons";
+    check(!moonsGroup, "pick list 094: no separate Moons group");
+    // every moon of the lab's list once, right after its own body, in the order of Body::moons, with the body's count
+    std::map<std::string, int> seen;
+    std::size_t moonsInLab = 0, moonsListed = 0;
+    for (const Body& b : sys.bodies) moonsInLab += b.moons.size();
+    bool order = true, counts = true, sels = true, depthOk = true;
+    for (const PickGroup& g : G)
+        for (std::size_t i = 0; i < g.items.size(); i++) {
+            const PickItem& it = g.items[i];
+            seen[it.name]++;
+            if (it.depth == 1) { moonsListed++; depthOk = depthOk && (std::string(g.title) == "Star and planets" || std::string(g.title) == "Dwarf planets"); continue; }
+            if (it.sel.kind != Selection::Body) { counts = counts && it.moons == 0; continue; }
+            const Body* b = nullptr;
+            for (const Body& x : sys.bodies) if (x.id == it.sel.bodyId) b = &x;
+            if (!b) { order = false; continue; }
+            counts = counts && it.moons == int(b->moons.size());
+            for (std::size_t j = 0; j < b->moons.size(); j++) {
+                const std::size_t k = i + 1 + j;
+                if (k >= g.items.size() || g.items[k].depth != 1 || g.items[k].name != b->moons[j].data->name) { order = false; continue; }
+                const Selection& s = g.items[k].sel;
+                sels = sels && s.kind == Selection::Moon && s.bodyId == b->id && s.moon == int(j);   // picking it selects {Moon, bodyId, index} as before
+            }
+            if (i + 1 + b->moons.size() < g.items.size()) order = order && g.items[i + 1 + b->moons.size()].depth == 0;
+        }
+    std::printf("pick list 094: %zu moons in the lab, %zu listed\n", moonsInLab, moonsListed);
+    check(moonsInLab > 0 && moonsListed == moonsInLab, "pick list 094: every moon of the lab's list is listed");
+    check(order, "pick list 094: each body's moons follow it, in the lab's order, and nothing else is indented");
+    check(depthOk, "pick list 094: moons sit only under Star and planets and Dwarf planets");
+    check(counts, "pick list 094: a body's count is the lab's own number of its moons (0 for everything else)");
+    check(sels, "pick list 094: a moon's item selects {Moon, its body's id, its index}");
+    bool once = true;
+    for (const Body& b : sys.bodies) for (const auto& m : b.moons) once = once && seen[m.data->name] == 1;
+    check(once, "pick list 094: each moon is listed once");
+    // Moon under Earth, Charon under Pluto, Titan under Saturn
+    const auto under = [&](const std::string& moon, const std::string& body) {
+        for (const PickGroup& g : G) {
+            std::string last;
+            for (const PickItem& it : g.items) { if (it.depth == 0) last = it.name; else if (it.name == moon) return last == body; }
+        }
+        return false;
+    };
+    check(under("Moon", "Earth"), "pick list 094: Moon under Earth");
+    check(under("Charon", "Pluto"), "pick list 094: Charon under Pluto");
+    check(under("Titan", "Saturn"), "pick list 094: Titan under Saturn");
+    // the global search and the subject name lookup go through every item: Moon, Titan and Charon are still in it
+    check(seen["Moon"] == 1 && seen["Titan"] == 1 && seen["Charon"] == 1, "pick list 094: Moon, Titan and Charon are items (the search and the subject name read them)");
+    // the rows shown
+    const auto fold = [](const std::string& x) { std::string o; for (char c : x) o += char(std::tolower(static_cast<unsigned char>(c))); return o; };
+    const PickGroup* planets = nullptr;
+    for (const PickGroup& g : G) if (std::string(g.title) == "Star and planets") planets = &g;
+    if (!planets) { check(false, "pick list 094: the Star and planets group"); return; }
+    int jupId = -1, earthId = -1;
+    for (const Body& b : sys.bodies) { if (b.name == "Jupiter") jupId = b.id; if (b.name == "Earth") earthId = b.id; }
+    const auto names = [&](const std::vector<PickRow>& rows) { std::string o; for (const PickRow& r : rows) o += planets->items[std::size_t(r.item)].name + (r.open ? "+" : "") + "|"; return o; };
+    const auto none = [](int) { return false; };
+    const std::vector<PickRow> folded = pickRows(*planets, "", Selection{}, none, fold);
+    bool noMoons = true;
+    for (const PickRow& r : folded) noMoons = noMoons && planets->items[std::size_t(r.item)].depth == 0 && !r.open;
+    check(noMoons && folded.size() == 10, "pick list 094: all folded at the start: the Sun, the barycentre and 8 planets, no moon (" + names(folded) + ")");
+    const std::vector<PickRow> jup = pickRows(*planets, "", Selection{}, [&](int id) { return id == jupId; }, fold);
+    std::size_t jupMoons = 0;
+    for (const Body& b : sys.bodies) if (b.id == jupId) jupMoons = b.moons.size();
+    check(jup.size() == 10 + jupMoons && names(jup).find("Jupiter+|") != std::string::npos, "pick list 094: Jupiter opened shows its moons under it (" + names(jup) + ")");
+    Selection moonSel; moonSel.kind = Selection::Moon; moonSel.bodyId = earthId; moonSel.moon = 0;
+    check(names(pickRows(*planets, "", moonSel, none, fold)).find("Earth+|Moon|") != std::string::npos, "pick list 094: a selected moon keeps its planet open");
+    std::string fT;
+    for (const PickGroup& g : G) for (const PickRow& r : pickRows(g, "titan", Selection{}, none, fold)) fT += g.items[std::size_t(r.item)].name + (r.open ? "+" : "") + "|";
+    checkStr094(fT, "Saturn+|Titan|Uranus+|Titania|", "pick list 094: the filter \"titan\" shows Titan (and Titania) under its open planet, nothing else");
+    std::string fJ;
+    for (const PickGroup& g : G) for (const PickRow& r : pickRows(g, "jupiter", Selection{}, none, fold)) fJ += g.items[std::size_t(r.item)].name + (r.open ? "+" : "") + "|";
+    checkStr094(fJ, "Jupiter|Jupiter’s Trojans|", "pick list 094: the filter \"jupiter\" shows Jupiter folded (and the belt Jupiter’s Trojans)");
+    std::size_t fZ = 0;
+    for (const PickGroup& g : G) fZ += pickRows(g, "zzzq", Selection{}, none, fold).size();
+    check(fZ == 0, "pick list 094: a name that matches nothing gives no rows (the panel then says \"Nothing in the list matches\")");
+    // Alpha Centauri: unchanged
+    std::string ac;
+    for (const PickGroup& g : pickList(sys, true)) { ac += std::string(g.title) + ":"; for (const PickItem& it : g.items) ac += it.name + (it.depth || it.moons ? "!" : "") + ","; }
+    std::string want;
+    want += std::string("Alpha Centauri:") + acen::thingName(acen::StarA) + "," + acen::thingName(acen::StarB) + "," + acen::thingName(acen::Bary) + "," + acen::thingName(acen::Proxima) + ",";
+    want += std::string("Proxima's planets:") + acen::thingName(acen::PlanetB) + "," + acen::thingName(acen::PlanetD) + "," + acen::thingName(acen::PlanetC) + ",";
+    want += std::string("Unconfirmed:") + acen::thingName(acen::CandidateA) + ",Far away:" + acen::thingName(acen::Sun) + ",";
+    checkStr094(ac, want, "pick list 094: the Alpha Centauri list is unchanged");
+}
 
 static void testCometTail078() {
     using namespace orbit::tail;
@@ -1417,6 +1511,7 @@ static void testCometTail078() {
 }
 
 int main() {
+    testPickList094();
     testReview085();
     testSun094();
     testCometTail078();

@@ -58,6 +58,7 @@
 #include "atom/atom_tools.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
+#include "ui/celestial_panel.h"
 #include "ui/porkchop_runner.h"
 #include "ui/reading.h"
 #include "ui/input_log.h"
@@ -851,6 +852,7 @@ int main(int argc, char** argv) {
                 while (acc >= units::kPhysicsStep) { app.sys.step(units::kPhysicsStep, app.set.tspeed); acc -= units::kPhysicsStep; }
             }
         }
+        ui::celestialTick(app);                         // 0.94.1: the porkchop grid's worker and card polled each frame, not only while the Data panel draws
         fpsFrames++; fpsTime += frameDt;
         sectMark(0);
         if (fpsTime >= 0.5) { fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }

@@ -112,7 +112,7 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "
             "round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.");
         add(false, "blackhole.edge_on", BenchKind::BlackHoleEdgeOn, -1, "Black Hole Lab, Sagittarius A*'s disc seen edge on, turning",
-            "Sagittarius A*, the disc on, feeding 0.11, from 57.5 GM/c\xC2\xB2 in the disc's plane (pitch 1.575 rad, the view of the 0.82.1 bug), the streaks and the "
+            "Sagittarius A*, the disc on, feeding 0.11, from 57.5 GM/c\xC2\xB2 in the disc's plane (pitch 1.575 rad, the view of the 0.82.1 bug; since 0.94.1 the camera stops just under the disc's surface), the streaks and the "
             "clump on, Real: the camera turning slowly round the axis (0.15 rad a second).");
         add(false, "orbit.sun_edge", BenchKind::OrbitSunEdge, -1, "Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse",
             "The Sun followed, filling the view (zoom 2.6), on 10 May 2024 00:00 UT (7 recorded sunspot groups, filled since 0.94.0), its edge by Neckel & Labs 1994, "

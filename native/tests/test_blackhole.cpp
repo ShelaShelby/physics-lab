@@ -20,6 +20,8 @@
 #include <atomic>
 #include <array>
 #include <cmath>
+#include <map>
+#include <utility>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -4050,6 +4052,75 @@ static void testHotColour() {
     }
 }
 
+// 0.94.1 (the owner's decision, 27 Nov 2026): the camera stays outside the disc's thickness. The height |z| = dist |cos(pitch)| is at least h(R) + kCamDiscMargin
+// where R = dist sin(pitch) lies on the disc, h from DiscPhys::height (Zhu App. B, the lab's own tested thickness); beyond the disc's edges the camera still
+// crosses the plane. camDiscPitch and keepOutsideDisc are new: this does not build on 0.94.0.
+static void testCameraOutsideDisc094() {
+    const auto heightAt = [](const Settings& s) {                   // the camera's height and the disc's surface under it, independently of camDiscPitch
+        const double z = std::fabs(s.dist * std::cos(s.pitch)), R = s.dist * std::sin(s.pitch);
+        DiscPhys p; p.massSun = s.massSun; p.lEdd = s.feed; p.aSigned = s.spin;
+        return std::make_pair(z, p.height(R) + kCamDiscMargin);
+    };
+    {   // a drag towards the plane from above stops at the surface, in small steps and in one large one
+        Settings s = settingsDefaults(); applyPreset(s, kFeedingKey); setDistance(s, 30); s.pitch = 80 * kPi / 180;
+        for (int i = 0; i < 400; i++) turn(s, 0, 0.001);
+        const auto zh = heightAt(s);
+        std::printf("camera 094: drag to the plane at 30 GM/c^2: pitch %.6f rad, z %.6f, h + margin %.6f GM/c^2\n", s.pitch, zh.first, zh.second);
+        check(s.pitch < kPi / 2 && std::fabs(zh.first - zh.second) < 1e-6, "camera 094: a drag towards the plane stops at the disc's surface plus the margin, above it");
+        check(cameraAtDisc(s), "camera 094: the lab says the camera is at the disc (the Camera section's line)");
+        Settings t = settingsDefaults(); applyPreset(t, kFeedingKey); setDistance(t, 30); t.pitch = 80 * kPi / 180;
+        turn(t, 0, 40 * kPi / 180);                                   // one jump through the plane
+        check(std::fabs(t.pitch - s.pitch) < 1e-12, "camera 094: one large step through the plane stops at the same place");
+        Settings u = settingsDefaults(); applyPreset(u, kFeedingKey); setDistance(u, 30); u.pitch = 100 * kPi / 180;
+        turn(u, 0, -40 * kPi / 180);                                  // from below, upwards
+        const auto zu = heightAt(u);
+        check(u.pitch > kPi / 2 && std::fabs(zu.first - zu.second) < 1e-6, "camera 094: from below, the camera stops under the disc");
+        CameraMotion m; grab(m); dragTurn(u, m, 0, -2000); release(m, false);   // a drag and its glide keep it there
+        for (int i = 0; i < 120; i++) cameraTick(u, m, 1.0 / 60, false);
+        check(u.pitch > kPi / 2 && heightAt(u).first >= heightAt(u).second - 1e-9, "camera 094: a drag and its glide stay under the disc");
+    }
+    {   // a typed or saved pitch inside the thickness goes out to the surface on its own side
+        Settings s = settingsDefaults(); applyPreset(s, kFeedingKey);
+        std::map<std::string, std::string> m; saveSettings(s, m);
+        m["dist"] = "57.5"; m["pitch"] = "1.5742";                    // 0.2 degrees below the plane: z = -0.20, h(57.5) = 0.66 (the ROADMAP's example)
+        const Settings t = loadSettings(m);
+        const auto zh = heightAt(t);
+        check(t.pitch > kPi / 2 && std::fabs(zh.first - zh.second) < 1e-6, "camera 094: a typed pitch inside the thickness is moved out to the surface (below)");
+        m["pitch"] = "1.5674";                                        // 0.2 degrees above
+        const Settings v = loadSettings(m);
+        check(v.pitch < kPi / 2 && std::fabs(heightAt(v).first - heightAt(v).second) < 1e-6, "camera 094: and above the plane, above");
+        m["pitch"] = "1.4";                                           // far from the disc: unchanged
+        check(loadSettings(m).pitch == 1.4, "camera 094: a pitch outside the thickness is kept as typed");
+    }
+    {   // the wheel: at the plane beyond the outer edge, moving in onto the disc lifts the camera out to the surface
+        Settings s = settingsDefaults(); applyPreset(s, kFeedingKey); setOuter(s, 30); setDistance(s, 60); s.pitch = kPi / 2;
+        check(!keepOutsideDisc(s) && s.pitch == kPi / 2, "camera 094: beyond the outer edge the camera may stand in the plane");
+        setDistance(s, 25);
+        check(heightAt(s).first >= heightAt(s).second - 1e-9, "camera 094: moved in over the disc, the camera is lifted out of its thickness");
+    }
+    {   // beyond the outer edge and inside the inner edge the camera still crosses the plane
+        Settings s = settingsDefaults(); applyPreset(s, kFeedingKey); setOuter(s, 30); setDistance(s, 60); s.pitch = 80 * kPi / 180;
+        for (int i = 0; i < 400; i++) turn(s, 0, 0.001);
+        check(s.pitch > kPi / 2 + 0.1, "camera 094: beyond the disc's outer edge the camera crosses the plane");
+        Settings t = settingsDefaults(); applyPreset(t, kFeedingKey); setDistance(t, 4); t.pitch = 80 * kPi / 180;
+        for (int i = 0; i < 400; i++) turn(t, 0, 0.001);
+        check(t.pitch > kPi / 2 + 0.1, "camera 094: inside the disc's inner edge (6 GM/c^2) the camera crosses the plane");
+        Settings u = settingsDefaults(); setDistance(u, 30); u.pitch = 80 * kPi / 180;   // Sagittarius A*: no disc
+        for (int i = 0; i < 400; i++) turn(u, 0, 0.001);
+        check(u.pitch > kPi / 2 + 0.1, "camera 094: with no disc the camera crosses the plane");
+    }
+    {   // Film: its disc has no thickness (J15's thin disc): the margin alone
+        Settings s = settingsDefaults(); applyPreset(s, kFeedingKey); setLook(s, Look::Film); setDistance(s, 15); s.pitch = 80 * kPi / 180;   // (15: inside the paper's disc, 9.26 to 18.70 GM/c^2)
+        for (int i = 0; i < 400; i++) turn(s, 0, 0.001);
+        check(s.pitch < kPi / 2 && std::fabs(s.dist * std::cos(s.pitch) - kCamDiscMargin) < 1e-9, "camera 094: Film stops the camera at the margin above its flat disc");
+    }
+    {   // a spinning hole: the thickness with its spin term, whether or not the picture draws it
+        Settings s = settingsDefaults(); applyPreset(s, kFeedingKey); setSpin(s, 0.9); setDistance(s, 20); s.pitch = 80 * kPi / 180;
+        for (int i = 0; i < 400; i++) turn(s, 0, 0.001);
+        check(s.pitch < kPi / 2 && std::fabs(heightAt(s).first - heightAt(s).second) < 1e-6, "camera 094: at spin 0.9 the camera stops at the calculated thickness");
+    }
+}
+
 int main() {
     if (const char* only = std::getenv("PL_BH_ONLY")) {             // (by hand: one of 0.79.0's tests)
         if (!std::strcmp(only, "height")) { testDiscHeight(); testDiscHeightSpin(); testDiscWords(); }
@@ -4060,6 +4131,7 @@ int main() {
         std::printf("%d checks, %d failed\n", g_checks, g_failed);
         return g_failed ? 1 : 0;
     }
+    testCameraOutsideDisc094();
     testElliptic();
     testRadii();
     testLightPath();

@@ -104,7 +104,12 @@ double DiscPhys::fluxOut(double r) const { return flux(r) + (ret ? fluxScale() *
 double DiscPhys::temperature(double r) const { return std::pow(std::max(0.0, fluxOut(r)) / stefanBoltzmann(), 0.25); }
 double DiscPhys::hottest(double* where) const {
     double r = fluxMaxRadius(aSigned);
-    if (ret) {                                                                  // 0.87.0: the returning flux moves the largest inward: golden-section on F + F_o
+    // 0.94.1: the search below (560 flux evaluations) depends only on the spin and the returning table; the card asks for it about 7 times a frame,
+    // so the last radius is kept per thread (the same number, not a new one)
+    thread_local double keptA = -2, keptR = 0;
+    thread_local const ReturnFlux* keptRet = nullptr;
+    if (ret && keptRet == ret && keptA == aSigned) r = keptR;
+    else if (ret) {                                                                  // 0.87.0: the returning flux moves the largest inward: golden-section on F + F_o
         const double r0 = discInner(aSigned), l0 = std::log(r0), l1 = std::log(4 * r);   // (a scan in ln r for its bracket first: F_o is piecewise linear in y)
         double lb = l0, best = -1;
         for (int i = 0; i <= 400; i++) { const double l = l0 + (l1 - l0) * i / 400, v = fluxOut(std::exp(l)); if (v > best) { best = v; lb = l; } }
@@ -115,6 +120,7 @@ double DiscPhys::hottest(double* where) const {
             if (fluxOut(std::exp(c)) > fluxOut(std::exp(d))) b = d; else a = c;
         }
         r = std::exp(0.5 * (a + b));
+        keptA = aSigned; keptRet = ret; keptR = r;
     }
     if (where) *where = r;
     return temperature(r);

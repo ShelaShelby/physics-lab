@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.94.1", "Moons under their planets, the camera outside the black hole's disc, two benchmark fixes",
+     "Orbit Lab: in Pick a body each planet and dwarf planet with moons has a fold arrow and its count (\"Jupiter ▸ 4 moons\"). The arrow shows its moons "
+     "under it; the separate Moons list is gone. The filter still finds a moon and shows it under its planet. Black Hole Lab: the camera now stops at the gas "
+     "disc's surface. The gas is opaque, and the lab has no model of the view from inside it. Beyond the disc's edges you can still cross its plane. The guide "
+     "explains the faint dotted curve along the shadow seen from near the disc's plane: light that went round the hole. Benchmark: two Orbit Lab waits after "
+     "the porkchop scene no longer run to their 15-second cap, and the Black Hole Lab's card does less work each frame."},
     {"0.94.0", "Orbit Lab: the Sun's surface (dark sunspots, granulation, NASA's photo of the day)",
      "Close up, the Sun is no longer a smooth ball with grey rings. Each recorded sunspot group is a dark spot with a darker core (the umbra) and a grey fringe "
      "(the penumbra), by measured darkness and a measured split of the area. The surface shows granulation, the fine pattern of rising cells, at its measured "

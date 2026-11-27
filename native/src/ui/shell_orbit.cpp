@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <set>
 
 #include "atom/atom_core.h"
 #include "atom/atom_tools.h"
@@ -131,6 +132,7 @@ std::vector<LegendEntry> legendEntries(const AppState& app) {
     for (const PickGroup& g : pickGroups(app)) {
         const std::string t = g.title;
         for (const PickItem& it : g.items) {
+            if (it.depth != 0) continue;                        // 0.94.1: the moons listed under their bodies are not planets
             if (t == "Star and planets" && it.name != "Sun" && it.name != "Barycentre") planets.push_back(it.color);
             if (t == "Dwarf planets") dwarfs.push_back(it.color);
         }
@@ -415,19 +417,39 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         auto lower = [](const std::string& x) { return app::shell::searchFold(x); };   // 0.39.3: "hale bopp" and "hale-bopp" find Hale–Bopp (app/shell.h)
         const std::string q = lower(filter);
         bool firstRow = true;
+        // 0.94.1: each body's moons under it, behind a fold arrow (all folded at the start; a picked body opens; a selected moon keeps its body open)
+        static std::set<int> openBodies;
+        static orbit::Selection seenSel;
+        if (!(seenSel == app.view.sel)) {
+            seenSel = app.view.sel;
+            if (seenSel.kind == orbit::Selection::Body || seenSel.kind == orbit::Selection::Moon) openBodies.insert(seenSel.bodyId);
+        }
+        const auto isOpen = [](int id) { return openBodies.count(id) != 0; };
         for (const PickGroup& g : pickGroups(app)) {
-            bool any = false;
-            for (const PickItem& it : g.items) if (q.empty() || lower(it.name).find(q) != std::string::npos) any = true;
-            if (!any) continue;
+            const std::vector<PickRow> rows = pickRows(g, q, app.view.sel, isOpen, lower);
+            if (rows.empty()) continue;
             pGap(p, m.s4);
             pHeading(p, g.title);
-            for (const PickItem& it : g.items) {
-                if (!q.empty() && lower(it.name).find(q) == std::string::npos) continue;
+            for (const PickRow& r : rows) {
+                const PickItem& it = g.items[std::size_t(r.item)];
                 const std::string rid = "pick." + it.name;
                 if (firstRow && shellLogOn()) { const ImVec2 o = here(p); auditNote("pickfirst " + std::to_string(o.x) + " " + std::to_string(o.y) + " " + std::to_string(p.w) + " " + std::to_string(m.row)); }   // (for the automatic checks: the first row shown)
                 firstRow = false;
-                if (pRow(p, rid.c_str(), it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); filter[0] = 0; }
+                const float indent = it.depth > 0 ? static_cast<float>(m.s16) : 0.0f;
+                float nameW = p.w - indent;
+                if (it.moons > 0) {                                 // the fold arrow and the count, on the row's right: "▸ 4 moons"
+                    const std::string fold = std::string(r.open ? "▾ " : "▸ ") + std::to_string(it.moons) + (it.moons == 1 ? " moon" : " moons");
+                    const float fw = std::min(p.w * 0.5f, width(Type::Body, false, fold) + static_cast<float>(2 * m.s8));
+                    nameW = p.w - fw;
+                    const std::string fid = "pick.fold." + it.name;
+                    if (pRowPart(p, fid.c_str(), indent + nameW, fw, fold)) {
+                        if (r.open) openBodies.erase(it.sel.bodyId); else openBodies.insert(it.sel.bodyId);
+                    }
+                    if (ImGui::IsItemHovered()) ui::SetTooltip("%s", (std::string(r.open ? "Hide " : "Show ") + it.name + "'s moons").c_str());
+                }
+                if (pRowPart(p, rid.c_str(), indent, nameW, it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); filter[0] = 0; }
                 if (!it.tip.empty() && ImGui::IsItemHovered()) ui::SetTooltip("%s", it.tip.c_str());
+                pRowEnd(p);
             }
         }
         if (firstRow && !q.empty()) { pGap(p, m.s4); pCaption(p, std::string("Nothing in the list matches “") + filter + "”.");   // 0.39.3: the list just went empty

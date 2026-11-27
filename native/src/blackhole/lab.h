@@ -117,7 +117,17 @@ bool allLightOn(const Settings& s);        // 0.58.0: Real, the disc on and allL
 void paperView(Settings& s);
 void setDistance(Settings& s, double dist);
 void setFov(Settings& s, double fovDeg);
-void turn(Settings& s, double dYaw, double dPitch);       // the pitch stays inside [kPitchMin, kPitchMax]
+void turn(Settings& s, double dYaw, double dPitch);       // the pitch stays inside [kPitchMin, kPitchMax] (0.94.1: and outside the disc's thickness, below)
+// 0.94.1 (the owner's decision, 27 Nov 2026, DECISIONS.md): THE CAMERA STAYS OUTSIDE THE DISC'S THICKNESS. The gas is opaque and the lab has no model of the view
+// from inside it. Where the shown disc is (on, and the camera's distance from the axis R = dist sin(pitch) between its inner and outer edges), the camera's
+// height |z| = |dist cos(pitch)| is kept at least h(R) + kCamDiscMargin, on the side it is on (or came from). h: the calculated thickness (disc.h
+// DiscPhys::height, every spin, Real) whether or not the picture draws it; Film's disc has none (J15's thin disc), so there only the margin.
+// Crossing the plane beyond the outer edge or inside the inner edge stays allowed. side: +1 above the plane (pitch < pi/2), -1 below, 0 the side it is on
+// now (exactly in the plane: above). camDiscPitch: the pitch nearest the plane allowed on that side at this distance (pi/2 where nothing stops the camera).
+constexpr double kCamDiscMargin = 0.1;                      // GM/c^2: a stated margin above the surface (about a quarter of h at 20 GM/c^2 in the feeding preset)
+double camDiscPitch(const Settings& s, double dist, int side);
+bool keepOutsideDisc(Settings& s, int side = 0);           // true when the pitch was moved
+bool cameraAtDisc(const Settings& s);                       // the camera is on that limit (the Camera section says why it stops)
 void saveSettings(const Settings& s, std::map<std::string, std::string>& out);
 
 // 0.82.0: the camera handles as the Orbit Lab's (orbit/camera_motion.h holds the shared numbers). A drag circles the camera round the hole at

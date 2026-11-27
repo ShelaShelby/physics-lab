@@ -26,6 +26,9 @@ public:
     // each frame: true when a finished grid was put into `out`
     bool poll(AppState& app, orbit::lambert::PorkchopGrid& out);
     bool busy() const { return gpuJob_ != 0 || cpu_.valid(); }
+    // 0.94.1: its start-up steps under way (state 2). celestialTick polls while this or busy() holds, so a closed Data panel neither keeps a finished grid
+    // waiting (the benchmark's lab never counted as finished) nor lets a step's time limit run out and switch the card off when the panel opens again
+    bool stepping() const { return state_ == 2; }
     bool lastWasGpu() const { return lastGpu_; }
     // 1 the card (its check passed), 0 not decided yet, -1 the processor
     int state() const { return state_ == 1 ? 1 : state_ == -1 ? -1 : 0; }

@@ -26,6 +26,8 @@ long celestialBenchPorkchop(AppState& app, double phase);
 std::string celestialPorkchopPathText(bool computeOk);
 // a grid is being solved (the benchmark's response line waits for it)
 bool celestialBusy();
+// 0.94.1: each frame, in every lab and with the panel shut: takes a finished porkchop grid from its worker or the card, and runs the card's start-up steps
+void celestialTick(AppState& app);
 // the benchmark keeps the transfer planner's choices and gives them back
 void celestialBenchSave();
 void celestialBenchRestore();

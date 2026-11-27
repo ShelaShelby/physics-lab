@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.94.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.94.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -64,6 +64,7 @@ add_library(orbit_core STATIC
   src/orbit/time_scale.cpp
   src/orbit/format.cpp
   src/orbit/card_text.cpp
+  src/orbit/pick_list.cpp                 # 0.94.1: the Pick a body list (ui/orbit_actions.h uses it)
   src/orbit/subject_card.cpp
   src/orbit/belts.cpp
   src/orbit/sky.cpp
@@ -607,7 +608,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_shell PROPERTIES TIMEOUT 900 COST 232)
       # ui_screens: Settings, the Benchmark window, search in every lab, the look of the themes
       add_test(NAME ui_screens COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_screens
-               check_5t.py:grey check_5t.py:tiles check_6b.py:bench check_6b.py:benchrest check_6b.py:benchrestore check_022s7.py:search check_audit19.py:molsearch)
+               check_5t.py:grey check_5t.py:tiles check_6b.py:bench check_6b.py:benchrest check_6b.py:benchporkchop check_6b.py:benchrestore check_022s7.py:search check_audit19.py:molsearch)
       set_tests_properties(ui_screens PROPERTIES TIMEOUT 900 COST 112)
       # ui_orbit: the Orbit Lab's controls against the old panel's states, its card, keys, orbit paths, Most realistic, the fact line
       add_test(NAME ui_orbit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit

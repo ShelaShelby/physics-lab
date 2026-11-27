@@ -133,6 +133,8 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   the film's choice.
 - No benchmark scenes are added to find problems; the owner's usual benchmark after each version stays (21 Nov 2026). Its second half is replaced by the benchmark rule of 21 Nov 2026 (Graphics and speed).
 
+- The camera stays outside the disc's thickness (27 Nov 2026). Where the disc is, the camera stops at its surface plus a small margin, on the side it is on. The gas there is opaque and the lab has no model of the view from inside it. Crossing the plane beyond the disc's outer edge or inside its inner edge stays allowed (0.94.1).
+
 ## Molecule Lab
 - The Molecule Lab is the 15 measured molecules; the builder is removed (4 Nov 2026). Density shows a DFT electron density at the measured shape (18 Oct 2026).
 - Space-filling shows true, overlapping van der Waals spheres; heavier atoms get more cloud dots (7 Nov 2026).
