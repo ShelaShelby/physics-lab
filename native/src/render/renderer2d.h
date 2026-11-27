@@ -30,6 +30,7 @@
 #include "kerr_sky.h"
 #include "atom_card.h"
 #include "molecule_card.h"
+#include "porkchop_card.h"
 
 namespace render {
 
@@ -60,6 +61,7 @@ public:
     const std::string& kerrWhy() const { return kerrWhy_; }
     // 0.56.0: the spinning hole per pixel (render/kerr_sky.h): the object that makes its shaders (the caller builds the stages, guarded); always there
     KerrSky& kerrSky() { return sky_; }
+    PorkchopCard& porkchopCard();                                    // 0.92.0: the porkchop grid on the card (made at the first call)
     AtomCard& atomCard();                                            // 0.57.0: the Atom Lab's Slice dots and jump groups on the card (made at the first call)
     MoleculeCard& moleculeCard();                                    // 0.57.1: the Molecule Lab's Density cloud on the card (made at the first call)
     // 0.64.0: Saturn's rings per pixel on the card (nullptr without the card programs); ringsCard records one half of the rings
@@ -415,6 +417,8 @@ private:
     IRockCompute* rocks_ = nullptr;           // owned; see rockCompute()
     IKerrCompute* kerr_ = nullptr;            // owned; see kerrCompute()
     KerrSky sky_;                             // 0.56.0: the spinning hole per pixel (its stages made by Vulkan's side)
+    PorkchopCard* porkCard_ = nullptr;       // 0.92.0: owned
+    PorkchopCard* (*vkPorkCard_)(VkCards&) = nullptr;
     AtomCard* atomCard_ = nullptr;           // owned (a pointer: the classes that hold a renderer without its code need no AtomCard)
     MoleculeCard* molCard_ = nullptr;        // 0.57.1: owned, the same way
     std::vector<MolCloudDraw> molClouds_;    // this frame's (Segment::slot)

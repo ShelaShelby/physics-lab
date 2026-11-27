@@ -1,4 +1,5 @@
 #include "orbit_view.h"
+#include "lagrange.h"
 #include "orbit/star_light.h"
 #include "orbit/label_clip.h"
 
@@ -440,7 +441,7 @@ std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& 
     part[0] = k.h; k = KeyHash();
     k.add(set.view3D); k.add(set.zoom); k.add(set.tspeed); k.add(set.trueScale); k.add(set.fullTrails); k.add(set.moons); k.add(set.dwarfs); k.add(set.comets);
     k.add(set.belts); k.add(set.gpuRocks); k.add(set.sky); k.add(set.cons); k.add(set.realPlanets); k.add(set.exaggerateWobble); k.add(set.relativity); k.add(set.far);
-    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused); k.add(set.trueLight);
+    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused); k.add(set.trueLight); k.add(set.overlay.version); k.add(set.overlay.lagrange); k.add(set.overlay.transfer);
     part[1] = k.h; k = KeyHash();
     k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
     k.add(set.textScale); k.add(set.shell); k.add(set.minTextU); k.add(set.minTextPx); k.add(set.reserveBottom); k.add(set.reserveRight); k.add(set.insetTop);
@@ -1010,6 +1011,59 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             hits_.push_back({{Selection::Bary}, bq.first, bq.second, 12});
             baryShown = true; baryQ = bq;
             labels.push_back({"Barycentre", bq.first, bq.second + 22, on, false, false});
+        }
+    }
+
+    // 0.92.0: the Lagrange points of a pair and a transfer orbit, from the Data panel (orbit/lagrange.h, orbit/lambert.h). The pair's two bodies are where the picture draws them, so for a moon
+    // (whose orbit the picture draws wider than it is) the points are those of the drawn pair; the Data panel's table gives the real distances.
+    if (set.overlay.lagrange && !set.overlay.light.empty()) {
+        const Overlay& O = set.overlay;
+        const std::string pn = O.heavy == "Sun" ? O.light : O.heavy;
+        const Body* pb = nullptr;
+        for (const Body& b : sys.bodies) if (b.name == pn) pb = &b;
+        Vec3 heavy{0, 0, 0}, light{0, 0, 0}, nrm{0, 0, 1};
+        bool ok = false;
+        if (pb && O.heavy == "Sun") { light = pb->pos; nrm = cross(pb->pos, pb->vel); ok = true; }
+        else if (pb) {
+            for (std::size_t j = 0; j < pb->moons.size(); j++)
+                if (O.light == pb->moons[j].data->name) {
+                    const MoonPlace pl = moonAt(*pb, j, 1.0);
+                    heavy = pb->pos; light = pl.pos;
+                    nrm = pl.realP ? cross(pl.rh, pl.ph) : Vec3{0, -pl.st, pl.ct} * pl.sgn;
+                    ok = true;
+                }
+        }
+        const double sep = ok ? length(light - heavy) : 0, nn = length(nrm);
+        if (ok && sep > 0 && nn > 0) {
+            const Vec3 e = (light - heavy) * (1 / sep), perp = cross(nrm * (1 / nn), e);
+            const lagrange::Points P = lagrange::points(O.mu);
+            for (int k = 0; k < 5; k++) {
+                const Vec3 w = heavy + e * ((P.x[k] + O.mu) * sep) + perp * (P.y[k] * sep);
+                const Q q = proj(w.x, w.y, w.z);
+                if (d3 && q.f <= 0) continue;
+                const Color c = k >= 3 ? Color{0.45f, 0.85f, 0.55f, 1} : Color{1.0f, 0.78f, 0.35f, 1};
+                R.disc(q.first, q.second, 3.6, Color{0, 0, 0, 0.6f});
+                R.ring(q.first, q.second, 5.5, 1.6, c);
+                R.disc(q.first, q.second, 2.0, c);
+                labels.push_back({"L" + std::to_string(k + 1), q.first + 11, q.second - 9, false, true, true, false, 1});
+            }
+        }
+    }
+    if (set.overlay.transfer && set.overlay.arc.size() > 1) {
+        const Overlay& O = set.overlay;
+        const Color c{0.35f, 0.8f, 1.0f, 1};
+        Q prev = proj(O.arc[0].x, O.arc[0].y, O.arc[0].z);
+        for (std::size_t i = 1; i < O.arc.size(); i++) {
+            const Q q = proj(O.arc[i].x, O.arc[i].y, O.arc[i].z);
+            if (!d3 || (q.f > 0 && prev.f > 0)) { R.line(prev.first, prev.second, q.first, q.second, 3.4, Color{0, 0, 0, 0.5f}); R.line(prev.first, prev.second, q.first, q.second, 1.8, c); }
+            prev = q;
+        }
+        for (int e = 0; e < 2; e++) {
+            const Vec3& w = e ? O.arrPos : O.depPos;
+            const Q q = proj(w.x, w.y, w.z);
+            if (d3 && q.f <= 0) continue;
+            R.ring(q.first, q.second, 6, 1.8, c);
+            labels.push_back({e ? "Arrival" : "Departure", q.first + 9, q.second + 14, false, true, true, false, 1});
         }
     }
 

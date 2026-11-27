@@ -36,6 +36,7 @@
 #include "orbit/belt_layer.h"
 #include "orbit/tail_layer.h"
 #include "orbit/solar_data.h"
+#include "orbit/porkchop_gpu.h"
 #include "orbit/ring_check.h"
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
@@ -956,6 +957,38 @@ static bool want(const char* name) {
     return list.find(std::string(",") + name + ",") != std::string::npos || list.find(std::string(",") + name + ":") != std::string::npos;
 }
 
+// 0.92.0: the porkchop grid on the card (kPorkchopCS) against the processor's double-precision solver (orbit/lambert.h): the same cells, each C3 and v_inf within the bound
+static void gpuPorkchop(render::Renderer2D& R) {
+    render::PorkchopCard& C = R.porkchopCard();
+    std::string why;
+    check("porkchop: the program is made (" + why + ")", C.build(nullptr, why));
+    struct Case { int dep, arr; double dep0, depStep, arr0, arrStep; int n; };
+    const Case cases[] = {{2, 3, 2461200.5, 4, 2461300.5, 5, 96}, {2, 1, 2461300.5, 2, 2461380.5, 2, 80}, {2, 4, 2461000.5, 10, 2461400.5, 12, 64}, {3, 2, 2461400.5, 6, 2461550.5, 6, 64}};
+    for (const Case& k : cases) {
+        orbit::lambert::PorkchopSetup s;
+        s.dep = k.dep; s.arr = k.arr; s.depJD0 = k.dep0; s.depStep = k.depStep; s.arrJD0 = k.arr0; s.arrStep = k.arrStep; s.nDep = s.nArr = k.n;
+        const orbit::lambert::PorkchopInput in = orbit::lambert::porkchopInput(s);
+        const orbit::lambert::PorkchopGrid ref = orbit::lambert::porkchopCpu(in);
+        const int id = C.begin(orbit::lambert::gpuJobOf(in));
+        check("porkchop: a batch starts", id > 0);
+        std::vector<float> res;
+        render::JobState st = render::JobState::Pending;
+        for (int t = 0; t < 4000 && st == render::JobState::Pending; t++) { st = C.poll(id, res); if (st == render::JobState::Pending) std::this_thread::sleep_for(std::chrono::milliseconds(2)); }
+        check("porkchop: the batch finishes", st == render::JobState::Done);
+        if (st != render::JobState::Done) continue;
+        const orbit::lambert::PorkchopGrid g = orbit::lambert::gridOfCard(in, res);
+        const orbit::lambert::GridCompare cmp = orbit::lambert::compareGrids(in, ref, g);
+        std::printf("porkchop %s->%s %d x %d: %ld cells, %ld solved by both, %ld flips, worst C3 miss %.3e of its bound (%.3e km2/s2 at %.2f), worst v_inf miss %.3e km/s (%.3e of its bound), worst conditioning T/|dT| %.3g, %ld over the bound\n",
+                    orbit::kPlanets[k.dep].name, orbit::kPlanets[k.arr].name, k.n, k.n, cmp.cells, cmp.both, cmp.flips, cmp.worstC3OfBound, cmp.worstC3, cmp.worstC3At, cmp.worstVinf, cmp.worstVinfOfBound, cmp.worstKappa, cmp.over);
+        check("porkchop: every cell both solved is within the derived single-precision bound", cmp.over == 0);
+        check("porkchop: cells solved by one side only are under 0.1 % of the grid and have no small C3", cmp.flips * 1000 <= cmp.cells && cmp.flipLow == 0);
+        // the plot: the pixels (one a cell) of the card's grid against the processor's, 8-bit colours over the same value range; at most 1 % of the pixels differ by more than 8 levels
+        const long pix = orbit::lambert::plotPixelsOver(ref, g, 8);
+        std::printf("porkchop plot: %ld of %ld pixels differ by more than 8 levels\n", pix, cmp.cells);
+        check("porkchop: the plot has at most 1 % of its pixels over 8 levels", pix * 100 <= cmp.cells);
+    }
+}
+
 int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);                          // 0.85.2: unbuffered (the owner's Radeon crashed it with the last lines still in the buffer)
     const std::string dir = argc > 1 ? argv[1] : "";
@@ -994,6 +1027,7 @@ int main(int argc, char** argv) {
     if (want("chartPictures")) { part("chartPictures"); chartPictures(R, dir); }
     if (want("chartShaderRules")) { part("chartShaderRules"); chartShaderRules(R); }
     if (want("starDots")) { part("starDots"); starDots(R, dir); }   // 0.86.0
+    if (want("gpuPorkchop")) { part("gpuPorkchop"); gpuPorkchop(R); }   // 0.92.0
     if (want("fallback33")) { part("fallback33"); fallback33(dir); }
     vkDeviceWaitIdle(g_vk.dev);
     R.useVulkan(nullptr);                                              // (the card programs' objects deleted before the device)

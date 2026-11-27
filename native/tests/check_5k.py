@@ -3,6 +3,7 @@
 #   log    the changelog page opens; calc   the calculator works (0.49); data   the Data panel works (0.51); about   the About page's last line (0.74.0)
 #   check_5k.py <PhysicsLab binary> <work folder> <part>
 import os, re, sys
+HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, prefetch, Bmp
 
@@ -155,6 +156,118 @@ def part_data(binary, work):
     check(lines and " logx=1 logy=1 " in lines[-1] and " held1=" not in lines[-1] and " p1=1.5001" in lines[-1], f"log axes on, and n free again after Hold is unticked: {lines[-1:]}")
     check(not r.scripted_missing(), f"every scripted control was there ({r.scripted_missing()[:2]})")
 
+def part_celestial(binary, work):
+    # 0.92.0: the Orbit Lab's celestial mechanics tools in the Data panel. One run opens each in turn (Lagrange points of the Sun and Saturn, the Kirkwood histogram, an ephemeris table of Jupiter, the
+    # drift check) and reads the line each tool prints (PLCELESTIAL); the numbers are checked here by their own mathematics, not by the app's functions: the collinear equation solved again by
+    # bisection, the histogram counted again from asteroid_data.inc, the resonances by Kepler's third law, Jupiter's distance between its perihelion and aphelion, the drift under the limits of the
+    # unit tests. A second run turns the five points on in the picture (amber and green rings: pixels of those colours outside the panel). A third makes the porkchop grid (Earth to Mars: its best
+    # C3 near the Hohmann one) and says which program solved it.
+    import math
+    def lines(r, tool):
+        return [ln[len("PLCELESTIAL "):] for ln in r.out.splitlines() if ln.startswith("PLCELESTIAL " + tool)]
+    def kv(ln):
+        d = {}
+        for tok in re.findall(r"(\w+)=(\S+)", ln):
+            d[tok[0]] = tok[1]
+        return d
+    seq = ("10:click=top.data;16:click=data.tables;20:click=data.table.cm:lagrange;26:click=cm.lg.pick;32:click=cm.lg.5;"
+           "42:click=data.tables;46:click=data.table.cm:kirkwood;"
+           "56:click=data.tables;60:click=data.table.cm:ephem;"
+           "70:click=data.tables;74:click=data.table.cm:drift;80:click=cm.dr.run")
+    r = run_app(binary, work, "celestial_a", {"PL_NEWUI": "on", "PL_SCRIPT": seq}, frames=330, size="1280x800")
+    check(not r.scripted_missing(), f"celestial: every scripted control was there ({r.scripted_missing()[:3]})")
+    # --- the Lagrange points of the Sun and Saturn
+    lg = [kv(l) for l in lines(r, "lagrange")]
+    d = next((d for d in lg if "L1km" in d and abs(float(d["mu"]) - 2.85e-4) < 1e-4), None)
+    check(d is not None, f"celestial: the Lagrange line for the Sun and Saturn was printed ({lg[-1:]})")
+    if d:
+        mu, sep = float(d["mu"]), float(d["sepkm"])
+        def force(x):
+            d1, d2 = x + mu, x - 1 + mu
+            return -(1 - mu) * d1 / abs(d1) ** 3 - mu * d2 / abs(d2) ** 3 + x
+        def root(lo, hi):
+            ln = force(lo) < 0
+            for _ in range(200):
+                m = (lo + hi) / 2
+                if (force(m) < 0) == ln: lo = m
+                else: hi = m
+            return (lo + hi) / 2
+        rh = (mu / 3) ** (1 / 3)
+        x1, x2, x3 = root(-mu + 1e-9, 1 - mu - 1e-3 * rh), root(1 - mu + 1e-3 * rh, 3), root(-3, -mu - 1e-9)
+        want = [(1 - mu - x1) * sep, (x2 - (1 - mu)) * sep, (1 - mu - x3) * sep, sep, sep]     # the distance of each point from the light body; L4 and L5 are one separation from both
+        got = [float(d[k]) for k in ("L1km", "L2km", "L3km", "L4km", "L5km")]
+        check(all(abs(g - w) <= 1e-6 * w for g, w in zip(got, want)), f"celestial: L1..L5 distances from the light body match the collinear equation solved again ({got} vs {want})")
+        check(abs(got[0] / sep - (rh - rh * rh / 3)) < 0.01 * rh and abs(got[1] / sep - (rh + rh * rh / 3)) < 0.01 * rh, "celestial: L1 and L2 lie at the Hill radius (mu/3)^(1/3) -/+ a third of its square")
+        check(d["stable"] == "1", "celestial: L4 and L5 of the Sun and Saturn are stable (27 mu (1 - mu) < 1)")
+    # --- the Kirkwood histogram
+    kw = [kv(l) for l in lines(r, "kirkwood")]
+    check(bool(kw), "celestial: the Kirkwood line was printed")
+    if kw:
+        d = kw[-1]
+        inc = open(os.path.join(HERE, "..", "src", "orbit", "asteroid_data.inc"), encoding="utf-8").read()
+        rocks = [tuple(float(v) for v in m.split(",")[:3]) for m in re.findall(r"^\{(\d[^{}]*)\}", inc, re.M)]
+        lo, w = float(d["lo"]), float(d["w"])
+        counts = [0] * 80
+        below = above = total = 0
+        for g, a, e in rocks:
+            if int(g) != 0: continue
+            total += 1
+            if a < lo: below += 1
+            elif a >= lo + 80 * w: above += 1
+            else: counts[int((a - lo) // w)] += 1
+        got = [int(c) for c in d["counts"].strip(",").split(",")]
+        check(got == counts and int(d["total"]) == total and int(d["below"]) == below and int(d["above"]) == above, f"celestial: the histogram is the data counted again ({total} rocks, {below} below, {above} above)")
+        ms = {m.split("@")[0]: float(m.split("@")[1]) for m in d["markers"].strip(",").split(",")}
+        sol = open(os.path.join(HERE, "..", "src", "orbit", "solar_data.cpp"), encoding="utf-8").read()
+        aj = float(re.search(r'\{"Jupiter", "#[0-9a-f]+", "gas giant",\s*\{([0-9.]+),', sol).group(1))
+        okm = all(abs(ms[f"{p}:{q}"] - aj * (q / p) ** (2 / 3)) < 1e-6 for p, q in ((4, 1), (3, 1), (5, 2), (7, 3), (2, 1)))
+        check(okm, f"celestial: the five resonances are a_J (q/p)^(2/3) with a_J = {aj} AU from the lab's Jupiter ({ms})")
+        # the gap at 3:1 is in the data: the bins within 0.03 AU of it hold fewer than half the rocks of the same number of bins on each side
+        k31 = int((ms["3:1"] - lo) // w)
+        inside, beside = sum(got[k31 - 1:k31 + 2]), (sum(got[k31 - 5:k31 - 2]) + sum(got[k31 + 3:k31 + 6])) / 2
+        check(inside * 2 < beside, f"celestial: the 3:1 gap is in the counts ({inside} rocks in 3 bins, {beside} in each side's 3)")
+    # --- the ephemeris table: Jupiter, Simple
+    ep = [kv(l) for l in lines(r, "ephem")]
+    check(bool(ep) and ep[-1]["planet"] == "Jupiter" and ep[-1]["rows"] == "8", f"celestial: the ephemeris table has 8 rows for Jupiter ({ep[-1:]})")
+    if ep:
+        d0, dn = float(ep[-1]["dist0"]), float(ep[-1]["distN"])
+        check(4.9 < d0 < 5.5 and 4.9 < dn < 5.5 and 0 <= float(ep[-1]["lon0"]) < 360 and abs(float(ep[-1]["lat0"])) < 1.4, f"celestial: Jupiter is between its perihelion and aphelion distances ({d0}, {dn} AU)")
+        check(abs(float(ep[-1]["first"]) - (2461319.0 + 69.184 / 86400)) < 1.5, f"celestial: the first row is 2026-10-05 12:00 UT turned into TDB ({ep[-1]['first']})")
+    # --- the drift check
+    dr = [kv(l) for l in lines(r, "drift")]
+    check(bool(dr) and dr[-1]["done"] == "1", f"celestial: the drift check finished ({dr[-1:]})")
+    if dr:
+        check(float(dr[-1]["maxE"]) < 1e-11 and float(dr[-1]["maxL"]) < 1e-12 and dr[-1]["steps"] == "36525", f"celestial: energy and angular momentum drift under the unit tests' limits ({dr[-1]['maxE']}, {dr[-1]['maxL']})")
+    # --- the five points on the picture
+    def amber(rr):
+        b = Bmp(rr.bmp)
+        pan = rr.rects.get("panel.data") or (0, 0, 0, 0)
+        n = 0
+        for y in range(50, b.h - 50, 1):
+            for x in range(0, b.w, 1):
+                if pan[0] <= x <= pan[0] + pan[2] and pan[1] <= y <= pan[1] + pan[3]: continue
+                if x > b.w - 345: continue                                         # (the Controls panel)
+                R, G, B = b.px(x, y)
+                if (abs(R - 255) < 12 and abs(G - 199) < 14 and abs(B - 89) < 18) or (abs(R - 115) < 12 and abs(G - 217) < 14 and abs(B - 140) < 18): n += 1
+        return n
+    seq = "10:click=top.data;16:click=data.tables;20:click=data.table.cm:lagrange;26:click=cm.lg.pick;30:click=cm.lg.4;36:click=cm.lg.show"
+    rb = run_app(binary, work, "celestial_b", {"PL_NEWUI": "on", "PL_SCRIPT": seq, "PL_ZOOM": "-0.26", "PL_SELECT": "Jupiter"}, frames=70, size="2000x900")   # (wide: the picture's middle, with Jupiter in it, is right of the panel)
+    on, off = amber(rb), amber(r)
+    check(not rb.scripted_missing() and on > off + 8, f"celestial: the picture shows the Lagrange points of the Sun and Jupiter (amber and green ring pixels outside the panel: {on} with them, {off} without)")
+    # --- the transfer planner
+    seq = "10:click=top.data;16:click=data.tables;20:click=data.table.cm:transfer"
+    rc = run_app(binary, work, "celestial_c", {"PL_NEWUI": "on", "PL_SCRIPT": seq}, frames=200, size="1280x800")
+    tr = [kv(l) for l in lines(rc, "transfer")]
+    check(bool(tr) and tr[-1]["dep"] == "Earth" and tr[-1]["arr"] == "Mars", f"celestial: the transfer planner made an Earth to Mars grid ({tr[-1:]})")
+    if tr:
+        mu = 1.32712440041279419e20; au = 149597870700.0
+        r1, r2 = 1.00000261 * au, 1.52371034 * au          # JPL's approximate semi-major axes of Earth and Mars (the lab's elements)
+        hoh = (math.sqrt(mu / r1) * (math.sqrt(2 * r2 / (r1 + r2)) - 1) / 1000) ** 2
+        c3 = float(tr[-1]["best_c3"])
+        check(0.85 * hoh <= c3 <= 1.4 * hoh, f"celestial: the best C3 of the grid ({c3:.3g} km2/s2) is near the Hohmann transfer's {hoh:.3g}")
+        check(tr[-1]["n"] == "96" and "PLPORKCHOPCARD state=1" in rc.out and tr[-1]["cardstate"] == "1", "celestial: the card's porkchop program passed its start-up check against the processor")
+    check(not rc.scripted_missing(), f"celestial: every scripted control of the planner was there ({rc.scripted_missing()[:3]})")
+
 def part_about(binary, work):
     # 0.74.0 (owner, 22 Nov 2026): the developer's paragraph of About ends with "Free Palestine" in bold and a small DRAWN flag of Palestine (html_view.cpp lrnFlagPS: 1:2, the height of the
     # line's letters, right after the words). One run: the page as it opens (the paragraph is in the first card), the words drawn and the flag's box in view.
@@ -167,6 +280,6 @@ def part_about(binary, work):
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"log": part_log, "calc": part_calc, "data": part_data, "about": part_about}[part](binary, work)
+    {"log": part_log, "calc": part_calc, "data": part_data, "about": part_about, "celestial": part_celestial}[part](binary, work)
     print(f"{checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

@@ -1,0 +1,89 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/jpl/sats_phys_par_2026-11-23.html
+# Reference: JPL SSD, "Planetary Satellite Physical Parameters" (the GM column of its table, and the table "Planet and Pluto GM Values")
+# URL: https://ssd.jpl.nasa.gov/sats/phys_par/
+# Date read: 2026-11-23 (the saved page; read again 2026-11-27 with the same sha256)
+# sha256 of the original: 9a9c004d950923ea368a8c4815d813c9c232c332d1586402a23b15d9581370d1
+# Place in the original: the table's rows of the Moon, Io, Europa, Ganymede, Callisto, Titan and Triton (name cell, code cell, GM in km^3/s^2), and the planets' own GM rows
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/orbit/lagrange.cpp (the GM values of the pairs); tests/test_celestial.cpp testSatellitePage
+#--- begin satellite Moon
+      <td class="text-left">Moon</td>
+      <td class="text-center">301</td>
+
+
+      <td class="text-center">
+
+            4902.800
+#--- end
+#--- begin satellite Io
+      <td class="text-left">Io</td>
+      <td class="text-center">501</td>
+
+
+      <td class="text-center">
+
+            5959.91547
+#--- end
+#--- begin satellite Europa
+      <td class="text-left">Europa</td>
+      <td class="text-center">502</td>
+
+
+      <td class="text-center">
+
+            3202.71210
+#--- end
+#--- begin satellite Ganymede
+      <td class="text-left">Ganymede</td>
+      <td class="text-center">503</td>
+
+
+      <td class="text-center">
+
+            9887.83275
+#--- end
+#--- begin satellite Callisto
+      <td class="text-left">Callisto</td>
+      <td class="text-center">504</td>
+
+
+      <td class="text-center">
+
+            7179.28340
+#--- end
+#--- begin satellite Titan
+      <td class="text-left">Titan</td>
+      <td class="text-center">606</td>
+
+
+      <td class="text-center">
+
+            8978.13710
+#--- end
+#--- begin satellite Triton
+      <td class="text-left">Triton</td>
+      <td class="text-center">801</td>
+
+
+      <td class="text-center">
+
+            1428.49546
+#--- end
+#--- begin planet Earth (Planet and Pluto GM Values)
+          <td>Earth</td>
+          <td class="text-center text-nowrap">398600.436 &pm;0.001</td>
+#--- end
+#--- begin planet Jupiter (Planet and Pluto GM Values)
+          <td>Jupiter</td>
+          <td class="text-center text-nowrap">126686531.9 &pm;0.42</td>
+#--- end
+#--- begin planet Saturn (Planet and Pluto GM Values)
+          <td>Saturn</td>
+          <td class="text-center text-nowrap">37931206.23 &pm;0.24</td>
+#--- end
+#--- begin planet Neptune (Planet and Pluto GM Values)
+          <td>Neptune</td>
+          <td class="text-center text-nowrap">6835099.97 &pm;9.63</td>
+#--- end

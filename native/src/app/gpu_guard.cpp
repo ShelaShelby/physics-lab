@@ -489,6 +489,11 @@ GpuGuard& gpuJumpGuard() {
     return v;
 }
 
+GpuGuard& gpuVkPorkchopGuard() {   // 0.92.0
+    static GpuGuard g("gpu-vkporkchop-step.txt", GpuGuard::kLog, false, "[vulkan] [porkchop] ", "The porkchop grid on Vulkan");
+    return g;
+}
+
 GpuGuard& gpuVkGroupsGuard() {
     static GpuGuard g("gpu-vkgroups-step.txt", GpuGuard::kLog, false, "[vulkan] [groups] ", "The superposition and jump groups on Vulkan");
     return g;
@@ -550,7 +555,8 @@ std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards() {
                                                        {"lightpaths", &gpuGuard()}, {"sky", &gpuSkyGuard()}, {"lens", &gpuVkLensGuard()},   // (0.62.0)
                                                        {"rings", &gpuVkRingsGuard()}, {"classic", &gpuVkClassicGuard()},   // (0.64.0)
                                                        {"nucdensity", &gpuVkNucDensGuard()},   // (0.67.0)
-                                                       {"lines", &gpuVkLinesGuard()}, {"surface", &gpuVkSurfaceGuard()}};   // (0.68.0)
+                                                       {"lines", &gpuVkLinesGuard()}, {"surface", &gpuVkSurfaceGuard()},   // (0.68.0)
+                                                       {"porkchop", &gpuVkPorkchopGuard()}};   // (0.92.0)
     return v;
 }
 

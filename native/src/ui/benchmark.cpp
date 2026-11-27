@@ -53,6 +53,8 @@
 #include "ui/app_pages.h"
 #include "ui/changelog.h"
 #include "ui/data_panel.h"
+#include "ui/celestial_panel.h"
+#include "ui/porkchop_runner.h"
 #include "ui/fonts.h"
 #include "ui/journey_dates.h"
 #include "ui/look.h"
@@ -540,6 +542,7 @@ app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, i
 
 // everything the benchmark must give back, and what it gathers
 struct BenchState {
+    int holdScene = -1; double holdS = 0;      // 0.92.0: the warm-up held for an undecided card program (BenchRun::frame hold)
     enum class Stage { Closed, Ask, Running, Done } stage = Stage::Closed;
     std::unique_ptr<app::BenchRun> run;
     // ---- the user's state, put back at the end (or when cancelled) ----
@@ -741,6 +744,12 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitSunEdge: orbitSunClose(app); b.scenePhase = 0; break;
         case K::OrbitOortRegion: orbitOortRegion(app); break;
         case K::OrbitTrueLightStars: orbitTrueLightStars(app); break;   // 0.86.0
+        case K::OrbitPorkchop:                                               // 0.92.0: the Data panel open on the transfer planner, Earth to Mars, the largest grid
+            commonSetup(app);
+            app.lab = 0;
+            dataBenchOpenTool(app, "cm:transfer");
+            celestialBenchPorkchop(app, 0);
+            break;
         case K::Atom:
             commonSetup(app);
             app.lab = 1;
@@ -821,6 +830,9 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
             if (b.scenePhase == 0 && u >= 0.5 * (warm + meas)) { b.scenePhase = 1; orbitClose(app, "Earth", kEarthZoom); }
             app.view.yaw = 0.6 + 0.5 * u;
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            break;
+        case K::OrbitPorkchop:                                                   // 0.92.0: the departure window dragged back and forth (a triangle wave over 5.7 s), a new grid each frame
+            celestialBenchPorkchop(app, 0.35 * u);
             break;
         case K::OrbitOortRegion: case K::OrbitTrueLightStars:
         case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds: case K::OrbitCometTails:
@@ -1030,6 +1042,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? "the graphics card (Vulkan rock compute)" :   // (0.63.1: the API in use)
                                                       !app.rocksOk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)") +
                    "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.68.0
+        case K::OrbitPorkchop: return celestialPorkchopPathText(app.computeOk);   // 0.92.0
         case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
         case K::OrbitFlyby: return orbit::ringCardPathText(g_vk) + "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.75.0
         case K::OrbitAlphaCen: return "the Alpha Centauri orbits: " + orbit::linesCardPathText(g_vk != nullptr);   // 0.73.0
@@ -1177,6 +1190,7 @@ const std::vector<WaitDef>& waitDefs() {
                                                                         "with the eased step (0.83.0); until the sharp picture of the new distance"},
         {"response.sunspot_table", "The Sun's first close view (the sunspot table read)", "the Orbit Lab at its defaults, the built-in sunspot table not read yet "
                                                                     "(orbit/sunspots.h, 255,250 rows): the Sun picked, close up on 10 May 2024; until the picture with its spot outlines"},
+        {"response.porkchop_grid", "A new porkchop grid", "the Data panel on the transfer planner, Earth to Mars, the largest grid (65,536 cells): the departure window moved 40 days; until the new grid is solved and drawn (the card once its start-up check has passed)", 1},
         {"response.orbit_date", "A jump to a far date in Real physics", "Planet physics Real: from today to 1850-06-01, 2095-01-01 and 1805-03-01; until the picture of that date is drawn"},
     };
     return v;
@@ -1237,6 +1251,13 @@ void waitPrepare(AppState& app, int w, int t) {
         app.view = orbit::OrbitView();
         app.paused = true;
         orbit::sunspotTableReset();
+    } else if (id == "response.porkchop_grid") {                 // 0.92.0: the transfer planner open, its first grid made
+        app.lab = 0;
+        resetToToday(app);
+        app.set = orbit::ViewSettings();
+        app.paused = true;
+        dataBenchOpenTool(app, "cm:transfer");
+        celestialBenchPorkchop(app, 0);
     } else if (id == "response.orbit_date") {
         app.lab = 0;
         resetToToday(app);
@@ -1262,6 +1283,7 @@ void waitAct(AppState& app, int w, int t) {
     else if (id == "response.blackhole_streaks") { blackhole::streakFieldRemake(); app.blackhole.gasPattern = true; }
     else if (id == "response.blackhole_tilt") blackhole::turn(app.blackhole, 0.1, 0.1);   // (from 80 to 85.7 degrees from the axis; each try starts from waitPrepare)
     else if (id == "response.sunspot_table") { app.view.select({orbit::Selection::Star}, true); app.view.ox = app.view.oy = 0; setZoom(app, kSunZoom); }
+    else if (id == "response.porkchop_grid") celestialBenchPorkchop(app, 40.0 / 900.0);   // the departure window 40 days on
     else if (id == "response.orbit_date") {
         static const int64_t dates[3] = {-3773779200000LL, 3944678400000LL, -5201798400000LL};   // 1850-06-01, 2095-01-01, 1805-03-01 (00:00 UTC)
         jumpToDate(app, dates[t], true);   // (as the Go button: 0.67.0 walks a far date on a worker)
@@ -1322,6 +1344,7 @@ void restore(AppState& app, BenchState& b) {
     app.showSettings = b.showSettings; app.showAbout = b.showAbout; app.showHistory = b.showHistory;
     app.prefs = *b.prefs;
     dataBenchRestore(b.data);
+    celestialBenchRestore();   // 0.92.0
     app.dateNote = b.dateNote;
     std::snprintf(app.dateText, sizeof app.dateText, "%s", b.dateText); std::snprintf(app.timeText, sizeof app.timeText, "%s", b.timeText);
     b.sys.reset(); b.view.reset(); b.atom.reset(); b.atomView.reset(); b.molecule.reset(); b.prefs.reset(); b.data.reset();
@@ -1401,6 +1424,7 @@ void begin(AppState& app) {
     b.molecule = std::make_unique<molecule::MoleculeLab>(app.molecule);
     b.prefs = std::make_unique<app::Prefs>(app.prefs);
     b.data = dataBenchSave();
+    celestialBenchSave();   // 0.92.0
     b.set = app.set; b.journey = app.journey; b.tempK = app.tempK;
     b.dateNote = app.dateNote;
     std::snprintf(b.dateText, sizeof b.dateText, "%s", app.dateText); std::snprintf(b.timeText, sizeof b.timeText, "%s", app.timeText);
@@ -1648,6 +1672,7 @@ bool benchLabFinished(AppState& app, render::Renderer2D& R) {
         if (L.p.view == "Orbit" || L.chartOn()) return true;
         return L.s.k >= L.cloudCap() && !L.s.trans;
     }
+    if (app.lab == 0 && celestialBusy()) return false;     // 0.92.0: a porkchop grid being solved
     if (app.lab == 0 && app.jumpWaiting) return false;     // 0.67.0: a far jump's walk under way (its picture is not drawn yet)
     if (app.lab == 0 && !orbit::linesCardSettled(R.vulkan())) return false;   // 0.68.0: the card's lines still being made and checked (drawn anew each frame)
     if (app.lab == molecule::kLabIndex) {
@@ -1918,7 +1943,14 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
     static const bool slowLog = envHas("PL_BENCH_SLOW");                  // (development: the frames over 250 ms, with their scene)
     if (slowLog && frameMs > 250 && sc < int(b.list.size())) std::printf("PLBENCH-SLOW %s %.0f ms %s at %.2f s\n", sceneText(b.list[std::size_t(sc)]).id.c_str(), frameMs, b.run->measuring() ? "counted" : "warm-up", b.run->sceneElapsedS());
     if (last && sc == 0 && !b.run->measuring()) b.swapMs += last->swapchainMs;   // 0.63.1: the swapchain made again for VSync off (the first scene's warm-up)
-    b.run->frame(frameMs, cpuMs, !grabbed, last);
+    // 0.92.0: a card program that has not passed or failed its start-up check by the end of the warm-up would have the scene measured on the processor with a report that
+    // says "once its start-up check has passed" (the loaded GitHub runner of 0.91.0's full tests: check_molecule.py card). The warm-up goes on until it is decided, at most kBenchHoldMaxS.
+    bool hold = false;
+    if (!b.run->measuring() && sc < int(b.list.size()) && b.run->sceneElapsedS() + frameMs / 1000 >= b.run->warmupS()) {
+        if (b.holdScene != sc) { b.holdScene = sc; b.holdS = 0; }
+        if (b.holdS < app::kBenchHoldMaxS && [&] { const std::string pt = scenePath(app, b, b.list[std::size_t(sc)], sc); return pt.find(app::kPathUndecidedCloud) != std::string::npos || pt.find(app::kPathUndecidedSurface) != std::string::npos; }()) { hold = true; b.holdS += frameMs / 1000; }
+    }
+    b.run->frame(frameMs, cpuMs, !grabbed, last, hold);
     settle(!grabbed);
     if (grabbed) b.grabNext = 0;
     if (b.run->finished()) nextPhase(app, b);

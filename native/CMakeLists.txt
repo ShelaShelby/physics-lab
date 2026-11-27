@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.91.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.92.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -55,6 +55,9 @@ add_library(orbit_core STATIC
   src/orbit/saturn_profile.cpp
   src/orbit/ring_bands.cpp
   src/orbit/nbody.cpp
+  src/orbit/lagrange.cpp
+  src/orbit/lambert.cpp
+  src/orbit/ephem_table.cpp
   src/orbit/moon_elp.cpp
   src/orbit/moon_sats.cpp
   src/orbit/solar_system.cpp
@@ -298,6 +301,12 @@ if(PL_BUILD_TESTS)
   target_link_libraries(nbody_tests PRIVATE orbit_core)
   target_compile_options(nbody_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME nbody_physics COMMAND nbody_tests)
+  add_executable(celestial_tests tests/test_celestial.cpp)   # 0.92.0: Lagrange points, Kirkwood gaps, Lambert and the porkchop grid, the ephemeris table and the drift check
+  target_include_directories(celestial_tests PRIVATE tests)
+  target_link_libraries(celestial_tests PRIVATE orbit_core)
+  target_compile_definitions(celestial_tests PRIVATE PL_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+  target_compile_options(celestial_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME celestial_physics COMMAND celestial_tests)
   add_executable(jpl_tests tests/test_jpl.cpp)
   target_include_directories(jpl_tests PRIVATE tests)
   target_link_libraries(jpl_tests PRIVATE orbit_core)
@@ -429,7 +438,7 @@ if(PL_BUILD_APP)
                       # storage buffers keep the bindings of their text)
                       "cloud_vert:kCloudVS" "moldot_vert:kMolDotVS" "cgrid_vert:kCloudGridVS" "mgrid_vert:kMolGridVS" "grid_frag:kCloudGridFS"
                       "groups_comp:kGroupsCS" "outdens_comp:kOutlineDensityCS" "outlevel_comp:kOutlineLevelCS" "rocks_comp:kRocksCS" "grains_comp:kGrainsCS" "slice_comp:kSliceDotsCS"
-                      "jump_comp:kJumpShowCS" "dirac_comp:kDiracSliceCS" "moldots_comp:kMolDotsCS"
+                      "jump_comp:kJumpShowCS" "dirac_comp:kDiracSliceCS" "moldots_comp:kMolDotsCS" "porkchop_comp:kPorkchopCS"   # 0.92.0: the porkchop grid
                       # 0.62.0 (Vulkan step 4): the Black Hole Lab's, the same way (kKerrSkyFS from its parts, as render/kerr_sky.cpp; the light paths' compute
                       # shader in double precision: shaderFloat64)
                       "lens_frag:kLensHeadPart+kGasPart+kDiscLightPart+kLensMainPart" "kerr_frag:kKerrHeadPart+kDiscLightPart+kKerrMainPart" "skytiny_frag:kKerrSkyTinyFS" "skymath_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyMathPart"
@@ -496,7 +505,7 @@ if(PL_BUILD_APP)
    
     src/render/kerr_compute.cpp
     src/render/kerr_sky.cpp
-    src/render/atom_card.cpp
+    src/render/atom_card.cpp src/render/porkchop_card.cpp
     src/render/molecule_card.cpp
     src/blackhole/spin_card.cpp
     src/blackhole/sky_card.cpp
@@ -525,6 +534,8 @@ if(PL_BUILD_APP)
     src/ui/shell.cpp
     src/ui/calc_panel.cpp
     src/ui/data_panel.cpp
+    src/ui/celestial_panel.cpp
+    src/ui/porkchop_runner.cpp
     src/ui/shell_widgets.cpp
     src/ui/shell_orbit.cpp
     src/ui/shell_atom.cpp
@@ -559,7 +570,7 @@ if(PL_BUILD_APP)
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
   if(PL_VK_TESTS)                                      # vk_compare_tests: the GPU programs against the CPU
     add_executable(vk_compare_tests tests/vk_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/renderer2d_vk.cpp src/render/kerr_compute.cpp
-                   src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp src/orbit/tail_layer.cpp src/orbit/ring_check.cpp src/atom/classic_check.cpp
+                   src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/porkchop_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp src/orbit/tail_layer.cpp src/orbit/ring_check.cpp src/atom/classic_check.cpp
                    src/atom/nucdens_check.cpp src/orbit/orbit_lines.cpp src/orbit/lines_check.cpp src/render/vk_lines.cpp src/molecule/surface_check.cpp src/render/vk_surface.cpp
                    src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp
                    ${PL_VK_SHADER_HEADERS})
@@ -586,7 +597,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_smoke PROPERTIES TIMEOUT 900 COST 30)
       # ui_shell: the app's start on Vulkan, the message without Vulkan, the GPU guards and the crash-safe helper; the calculator, the Data panel, About and the changelog
       add_test(NAME ui_shell COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_shell
-               check_shell.py:vulkan check_shell.py:novulkan check_shell.py:guardturn check_shell.py:gpuhelper check_5k.py:calc check_5k.py:data check_5k.py:about check_5k.py:log)
+               check_shell.py:vulkan check_shell.py:novulkan check_shell.py:guardturn check_shell.py:gpuhelper check_5k.py:calc check_5k.py:data check_5k.py:about check_5k.py:log check_5k.py:celestial)
       set_tests_properties(ui_shell PROPERTIES TIMEOUT 900 COST 232)
       # ui_screens: Settings, the Benchmark window, search in every lab, the look of the themes
       add_test(NAME ui_screens COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_screens

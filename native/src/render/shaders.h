@@ -3334,6 +3334,139 @@ void main() {
 // its fixed group (its shell's colour, uploaded once per jump, 4 a word), shown when its fixed random number, the lab's splitmix64 of i + (pop << 40) as
 // z >> 11, is below the share times 2^53, an integer compare (uT0 for the old dots, uT1 for the new, each the 53-bit integer ceil(share 2^53) as (low, high)
 // words): the same decision as the processor's double, bit for bit. Written 4 groups a word, read by the cloud's programs as their group attribute.
+// ---- 0.92.0: Lambert's problem for a whole grid of departure and arrival dates (the Orbit Lab's porkchop plot), one cell an invocation ----
+// The same algorithm as orbit/lambert.cpp (D. Izzo, Celestial Mechanics and Dynamical Astronomy 121 (2015) 1: Householder iterations on T(x), Eq. (18) with the derivatives of
+// Eq. (22); the start of Eq. (30) as improved after it; Battin's series, Eq. (20), near x = 1; Algorithm 1 for the velocities), zero revolutions, in single precision with
+// the units of porkchop_input (length AU, mu = 1). The processor's double-precision solver is the reference (tests/vk_compare.cpp). A cell with no transfer gets (-1, -1).
+// dep, arr: two vec4 a date, its position (AU, w unused) then its velocity (canonical units). res: vec2 a cell, i * uNArr + j: C3 (km^2/s^2) and the arrival speed relative to the planet (km/s).
+static const char* const kPorkchopCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) writeonly buffer Out { vec2 res[]; };
+layout(std430, binding = 1) readonly buffer Dep { vec4 dep[]; };
+layout(std430, binding = 2) readonly buffer Arr { vec4 arr[]; };
+uniform int uNDep;
+uniform int uNArr;
+uniform float uOff;
+uniform float uDepStep;
+uniform float uArrStep;
+uniform float uTU;
+uniform float uVK;
+
+// T(x) for lambda lam: Eq. (18); within 0.2 of x = 1 (where 1 - x^2 and psi both go to 0 and single precision would cancel) Battin's series, Eq. (20)
+float tofT(float lam, float x) {
+    float lam2 = lam * lam;
+    float om = 1.0 - x * x;
+    float y = sqrt(max(1.0 - lam2 * om, 0.0));
+    float T = 0.0;
+    if (abs(x - 1.0) < 0.2) {
+        float eta = y - lam * x;
+        float S1 = 0.5 * (1.0 - lam - x * eta);
+        float term = 1.0;
+        float sum = 1.0;
+        for (int k = 0; k < 60; k++) {
+            term = term * (3.0 + float(k)) / (2.5 + float(k)) * S1;
+            sum = sum + term;
+            if (abs(term) < 1.0e-8 * abs(sum)) break;
+        }
+        T = 0.5 * (eta * eta * eta * (4.0 / 3.0) * sum + 4.0 * lam * eta);
+    } else {
+        float psi = 0.0;
+        if (x < 1.0) psi = acos(clamp(x * y + lam * om, -1.0, 1.0));
+        else psi = acosh(max(1.0, x * y - lam * (x * x - 1.0)));
+        T = (psi / sqrt(abs(om)) - x + lam * y) / om;
+    }
+    return T;
+}
+
+// T(x) and its first three derivatives. Away from x = 1 the derivatives are Eq. (22). Eq. (22) divides by 1 - x^2 once for each derivative, which in single precision turns the rounding of T
+// into garbage within 0.2 of x = 1 (the processor's double precision has room for it): there the derivatives are central differences of the series, steps 0.02, 0.03 and 0.05.
+vec4 tofCurve(float lam, float x) {
+    float T = tofT(lam, x);
+    if (abs(x - 1.0) < 0.2) {
+        float h1 = 0.02;
+        float h2 = 0.03;
+        float h3 = 0.05;
+        float d1 = (tofT(lam, x + h1) - tofT(lam, x - h1)) / (2.0 * h1);
+        float d2 = (tofT(lam, x + h2) - 2.0 * T + tofT(lam, x - h2)) / (h2 * h2);
+        float d3 = (tofT(lam, x + 2.0 * h3) - 2.0 * tofT(lam, x + h3) + 2.0 * tofT(lam, x - h3) - tofT(lam, x - 2.0 * h3)) / (2.0 * h3 * h3 * h3);
+        return vec4(T, d1, d2, d3);
+    }
+    float lam2 = lam * lam;
+    float lam3 = lam2 * lam;
+    float om = 1.0 - x * x;
+    float y = sqrt(max(1.0 - lam2 * om, 0.0));
+    float d1 = (3.0 * T * x - 2.0 + 2.0 * lam3 * x / y) / om;
+    float d2 = (3.0 * T + 5.0 * x * d1 + 2.0 * (1.0 - lam2) * lam3 / (y * y * y)) / om;
+    float d3 = (7.0 * x * d2 + 8.0 * d1 - 6.0 * (1.0 - lam2) * lam2 * lam3 * x / (y * y * y * y * y)) / om;
+    return vec4(T, d1, d2, d3);
+}
+
+void main() {
+    int id = int(gl_GlobalInvocationID.x);
+    if (id >= uNDep * uNArr) return;
+    int i = id / uNArr;
+    int j = id - i * uNArr;
+    res[id] = vec2(-1.0, -1.0);
+    float tofD = uOff + uArrStep * float(j) - uDepStep * float(i);
+    if (!(tofD > 0.0)) return;
+    vec3 r1 = dep[2 * i].xyz;
+    vec3 vp1 = dep[2 * i + 1].xyz;
+    vec3 r2 = arr[2 * j].xyz;
+    vec3 vp2 = arr[2 * j + 1].xyz;
+    float n1 = length(r1);
+    float n2 = length(r2);
+    float c = length(r2 - r1);
+    float s = 0.5 * (n1 + n2 + c);
+    vec3 i1 = r1 / n1;
+    vec3 i2 = r2 / n2;
+    vec3 ih = cross(i1, i2);
+    float nh = length(ih);
+    if (!(nh > 1.0e-6)) return;
+    ih = ih / nh;
+    float lam = sqrt(max(0.0, 1.0 - c / s));
+    vec3 it1 = vec3(0.0);
+    vec3 it2 = vec3(0.0);
+    if (r1.x * r2.y - r1.y * r2.x < 0.0) { lam = -lam; it1 = cross(i1, ih); it2 = cross(i2, ih); }
+    else { it1 = cross(ih, i1); it2 = cross(ih, i2); }
+    float T = sqrt(2.0 / (s * s * s)) * (tofD / uTU);
+    float T00 = acos(clamp(lam, -1.0, 1.0)) + lam * sqrt(max(0.0, 1.0 - lam * lam));
+    float T1 = 2.0 / 3.0 * (1.0 - lam * lam * lam);
+    float x = 0.0;
+    if (T >= T00) x = pow(T00 / T, 2.0 / 3.0) - 1.0;
+    else if (T < T1) x = 2.5 * T1 * (T1 - T) / (T * (1.0 - pow(abs(lam), 5.0) * sign(lam))) + 1.0;
+    else x = pow(T / T00, log(T1 / T00) / log(2.0)) - 1.0;
+    for (int it = 0; it < 24; it++) {
+        vec4 f = tofCurve(lam, x);
+        float d = f.x - T;
+        float num = f.y * f.y - d * f.z * 0.5;
+        float den = f.y * (f.y * f.y - d * f.z) + f.w * d * d / 6.0;
+        float dx = d * num / den;
+        if (!(abs(dx) < 1.0e30)) return;
+        float xn = x - dx;
+        if (xn <= -1.0) xn = 0.5 * (x - 1.0);
+        float step = abs(xn - x);
+        x = xn;
+        if (step < 2.0e-6 * (1.0 + abs(x))) break;
+    }
+    float y = sqrt(max(0.0, 1.0 - lam * lam * (1.0 - x * x)));
+    float gam = sqrt(s * 0.5);
+    float rho = (n1 - n2) / c;
+    float sig = sqrt(max(0.0, 1.0 - rho * rho));
+    float Vr1 = gam * ((lam * y - x) - rho * (lam * y + x)) / n1;
+    float Vr2 = -gam * ((lam * y - x) + rho * (lam * y + x)) / n2;
+    float Vt1 = gam * sig * (y + lam * x) / n1;
+    float Vt2 = gam * sig * (y + lam * x) / n2;
+    vec3 v1 = i1 * Vr1 + it1 * Vt1;
+    vec3 v2 = i2 * Vr2 + it2 * Vt2;
+    vec3 d1 = v1 - vp1;
+    vec3 d2 = v2 - vp2;
+    float c3 = dot(d1, d1) * uVK * uVK;
+    float vi = length(d2) * uVK;
+    if (isnan(c3) || isnan(vi) || isinf(c3) || isinf(vi)) return;
+    res[id] = vec2(c3, vi);
+}
+)";
+
 static const char* const kJumpShowCS = R"(#version 430 core
 layout(local_size_x = 64) in;
 layout(std430, binding = 0) readonly buffer Fixed { uint fixedG[]; };

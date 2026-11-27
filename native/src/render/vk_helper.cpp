@@ -27,6 +27,7 @@
 #include "render/nucdens_card.h"
 #include "render/ring_card.h"
 #include "render/atom_card.h"
+#include "render/porkchop_card.h"
 #include "render/molecule_card.h"
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
@@ -39,6 +40,7 @@
 #include "r2d_nucdens_comp.h"
 #include "r2d_lines_comp.h"
 #include "r2d_surface_comp.h"
+#include "r2d_porkchop_comp.h"
 #include "r2d_kerrvar_math.h"
 #include "r2d_kerrvar_step.h"
 #include "r2d_kerrvar_edge.h"
@@ -248,6 +250,20 @@ std::vector<Step> programsOf(const std::string& kind, const std::string& name) {
                                        if (!ok && why.empty()) why = "the run did not finish";
                                        delete k;
                                        return ok; }}};
+    if (name == "porkchop") return {kernel("the porkchop grid's pipeline", k_r2d_porkchop_comp, sizeof k_r2d_porkchop_comp, false),   // 0.92.0
+                                    {"the porkchop grid's first small run", [](Ctx& c, std::string& why) {   // two departures and two arrivals of Earth and Mars
+                                        render::PorkchopCard* k = render::makeVkPorkchopCard(c.cards);
+                                        bool ok = k->build(nullptr, why);
+                                        render::PorkchopJob j;
+                                        j.nDep = j.nArr = 2; j.off = 200; j.depStep = 10; j.arrStep = 10; j.tu = 58.13244f; j.vk = 29.78469f;
+                                        j.dep = {1.0f, 0.0f, 0.0f, 0, 0.0f, 1.0f, 0.0f, 0, 0.98f, 0.17f, 0.0f, 0, -0.17f, 0.98f, 0.0f, 0};
+                                        j.arr = {-1.2f, 1.0f, 0.0f, 0, -0.65f, -0.8f, 0.0f, 0, -1.4f, 0.8f, 0.0f, 0, -0.5f, -0.9f, 0.0f, 0};
+                                        std::vector<float> res;
+                                        const int id = ok ? k->begin(j) : 0;
+                                        ok = id > 0 && waitJob([&] { return k->poll(id, res); });
+                                        if (!ok && why.empty()) why = "the run did not finish";
+                                        delete k;
+                                        return ok; }}};
     if (name == "nucdensity") return {kernel("the nucleus density's pipeline", k_r2d_nucdens_comp, sizeof k_r2d_nucdens_comp, false),
                                       {"the nucleus density's first small run", [](Ctx& c, std::string& why) {   // the start-up check's first case
                                           render::NucDensCard* k = render::makeVkNucDensCard(c.cards);

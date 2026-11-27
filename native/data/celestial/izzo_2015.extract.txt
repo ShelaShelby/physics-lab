@@ -1,0 +1,263 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/celestial/izzo_2015_arxiv1403.2705.txt
+# Reference: Dario Izzo, "Revisiting Lambert's problem", Celestial Mechanics and Dynamical Astronomy 121 (2015) 1-15, arXiv:1403.2705v2; the original is the text of the arXiv PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1403.2705
+# Date read: 2026-11-27
+# sha256 of the original: 6eb5da5bee00fc76e333a74442c5b4bb80f61003188f4256b1bf3412be35b60f
+# Place in the original: section 2.2 (Eq. 14 to 18), Eq. 19 to 23, section 4.1 and 4.2 (Householder, Eq. 30), Algorithm 1 and 2
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/orbit/lambert.cpp, src/orbit/lambert.h, src/render/shaders.h kPorkchopCS (the algorithm); tests/test_celestial.cpp (Eq. 21 for the parabolic time)
+#--- begin Eq. (17) and (18) and the bounds of x
+which imply:
+                   √             α
+                                       √            β
+                          2                   2
+                    √1 − x = sin 2 α , λ√1 − x = sin 2 β                             (15)
+                       2
+                      x − 1 = sinh 2      2
+                                       λ x − 1 = sinh 2
+          p
+and y = 1 − λ2 (1 − x2 ). Using these relations it is possible to relate the
+auxiliary angles ϕ and ψ directly to x:
+                                                               √
+           cos ϕ = xy − λ(1 − x2 )             sin ϕ = (y + xλ) √1 − x2
+                                   ,                                                 (16)
+           cosh ϕ = xy + λ(x2 − 1)             sinh ϕ = (y + xλ) x2 − 1
+
+and,
+                                                               √
+          cos ψ = xy + λ(1 − x2 )              sin ψ = (y − xλ) √1 − x2
+                                  ,                                                  (17)
+          cosh ψ = xy − λ(x2 − 1)              sinh ψ = (y − xλ) x2 − 1
+Revisiting Lambert’s Problem                                                   7
+
+                                                          √
+                                                              2
+          √ to derive the relations cos ϕ sin ψ = (x−λy) 1 − x , cosh ϕ sinh ψ =
+which allows
+(x − λy) x2 − 1 and thus have the following time of flight equation valid in
+all cases:                                                !
+                             1       ψ + Mπ
+                     T =                         − x + λy                  (18)
+                          1 − x2
+                                    p
+                                       |1 − x2 |
+where we must set M = 0 in the case of hyperbolic motion where unbounded
+motion prevents complete revolutions to happen. The auxiliary angle ψ is
+computed using Eq.(17) by the appropriate inverse function and thus, the
+time of flight evaluation is reduced to one only inverse function computation.
+Given the bounds on α, from the definition of x, we can see how x ∈ [−1, ∞].
+Also, x > 1 implies hyperbolic motion, while x < 1 elliptic motion. Since
+#--- end
+#--- begin Eq. (19) to (21)
+    Computing Eq.(18) in x = 0 we get:
+                                           p
+          T (x = 0) = T0M = arccos λ + λ 1 − λ2 + M π = T00 + M π           (19)
+where we have introduced T0 as the value of T in x = 0 and T00 as the value
+in the single revolution case M = 0.
+    When computing Eq.(18) in the single revolution case, a loss of precision
+is encountered due to numerical cancellation for values of x ≈ 1 where both
+1−x2 and ψ tend to zero. In these cases we compute the time of flight equation
+by series expansion using the elegant result from Battin [Battin(1999)] setting:
+                               η = y − λx
+                               S1 = 21 (1 − λ − xη)
+                                                                            (20)
+                               Q = 43 1 F2 (3, 1, 52 , S1 )
+                               2T = η 3 Q + 4λη
+where 1 F2 (a, b, c, d) is the Gaussian or ordinary hypergeometric function. This
+can be evaluated by direct computation of the associated hypergeometric se-
+ries. Noting that S1 → 0 when x → 1 the number of terms to retain in the
+series is small whenever the series is used in the neighbourhood of x = 1.
+Departing from Battin, we study the parabolic case substituting x = 1, y = 1
+into Eq.(20) and thus obtaining the following remarkable expression:
+                                            2
+                           T (x = 1) = T1 =   (1 − λ3 )                    (21)
+                                            3
+relating the geometry of the triangle created by two different observations of
+an object on a parabolic keplerian orbit to the non-dimensional time elapsed
+#--- end
+#--- begin Eq. (22) and (23)
+between them. It is also possible to derive the following formulas for the time
+of flight derivatives:
+                 (1 − x2 ) dT
+                            dx = 3T x − 2 + 2λ y
+                                                   3x
+                             2
+                                                          2 λ3
+                 (1 − x2 ) ddxT2 = 3T + 5x dTdx + 2(1 − λ ) y 3             (22)
+                             3          2
+                 (1 − x2 ) ddxT3 = 7x ddxT2 + 8 dT          2 5 x
+                                                dx − 6(1 − λ )λ y 5
+8                                                                                 Dario Izzo
+
+
+
+
+Fig. 2 Time of flight curves parametrized using x for different λ and M values.
+
+
+
+which are valid in all cases (single and multiple revolutions, elliptic and hyper-
+bolic) except in λ2 = 1, x = 0 and x = 1, ∀λ. We then apply de l’Hôpital rule
+to the first of the above equations, and using the expression derived for T1 we
+are also able to find the value of the derivative of the time of flight curves in
+the case of a parabola:
+
+                                 dT      2
+                                        = (λ5 − 1)                                     (23)
+                                 dx x=1  5
+
+which is valid for M = 0. By direct substitution, one can also easily show:
+
+#--- end
+#--- begin 4.1 the Householder step
+our case, as the derivatives computation is done using equations 22, House-
+holder iterations are able to provide a significant benefit. We report the exact
+12                                                                                     Dario Izzo
+
+
+form used to implement the iterations as it is known how different numeri-
+cal form can produce different behaviours. After experimenting with different
+implementations the following was used:
+
+                                                    f 02 (xn ) − f (xn )f 00 (xn )/2
+     xn+1 = xn − f (xn )
+                           f 0 (x   n   )(f 02 (x                  00             000 2
+                                                    n ) − f (xn )f (xn )) + f (xn )f (xn )/6
+
+where f is, in our case, T (x)−T ∗ and the derivatives are indicated as f 0 , f 00 , f 000 .
+
+#--- end
+#--- begin Eq. (30) the starter and its improvement
+pass through the points (x0 , T0 ) and (x1 , T1 ) and have the desired asymptotic
+behaviour.
+    The above relation is easily inverted and thus the following simple starter
+ξ0 is derived:
+                      ξ0 = 23 (τ0 − τ ),      T ≥ T0
+                      ξ0 = log 2 + τ1 − τ, T < T1
+                      ξ0 = ττ1−τ
+                               −τ0 log 2
+                                  0
+                                              T1 < T < T0
+Transforming these relations back to the x-T plane we find the following ex-
+pression for the starter x0 :
+                                    T0
+                                          32
+                         x0 =       T           − 1,        T ≥ T0
+                                                                                               (30)
+                         x0 = 2 TT1 − 1,        T < T1
+                                           T1
+                                     log
+                         x0 = TT0
+                                        2 T0
+                                              − 1 T1 < T < T0
+Revisiting Lambert’s Problem                                                                13
+
+
+
+
+Fig. 5 Absolute errors introduced by the Gooding initial guess (left) and the proposed
+initial guess (right) for the single revolution M = 0 case. Each line correspond to a different
+λ value ranging from -0.99 to 0.99
+
+
+having an extremely low computational cost also in view of the fact log2 admits
+efficient implementaions. We can improve the expression for the T < T1 case
+making use of the newly found result expressed in Eq.(23). We thus set
+                              2
+                     x0 = TT0 3 − 1,       T ≥ T0
+
+                                    (T1 −T )
+                         x0 = 52 TT1(1−λ   5 ) + 1,  T < T1
+                                            
+                                              T1
+                                      log
+                         x0 = TT0
+                                         2 T0
+                                                 − 1 T1 < T < T0
+where we enforced the derivatives and values at x = 1 and x = ∞. We report
+#--- end
+#--- begin Algorithm 1 and 2
+Algorithm 1 Lambert solver: inputs, r1 = [r11 , r12 , r13 ], r2 = [r21 , r22 , r23 ], t
+and µ
+Require: t > 0, µ > 0
+ c = r2 − r1
+ c = |c|, r1 = |r1 |, r2 = |r2 |
+ s = 21 (r1 + r2 + c)
+ îr,1 = r1 /r1 , îr,2 = r2 /r2
+ îh = îr,1 × îr,2       √
+ λ2 = 1 − c/s, λ = λ2
+ if (r11 r22 − r12 r21 ) < 0 then
+     λ = −λ
+     ît,1 = îr,1 × îh , ît,2 = îr,2 × îr,2
+ else
+     ît,1 = îh × îr,1 , ît,2 = îh × îh
+ end q    if
+             2µ
+ T =         s3
+                 t
+ xlistq  , ylist =findxy(λ, T )
+             µs
+                , ρ = r1 −r
+                                       p
+ γ=          2            c
+                              2
+                                , σ = (1 − ρ2 )
+ for each x, y in xlist , ylist do
+     Vr,1 = γ[(λy − x) − ρ(λy + x)]/r1
+     Vr,2 = −γ[(λy − x) + ρ(λy + x)]/r2
+     Vt,1 = γσ(y + λx)/r1
+     Vt,2 = γσ(y + λx)/r2
+     v1 = Vr,1 îr,1 + Vt,1 ît,1
+     v2 = Vr,2 îr,2 + Vt,2 ît,2
+ end for
+
+
+
+The above expressions approximate well the time of flight curves as |x| → 1.
+A great advantage of these expressions is that they do not make use of Tmin ,
+xmin (i.e. the minimum of the time of flight curve and its extremal value) which
+would require a distinct set of iterations to be found. We then avoid to pass
+to the root solver solution bounds at each M , at the risk of allowing, during
+the iterations, switches between short and long period solutions, a theoretical
+occurence, though, that was never encountered in our experimental tests.
+
+
+5 New solver performances
+
+To test the performances of our new algorithm we start by assessing its ac-
+curacy. We consider, for an assigned M , a random λ ∈ [−0.999, 0.999] and a
+random xtrue ∈ [−0.99, 3] (or xtrue ∈ [−0.999, 0.999] whenever M > 0) and
+we compute the resulting time of flight T . We then use Housholder iterations
+starting from the appropriate initial guess to find back the x value. We find
+that stopping the iterations whenever the difference between the x value com-
+puted at two successive iterations is less than 10−5 (10−8 whenever M > 0)
+is a good setting. We record, for each of such trials, the number of iterations
+made by the Householder method it, and the error defined as  = |xtrue − x|.
+This is repeated 1,000,000 times for M = 0 and then 100,000 times for each
+M = 1, 2, ...., 50. The result is shown in Figure 6. In the vast majority of
+Revisiting Lambert’s Problem                                                  15
+
+
+Algorithm 2 findxy(λ, T ): computes all x, y for single and muti-rev solutions
+
+Require: |λ| < 1, T < 0
+ Mmax = floor(T /π)  √
+ T00 = arccos λ + λ 1 − λ2
+ if T < T00 + Mmax π and Mmax > 0 then
+    start Halley iterations from x = 0, T = T0 and find Tmin (Mmax )
+    if Tmin > T then
+       Mmax = Mmax − 1
+    end if
+ end if
+ T1 = 32 (1 − λ3 )
+ compute x0 from Eq.(30)
+ start Householder iterations from x0 and find x, y
+ while Mmax > 0 do
+    compute x0l and x0r from Eq.(31) with M = Mmax
+    start Householder iterations from x0l and find xr , yr
+    start Householder iterations from x0r and find xl , yl
+    Mmax = Mmax − 1
+ end while
+#--- end

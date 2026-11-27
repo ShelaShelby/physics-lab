@@ -1,0 +1,153 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/celestial/tatum_celestial_mechanics_ch16.txt
+# Reference: Jeremy Tatum, "Celestial Mechanics", University of Victoria, chapter 16 "The Restricted Three-Body Problem"; the original is the text of the notes' PDF (pdftotext -layout)
+# URL: https://www.astro.uvic.ca/~tatum/celmechs/celm16.pdf
+# Date read: 2026-11-27
+# sha256 of the original: d11a3ed7fbc828c4d601c93650abcfc31013f700fd1aa9a187d91b57a988ce25
+# Place in the original: section 16.1 (equations 16.1.1 to 16.1.23: the collinear points; the table of least distances after 16.1.27) and section 16.2 (equations 16.2.26 and 16.2.27 and the Sun-Jupiter numbers)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/orbit/lagrange.h and lagrange.cpp (the model and the stability), tests/test_celestial.cpp (the quintics, the table, the critical mass ratio, the Sun-Jupiter frequencies)
+#--- begin 16.1.1 to 16.1.23: notation, the force balance and the quintics
+I establish the following notation.
+
+
+                                      M1
+Mass ratio:                              = q.                                     16.1.3
+                                      M2
+
+                                         M1
+Mass fraction:                                 = µ.                               16.1.4
+                                      M1 + M 2
+
+
+                                               µ
+They are related by                   q =                                         16.1.5
+                                             1 −µ
+                                               2
+
+
+                                               q .
+and                                    µ =                                         16.1.6
+                                              1+ q
+
+We note the following distances:
+
+
+                               M1C = (1 − µ)a ,       M 2C = µa .                  16.1.7
+
+
+We ask ourselves the following question: Are there any points on the line passing
+through the two masses where a third body of negligible mass could orbit around C with
+the same period as the other two masses; i.e. it would remain on the line joining the two
+main masses?
+
+In fact there are three such points, and they are known as the collinear lagrangian points.
+(The collinear points were discussed by Euler before Lagrange, but Lagrange took the
+problem further and discovered an additional two points not collinear with the masses,
+and the five points today are generally all known as the lagrangian points. We shall
+discuss the additional points in section 16.2.) I have marked the three points in figure
+XVI.4 with the letters L1, L2 and L3. There are evidently 3! = 6 ways in which I could
+choose the subscripts. Often today, the inner lagrangian point is labelled L1 and the outer
+points are labelled L2 and L3. This seems to me to lack logic, and I choose to label the
+inner point L3, and the outer points associated with M1 and M2 are then L1 and L2
+respectively.     Incidentally, I am not making any assumption about which of the two
+main bodies is the more massive.
+
+Let us deal first with L1. Let us suppose that the distance from C to L1 is xa.
+
+A particle of mass m at L1 is subject (in a co-rotating reference frame) to three forces,
+namely the gravitational attractions from the two main bodies, and the centrifugal force
+acting away from C. If this body is to be in equilibrium, we must have
+
+                            GM 1m              GM 2 m
+                                        2
+                                          +               = mxaω2 .                16.1.8
+                       [( x − 1 + µ)a ]     [( x + µ)a ]2
+
+On making use of equations 16.1.2 and 16.1.4, we find that this equation becomes
+
+                                     µ            1− µ
+                                            2
+                                              +            = x.                    16.1.9
+                               ( x − 1 + µ)     ( x + µ) 2
+
+After manipulation, this becomes
+
+                       a0 + a1 x + a2 x 2 + a3 x 3 + a4 x 4 + x 5 = 0 ,            16.1.10
+                                                3
+
+
+where                  a0 = − 1 + 3µ − 3µ 2 ,                                        16.1.11
+
+                       a1 = 2 − 4µ + µ 2 − 2µ 3 + µ 4 ,                              16.1.12
+
+                       a2 = − 1 + 2µ − 6µ 2 + 4µ 3 ,                                 16.1.13
+
+                       a3 = 1 − 6µ + 6µ 2                                            16.1.14
+
+and                    a4 = − 2 + 4µ .                                               16.1.15
+
+Although equation 16.1.10 is a quintic equation, it has just one real root for positive µ. It
+is also worth noting, that, although I re-wrote equation 16.1.9 in the quintic form of
+equation 16.1.10, my experience is that it is easier to solve the original form, 16.1.9, by
+the Newton-Raphson process, than to set up and solve the quintic version of the equation.
+
+The positions of L2 and L3 can be found by exactly similar arguments – you just have to
+take care with the directions and distances of the two gravitational forces.
+
+For L2, the coefficients are the same as for L1, except
+
+                       a1 = − 2 + 4µ + µ 2 − 2µ 3 + µ 4 ,                            16.1.16
+
+                       a2 = − 1 − 2µ + 6µ 2 − 4µ 3                                   16.1.17
+
+and                    a4 = 2 − 4µ .                                                 16.1.18
+
+For L3, the coefficients are
+
+                       a0 = 1 − 3µ + 3µ 2 − 2µ 3 ,                                   16.1.19
+
+                       a1 = 2 − 4µ + 5µ 2 − 2µ 3 + µ 4 ,                             16.1.20
+
+                       a2 = 1 − 4µ + 6µ 2 − 4µ 3 ,                                   16.1.21
+
+                       a3 = 1 − 6µ + 6µ 2                                            16.1.22
+
+and                    a4 = 2 − 4µ .                                                 16.1.23
+#--- end
+#--- begin the table of least distances
+
+                                          Least value          Mass fraction
+
+                             M1 C         0.421875*             0.666666&
+                             M1L2         1.690392              0.524579
+                             M1 M2        1.000000              0.500000
+                             M1L3         0.489038              0.446273
+                             M1L1         0.677756              0.436062
+                                                    *
+#--- end
+#--- begin 16.2.26, 16.2.27 and the Sun-Jupiter numbers
+                                                                                      27 q ,
+This is a quadratic equation in n2, and for real n2 we must have b2 > 4ac, or 1 >
+                                                                                    (q + 1) 2
+or q 2 − 25q + 1 > 0 . That is, q > 24.959 935 8 or q < 1/24.959 935 8 = 0.040 064 206.
+We also require n2 to be not only real but positive. The solutions of equation 16.2.26 are
+
+
+                                  (                        )
+                        2n 2 = ω2 1 ± 1 − 27 q /(1 + q ) 2 .                         16.2.27
+
+For any mass ratio q that is less than 0.040 064 206 or greater than 24.959 935 8 both of
+these solutions are positive. Thus stable elliptical orbits (in the co-rotating frame) around
+the equilateral lagrangian points are possible if the mass ratio of the two principal masses
+is greater than about 25, but not otherwise.
+
+If we consider the Sun-Jupiter system, for which q = 1047.35, we have that
+
+               n = 0.996 757ω or n = 0.080 464 5ω .
+
+The period of the motion around the lagrangian point is then
+
+               P = 1.0033PJ        or P = 12.428PJ .
+#--- end

@@ -267,12 +267,12 @@ void BenchRun::noteWindow(bool focused, bool minimised) {
     if (!focused || minimised) inactive_[scene_] = 1;
 }
 
-void BenchRun::frame(double frameMs, double cpuMs, bool count, const BenchFrameCost* cost) {
+void BenchRun::frame(double frameMs, double cpuMs, bool count, const BenchFrameCost* cost, bool hold) {
     if (finished_ || setup_ >= 0) return;
     if (!count && measuring_) return;                      // (a frame that read the picture back: neither counted nor on the scene's clock)
     elapsed_ += frameMs / 1000;
     if (!measuring_) {
-        if (elapsed_ >= warm_) { measuring_ = true; elapsed_ = 0; }
+        if (elapsed_ >= warm_ && !hold) { measuring_ = true; elapsed_ = 0; }
         return;
     }
     if (count) { frameMs_[scene_].push_back(frameMs); cpuSum_[scene_] += cpuMs; cpuN_[scene_]++; }

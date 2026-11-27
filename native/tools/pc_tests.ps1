@@ -299,7 +299,7 @@ if ($Parts -contains 'bench') {
     Add-Check '3d.bench' ($null -ne $file) "the benchmark ran and saved its result ($(if ($file) { $file.Name } else { 'no file' }); $([math]::Round($r.Seconds)) s)"
     if ($file) {
         Copy-Item $file.FullName (Join-Path $res $file.Name) -Force
-        foreach ($ln in (Get-Content $file.FullName | Where-Object { $_ -match 'Hz|refresh|ui\.resize_blackhole|rest\.orbit|rest\.blackhole_glare|blackhole\.close_spin|orbit\.true_light|orbit\.sun_edge|orbit\.oort_region' } | Select-Object -First 40)) { Add-Info '3d.bench' $ln.Trim() }
+        foreach ($ln in (Get-Content $file.FullName | Where-Object { $_ -match 'Hz|refresh|ui\.resize_blackhole|rest\.orbit|rest\.blackhole_glare|blackhole\.close_spin|orbit\.true_light|orbit\.sun_edge|orbit\.oort_region|orbit\.porkchop|response\.porkchop_grid' } | Select-Object -First 40)) { Add-Info '3d.bench' $ln.Trim() }
     }
 }
 

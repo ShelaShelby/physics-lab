@@ -39,6 +39,7 @@ void Renderer2D::useVulkan(VkDraw2D* d) {
 // 0.61.0: the card programs on Vulkan; null: Vulkan's objects deleted (the labs' card paths then see none)
 void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }
+    if (porkCard_) { porkCard_->reset(); delete porkCard_; porkCard_ = nullptr; }   // 0.92.0
     if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }
     delete ringCard_; ringCard_ = nullptr;   // 0.64.0
     delete classicCard_; classicCard_ = nullptr;
@@ -55,6 +56,7 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
         if (vkc_) vkc_->collect();
     }
     vkc_ = c;
+    vkPorkCard_ = c ? +[](VkCards& v) { return makeVkPorkchopCard(v); } : nullptr;
     vkAtomCard_ = c ? +[](VkCards& v) { return makeVkAtomCard(v); } : nullptr;
     vkMolCard_ = c ? +[](VkCards& v) { return makeVkMoleculeCard(v); } : nullptr;
     vkRingCard_ = c ? +[](VkCards& v) { return makeVkRingCard(v); } : nullptr;

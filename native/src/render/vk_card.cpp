@@ -30,6 +30,7 @@
 #include "r2d_nucdens_comp.h"
 #include "r2d_jump_comp.h"
 #include "r2d_dirac_comp.h"
+#include "r2d_porkchop_comp.h"
 #include "r2d_moldots_comp.h"
 #include "r2d_cgrid_vert.h"
 #include "r2d_mgrid_vert.h"
@@ -67,6 +68,7 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "outline") return vkCardId("outline", {kOutlineDensityCS, kOutlineLevelCS});
     if (name == "rocks") return vkCardId("rocks", {kRocksCS, kGrainsCS});   // (0.78.0: and the comets' grains)
     if (name == "cloud") return vkCardId("cloud", {kCloudVS, kCloudGridVS, kCloudGridFS, kBlobFS});
+    if (name == "porkchop") return "vulkan " + porkchopShaderId();   // 0.92.0
     if (name == "slice") return "vulkan " + sliceShaderId();
     if (name == "jump") return "vulkan " + jumpShaderId();
     if (name == "lightpaths") return vkCardId("lightpaths", {kKerrTableCS});                       // 0.62.0 (step 4): the Black Hole Lab's
@@ -1432,6 +1434,84 @@ private:
 };
 
 AtomCard* makeVkAtomCard(VkCards& c) { return new AtomCardVk(c); }
+
+// =====================================================================================================================================================
+// 0.92.0: the porkchop grid (kPorkchopCS): built and checked by ui/porkchop_runner.cpp under gpuPorkchopGuard
+// =====================================================================================================================================================
+class PorkchopCardVk : public PorkchopCard {
+public:
+    explicit PorkchopCardVk(VkCards& c) : c_(c) {}
+    ~PorkchopCardVk() override { reset(); }
+    bool build(KerrSteps* steps, std::string& why) override {
+        if (k_.pipe) return true;
+        const std::string name = "the porkchop grid shader", cName = "compile " + name, lName = "link " + name;
+        if (steps) steps->begin(cName);
+        double t = nowS();
+        std::string w2;
+        VkDraw2D::Shader sh;
+        const bool good = reflectSpirv(k_r2d_porkchop_comp, sizeof k_r2d_porkchop_comp / 4, sh, w2);
+        if (steps) steps->end(cName, std::string(good ? "the SPIR-V read" : "FAILED") + " in " + msText(nowS() - t) + " (" + std::to_string(sizeof k_r2d_porkchop_comp) + " bytes, made at build time from shaders.h)");
+        if (!good) { why = "the SPIR-V of " + name + " is broken: " + w2; return false; }
+        if (steps) steps->begin(lName);
+        t = nowS();
+        const bool forced = forcedFail("porkchop");
+        const bool made = !forced && c_.makeKernel(k_r2d_porkchop_comp, sizeof k_r2d_porkchop_comp, k_, w2);
+        if (steps) steps->end(lName, std::string(made ? "the pipeline made" : "FAILED") + " in " + msText(nowS() - t) + (made ? std::string() : ": " + (forced ? std::string("made to fail on purpose (PL_VK_CARDFAIL)") : w2)));
+        if (!made) { why = forced ? std::string("the pipeline of ") + name + " was made to fail on purpose (PL_VK_CARDFAIL)" : "the Vulkan driver did not make the pipeline of " + name; return false; }
+        return true;
+    }
+    bool built() const override { return k_.pipe != VK_NULL_HANDLE; }
+    void reset() override {
+        while (!jobs_.empty()) release(jobs_.back().id);
+        c_.dropKernel(k_);
+        ready_ = false;
+    }
+    int begin(const PorkchopJob& s) override {
+        const long cells = static_cast<long>(s.nDep) * s.nArr;
+        if (!built() || !c_.ok() || s.nDep <= 0 || s.nArr <= 0 || cells > (1L << 22) || s.dep.size() != std::size_t(8) * std::size_t(s.nDep) || s.arr.size() != std::size_t(8) * std::size_t(s.nArr) || jobs_.size() >= 8) return 0;
+        Job j;
+        j.id = nextId_++;
+        j.bytes = cells * 8;
+        if (!c_.makeBuffer(VkDeviceSize(j.bytes), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.out, "the porkchop grid") ||
+            !c_.makeBuffer(VkDeviceSize(s.dep.size() * sizeof(float)), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.dep, "the porkchop departures") ||
+            !c_.makeBuffer(VkDeviceSize(s.arr.size() * sizeof(float)), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.arr, "the porkchop arrivals")) { drop(j); return 0; }
+        std::memcpy(j.dep.map, s.dep.data(), s.dep.size() * sizeof(float));      // (host-visible: the processor's writes are seen by the batch submitted after them)
+        std::memcpy(j.arr.map, s.arr.data(), s.arr.size() * sizeof(float));
+        VkUniforms& u = k_.u;
+        u.i("uNDep", &s.nDep, 1); u.i("uNArr", &s.nArr, 1); u.f("uOff", &s.off, 1); u.f("uDepStep", &s.depStep, 1); u.f("uArrStep", &s.arrStep, 1); u.f("uTU", &s.tu, 1); u.f("uVK", &s.vk, 1);
+        if (!c_.dispatch(k_, {&j.out, &j.dep, &j.arr}, static_cast<std::uint32_t>((cells + 63) / 64))) { drop(j); return 0; }
+        c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
+        j.ticket = c_.flush(false);
+        if (!j.ticket) { drop(j); return 0; }
+        jobs_.push_back(j);
+        return j.id;
+    }
+    JobState poll(int job, std::vector<float>& res) override {
+        Job* j = find(job);
+        if (!j) return JobState::Failed;
+        if (!c_.done(j->ticket)) return JobState::Pending;
+        const bool good = !c_.failed();
+        if (good) { res.resize(static_cast<std::size_t>(j->bytes / 4)); std::memcpy(res.data(), j->out.map, static_cast<std::size_t>(j->bytes)); }
+        release(job);
+        return good ? JobState::Done : JobState::Failed;
+    }
+    void cancel(int job) override { release(job); }
+private:
+    struct Job { int id = 0; std::uint64_t ticket = 0; VkCards::Buf out, dep, arr; long bytes = 0; };
+    Job* find(int id) { for (Job& j : jobs_) if (j.id == id) return &j; return nullptr; }
+    void drop(Job& j) { c_.dropBuffer(j.out); c_.dropBuffer(j.dep); c_.dropBuffer(j.arr); }
+    void release(int id) {
+        for (std::size_t i = 0; i < jobs_.size(); i++)
+            if (jobs_[i].id == id) { drop(jobs_[i]); jobs_.erase(jobs_.begin() + static_cast<std::ptrdiff_t>(i)); return; }
+    }
+    VkCards& c_;
+    VkCards::Kernel k_;
+    std::vector<Job> jobs_;
+    int nextId_ = 1;
+};
+
+PorkchopCard* makeVkPorkchopCard(VkCards& c) { return new PorkchopCardVk(c); }
+
 
 // =====================================================================================================================================================
 // 0.64.0: Saturn's rings per pixel (kRingsFS with kVertexShader, the renderer's program kRings) and the same function at listed points (kRingsProbeCS),

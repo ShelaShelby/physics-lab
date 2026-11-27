@@ -1140,12 +1140,12 @@ static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
     // 0.83.0 (on purpose, the owner's rule of 24 Nov 2026): 23 scenes whose 1 % low in his 0.82.0 run was at least 1.5 x 255 Hz moved to All scenes; 9 new hard
     // scenes (atom.bfield_drag dropped: a field change remakes nothing heavy). REPORT 0.83.0.
-    checkTrue("benchmark lists (on purpose, 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 30 Hard scenes first, 70 in All", app::kBenchHardScenes == 30 && app::kBenchAllScenes == 70 && int(v.size()) == 70);
+    checkTrue("benchmark lists (on purpose, 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 71 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 71 && int(v.size()) == 71);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[70] = {
+    static const char* const ids[71] = {
         // the Hard list (0.83.0): the 17 kept, in the owner's order, then the new ones a to j of the job (f dropped)
         "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas", "blackhole.circle_spin",
         "atom.nucleus_zoom", "atom.nucleon", "molecule.vib_density", "atom.slice_dirac_drag", "atom.jump_all", "ui.settings_open", "atom.side_all_glow", "orbit.real_fast",
@@ -1153,8 +1153,10 @@ static void testBenchSceneNumbers() {
         "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "blackhole.edge_on", "orbit.saturn_real_fast", "atom.emit_all", "atom.slice_dense",   // 0.91.0: atom.slice_dense in molecule.live_hot's place (moved to All scenes by the 1.5 x rule)
         "ui.settings_over_blackhole", "ui.resize_blackhole",
         "blackhole.close_spin",                                                  // 0.84.0
-        "orbit.true_light", "orbit.sun_edge", "orbit.oort_region",              // 0.85.0
+        "orbit.true_light",                                                      // 0.85.0 (orbit.sun_edge and orbit.oort_region went to All scenes in 0.92.0)
         "orbit.true_light_stars",                                                // 0.86.0 (in place of blackhole.film_soft, removed with its drawing: R6)
+        "orbit.porkchop",                                                        // 0.92.0
+        "orbit.sun_edge", "orbit.oort_region",                                   // 0.92.0: moved to All scenes (1 % low 524.3 and 406.2 fps in bench_0.85.2)
         "molecule.live_hot",                                                     // 0.91.0: moved to All scenes (1 % low 684.4 fps in bench_0.85.2)
         // moved to All scenes in 0.83.0 (their ids and set-ups the same)
         "orbit.saturn", "orbit.earth", "orbit.sky", "orbit.journey", "atom.slice_drag", "atom.slice_super_drag", "atom.slice_all_drag", "atom.side_all_classic",
@@ -1216,8 +1218,9 @@ static void testBenchSceneNumbers() {
     // 0.84.0 (on purpose): 27 scenes (blackhole.close_spin) and 42 waits: 266.7 s, under the same 4.5 minutes
     // 0.85.0 (on purpose, the owner's decision of 25 Nov 2026): 30 scenes and 45 waits (response.sunspot_table): 291.0 s; the limit raised once to 4.9 minutes
     // 0.87.0 (on purpose): 46 waits (response.blackhole_return, done once): 292.6 s, under the same 4.9 minutes
+    // 0.92.0 (on purpose): 29 scenes (orbit.porkchop in; orbit.sun_edge and orbit.oort_region to All scenes by the owner's rule) and 47 waits (response.porkchop_grid, done once): 287.7 s
     checkTrue("benchmark run: planned within the owner's 4.9 minutes (0.85.0, raised once from 4.5; " + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 4.9 * 60 && near(app::kBenchLimitS, 294) &&
-              app::kBenchResponseActions == 46);
+              app::kBenchResponseActions == 47);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {

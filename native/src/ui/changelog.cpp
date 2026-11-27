@@ -19,6 +19,16 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.92.0", "Orbit Lab: celestial mechanics in the Data panel (Lagrange points, Kirkwood gaps, a transfer planner with a porkchop plot, ephemeris tables, an integrator check)",
+     "The Data panel's table list for the Orbit Lab now has five tools. Lagrange points: pick a pair (the Sun with a planet, or a planet with one of its big moons) and see the five points in a table (kilometres and "
+     "units of the separation) and, if you tick it, on the picture in 2D and 3D; L4 and L5 are checked with Routh's criterion. The model is two bodies on circular orbits and a third with no mass. Kirkwood gaps: a "
+     "histogram of the semi-major axes of the lab's real main-belt rocks, with Jupiter's resonances 4:1, 3:1, 5:2, 7:3 and 2:1 marked at a = a_J (q/p)^(2/3); the gaps are in the data, the lab does not simulate "
+     "how they formed. Transfer planner: Lambert's problem (Izzo 2015) for any two planets on the lab's own ephemeris, with zero revolutions and patched conics (only the Sun pulls during the transfer); the "
+     "porkchop plot shows the departure C3 or the arrival v-infinity over a grid of departure and arrival dates (up to 256 by 256), solved on the graphics card once its start-up check against the processor has "
+     "passed; click the plot to draw the transfer orbit on the picture and read its dates, time of flight, C3 and v-infinity. Ephemeris table: a planet's distance, longitude and latitude on chosen dates, "
+     "in Simple or Real physics, with the model's worst error against JPL Horizons. Drift check: the integrator's energy and angular momentum over 10, 100 or 1,000 years as a relative change. "
+     "The benchmark: a new Hard scene, orbit.porkchop, and a wait, a new porkchop grid; orbit.sun_edge and orbit.oort_region moved to All scenes. Fix: the benchmark's warm-up now waits (up to 30 s) "
+     "until the Molecule Lab's Density cloud and surface programs have passed or failed their start-up check, so a loaded computer no longer measures the processor's path under the card's name."},
     {"0.91.0", "Atom Lab: more level clouds, the outer electron alone in the Slice, the Dirac Slice on the graphics card, hydrogen's recoil",
      "Level clouds: the calculations of calcium, zinc, strontium, cadmium, barium, mercury and radium were run again with more ways to start an orbital. New clouds: zinc's 4s5s, "
      "strontium's 5s4d 3D1, 5s6f and 4d5p 3P, calcium's 4s6d 3D3 and mercury's 6s7d. A new check rejects an orbital with too many nodes: cadmium's 5d levels lose the clouds "

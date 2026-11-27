@@ -19,6 +19,7 @@
 #include "orbit/card_text.h"
 #include "orbit/units.h"
 #include "ui/calc_panel.h"
+#include "ui/celestial_panel.h"
 #include "ui/changelog.h"
 #include "ui/look.h"
 #include "ui/orbit_panel.h"
@@ -38,7 +39,7 @@ constexpr int kRecMax = 20000;           // samples a recording keeps (then it s
 constexpr std::size_t kUserMax = 65536;  // the text box for the user's data
 
 struct DataState {
-    bool open = false, fieldActive = false;
+    bool open = false, fieldActive = false, benchDraw = false;
     std::string tableId[4] = {"planets", "ionlines", "modes", "user"};   // the table on show in each lab (0.55.0: the Black Hole Lab has no tables yet: only your own data)
     LabContext built;                    // the selection the table was made for
     std::string builtId;
@@ -182,6 +183,10 @@ void refreshTable(const AppState& app) {
         if (D.builtId != "user" || D.builtLab != app.lab) { D.builtId = "user"; D.builtLab = app.lab; if (D.userOk) takeTable(D.userTable); else D.have = false; }
         D.why = D.userOk ? "" : D.userWhy;
         return;
+    }
+    if (isCelestialTool(id)) {                        // 0.92.0: the Orbit Lab's celestial mechanics tools are not tables: no table, no plot (ui/celestial_panel.h)
+        if (app.lab != 0) id = "planets";
+        else { D.have = false; D.why.clear(); D.builtId = id; D.builtLab = 0; return; }
     }
     if (id == "recording") {
         if (app.lab != 0) { id = "planets"; }
@@ -616,7 +621,7 @@ void drawTable(sh::Panel& p) {
 // ---- 0.56.1: the benchmark's ui.data_plot (the panel's whole state kept and given back) ----
 struct DataBenchKeep { DataState d; };
 std::shared_ptr<DataBenchKeep> dataBenchSave() { auto k = std::make_shared<DataBenchKeep>(); k->d = D; return k; }
-void dataBenchRestore(const std::shared_ptr<DataBenchKeep>& k) { if (k) D = k->d; }
+void dataBenchRestore(const std::shared_ptr<DataBenchKeep>& k) { if (k) D = k->d; D.benchDraw = false; }
 int dataBenchLargest(const AppState& app, std::string* id, std::string* title) {
     int best = -1;
     for (const TableRef& r : labTables(contextOf(app))) {
@@ -643,12 +648,19 @@ std::string dataBenchShow(AppState& app) {
     return title + " (" + std::to_string(rows) + " rows), " + (fit >= 0 ? "fit: " + D.table.presets[std::size_t(fit)].label : std::string("a straight line fitted"));
 }
 
+void dataBenchOpenTool(AppState& app, const char* id) {
+    D.open = true; D.benchDraw = true;
+    D.tableId[std::clamp(app.lab, 0, 3)] = id;
+    D.builtId.clear();
+    refreshTable(app);
+}
 bool dataOpen() { return D.open; }
 void dataToggle() { D.open = !D.open; }
 void dataClose() { D.open = false; D.fieldActive = false; }
 bool dataFieldActive() { return D.open && D.fieldActive; }
 
 void dataTick(AppState& app) {
+    if ((!D.open || app.lab != 0) && (app.set.overlay.lagrange || app.set.overlay.transfer)) celestialLeave(app);   // 0.92.0: the picture's Lagrange points and transfer orbit go with the panel
     if (!D.rec) return;
     const orbit::Body* b = orbit::findBody(app.sys, D.recBody);
     if (!b) { D.rec = false; D.recStop = "Stopped: the body is gone."; return; }
@@ -669,7 +681,7 @@ void dataTick(AppState& app) {
 }
 
 Rect dataPanelDraw(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m, const std::vector<Rect>& cards) {
-    if (!D.open || app.benchRunning) { D.fieldActive = false; return Rect{0, 0, 0, 0}; }
+    if (!D.open || (app.benchRunning && !D.benchDraw)) { D.fieldActive = false; return Rect{0, 0, 0, 0}; }
     const double w = std::min<double>(m.em(40), std::max<double>(m.em(24), fr.window.w * 0.55));
     Rect r = app::shell::placePanel(app::shell::Anchor::TopLeft, w, sh::lastHeight("##data", static_cast<float>(m.em(40))), fr, m, 0);
     for (const Rect& c : cards) r = app::shell::sideStep(r, c, fr.window, m.s12, m.s12);
@@ -694,7 +706,8 @@ Rect dataPanelDraw(AppState& app, const app::shell::Frame& fr, const app::shell:
     std::string& id = D.tableId[lab];
     if (app.lab == 3)                                    // 0.55.0: said plainly, so no other lab's table is taken for this one's
         sh::pCaption(p, "The Black Hole Lab has no tables yet (planned: its special radii, the shadow's size against distance, the two black holes beside the telescope's rings). You can still type or paste your own data below.", false);
-    const std::string shownTitle = id == "user" ? "Your data (type or paste)" : D.have ? D.table.title : id;
+    std::string shownTitle = id == "user" ? "Your data (type or paste)" : D.have ? D.table.title : id;
+    for (const auto& t : celestialTools()) if (t.first == id) shownTitle = t.second;    // 0.92.0
     if (fitRow(p, "data.tables", std::string(D.pickTable ? "▾ " : "▸ ") + "Table: " + shownTitle)) D.pickTable = !D.pickTable;
     if (D.pickTable) {
         static LabContext refsFor;                         // the list is made once per selection (making every table to name it is not free)
@@ -703,9 +716,10 @@ Rect dataPanelDraw(AppState& app, const app::shell::Frame& fr, const app::shell:
         if (!haveRefs || !sameContext(refsFor, contextOf(app))) { cached = labTables(contextOf(app)); refsFor = contextOf(app); haveRefs = true; }
         std::vector<TableRef> refs = cached;
         if (app.lab == 0) refs.push_back({"recording", "Recording of a body as time runs"});
+        if (app.lab == 0) for (const auto& t : celestialTools()) refs.push_back({t.first, t.second});   // 0.92.0
         refs.push_back({"user", "Your data (type or paste)"});
         for (const TableRef& t : refs)
-            if (fitRow(p, "data.table." + t.id, "    " + t.title, t.id == id)) { id = t.id; D.builtId.clear(); D.pickTable = false; refreshTable(app); rebuild(); }
+            if (fitRow(p, "data.table." + t.id, "    " + t.title, t.id == id)) { if (isCelestialTool(id) && !isCelestialTool(t.id)) celestialLeave(app); id = t.id; D.builtId.clear(); D.pickTable = false; refreshTable(app); rebuild(); }
     }
     // ---- the user's data ----
     if (id == "user") {
@@ -765,6 +779,12 @@ Rect dataPanelDraw(AppState& app, const app::shell::Frame& fr, const app::shell:
         sh::pCaption(p, std::to_string(D.rt.size()) + " samples" + (D.rec ? " (recording " + D.recName + ": one sample every " + fmtg(D.recStep / units::kDay, 3) + " days of simulated time)" : "") +
                             (D.recThinned > 0 ? "; the recording filled up " + std::to_string(D.recThinned) + (D.recThinned == 1 ? " time" : " times") + " and kept every other sample to go on" : "") +
                             (D.recStop.empty() ? "" : ". " + D.recStop));
+    }
+    if (isCelestialTool(id)) {                            // 0.92.0
+        celestialDraw(p, app, id);
+        D.fieldActive = celestialFieldActive();
+        sh::endPanel(p);
+        return r;
     }
     if (!D.have) {
         if (!D.why.empty() && id != "user") sh::pCaption(p, D.why);

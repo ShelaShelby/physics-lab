@@ -283,6 +283,11 @@ void Renderer2D::blobsPaletteTake(std::vector<Blob>& b, bool additive, const Pha
     b.clear();
 }
 
+PorkchopCard& Renderer2D::porkchopCard() {
+    if (!porkCard_) porkCard_ = vk_ && vkc_ && vkPorkCard_ ? vkPorkCard_(*vkc_) : new PorkchopCardNone();   // 0.92.0
+    return *porkCard_;
+}
+
 AtomCard& Renderer2D::atomCard() {
     if (!atomCard_) atomCard_ = vk_ && vkc_ && vkAtomCard_ ? vkAtomCard_(*vkc_) : new AtomCardNone();   // 0.61.0: Vulkan's
     return *atomCard_;

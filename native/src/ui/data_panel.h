@@ -21,6 +21,8 @@ std::shared_ptr<DataBenchKeep> dataBenchSave();
 void dataBenchRestore(const std::shared_ptr<DataBenchKeep>& k);
 int dataBenchLargest(const AppState& app, std::string* id, std::string* title);
 std::string dataBenchShow(AppState& app);
+// 0.92.0 (the benchmark's orbit.porkchop): open the panel on a celestial tool (its id, "cm:transfer") and have it drawn while the benchmark runs; dataBenchClose ends that
+void dataBenchOpenTool(AppState& app, const char* id);
 bool dataOpen();
 void dataToggle();
 void dataClose();

@@ -58,6 +58,7 @@
 #include "atom/atom_tools.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
+#include "ui/porkchop_runner.h"
 #include "ui/reading.h"
 #include "ui/input_log.h"
 #include "imgui_internal.h"
@@ -406,6 +407,7 @@ int main(int argc, char** argv) {
         vk.initCards(renderer, cardsWhy);
         for (const std::string& w : cardsWhy) { app::gpuVulkanGuard().log("card program on the processor: " + w); std::printf("Vulkan card program on the processor: %s\n", w.c_str()); }
         if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // (checks: the processor's paths, to compare)
+        ui::porkchopSetRenderer(&renderer);                                  // 0.92.0: the porkchop grid's card program is made on it (ui/porkchop_runner.h)
         app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr; app.rocksWhy = renderer.rocksWhy();
         atom::setOutlineCompute(renderer.outlineCompute());
         std::printf("Vulkan card programs: %zu bytes of SPIR-V; double precision in shaders: %s\n", vk.cardSpirvBytes(), vk.float64() ? "yes" : "no");

@@ -13,6 +13,11 @@ namespace app {
 // 0.56.1: the default run ("Hard scenes") takes about four minutes: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s (bench_scenes.cpp
 // holds the whole run's planned length with a static_assert; app/bench.h kBenchPlannedS)
 constexpr double kBenchWarmupS = 1.3;      // not counted
+// 0.92.0: the warm-up goes on, at most this long, while the Molecule Lab's Density cloud or surface program has not passed or failed its start-up check. The two texts are the
+// undecided wording of molecule/molecule_card_paths.cpp and molecule/surface_check.cpp pathText.
+constexpr double kBenchHoldMaxS = 30.0;
+constexpr const char* kPathUndecidedCloud = "(made when the Density style's cloud is first shown)";
+constexpr const char* kPathUndecidedSurface = "(made when the surface is first shown)";
 constexpr double kBenchMeasureS = 5.2;     // counted
 constexpr double kBenchSlowMs = 16.7;      // a frame slower than this is counted as slow (60 fps = 16.67 ms; the report says 16.7)
 
@@ -217,7 +222,8 @@ public:
     // One finished frame: its time (ms) and the CPU work (ms). count false (0.56.1): a frame that read the picture back for the scene's own check: while
     // counting it is neither counted nor on the scene's clock (reading back waits for every frame the driver still holds)
     // 0.63.1: cost (may be null): where the frame's time went; cpuMs is then the work without the waits for the card (cost->workMs)
-    void frame(double frameMs, double cpuMs, bool count = true, const BenchFrameCost* cost = nullptr);
+    // 0.92.0: hold true: the warm-up goes on past its time (the scene's card program is not decided yet, so the path measured would be the processor's); the caller caps it
+    void frame(double frameMs, double cpuMs, bool count = true, const BenchFrameCost* cost = nullptr, bool hold = false);
     // 0.15 stage 2: call once per frame BEFORE frame() with the window's state; a scene during which the window was not focused or was minimised is flagged (BenchScene::windowInactive).
     void noteWindow(bool focused, bool minimised);
     // A GPU result that came in (a frame or two late): the busy time and the span (ms). Counted only while a scene is being measured.

@@ -164,6 +164,7 @@ IGroupCompute* makeVkGroupCompute(VkCards& c, std::string& why);
 IOutlineCompute* makeVkOutlineCompute(VkCards& c, std::string& why);
 IRockCompute* makeVkRockCompute(VkCards& c, std::string& why);
 AtomCard* makeVkAtomCard(VkCards& c);
+PorkchopCard* makeVkPorkchopCard(VkCards& c);   // 0.92.0
 RingCard* makeVkRingCard(VkCards& c);
 // 0.64.0: the Classic Cloud 3D dots (render/classic_card.h): made, recorded into the frame's batch, the squares' buffer the frame draws
 ClassicCard* makeVkClassicCard(VkCards& c);

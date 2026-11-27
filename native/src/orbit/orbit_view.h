@@ -28,7 +28,20 @@ enum class ConsMode { Off, Lines, LinesAndNames };   // Constellations
 // Real planets: "Exaggerate the Sun's wobble" draws the Sun's path (and the Sun's place on it) this many times too big, round the barycentre.
 constexpr double kSunWobbleScale = 50;
 
+// 0.92.0: what the Data panel's celestial tools add to the picture (both 2D and 3D): the five Lagrange points of one pair, and a transfer orbit with its two ends.
+// Not saved. version grows with every change, so the app's kept picture (pictureKey) is drawn again.
+struct Overlay {
+    int version = 0;
+    bool lagrange = false;
+    std::string heavy, light;      // "Sun", "Jupiter" or "Jupiter", "Io": the bodies' names
+    double mu = 0;                 // light / (heavy + light)
+    bool transfer = false;
+    std::vector<Vec3> arc;         // the transfer orbit, m, Sun at the origin (the same frame as Body::pos)
+    Vec3 depPos, arrPos;
+};
+
 struct ViewSettings {
+    Overlay overlay;
     bool view3D = false;        // View: 2D (top-down) / 3D (rotatable)
     double zoom = -0.8;         // log10 of the zoom factor
     double tspeed = -0.92;      // Time speed slider

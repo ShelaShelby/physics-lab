@@ -153,6 +153,8 @@ GpuGuard& gpuVulkanGuard();
 // "[vulkan] [<name>] ", versions "vulkan <name> <hash>"): gpuSliceGuard, gpuJumpGuard, gpuMolCloudGuard, gpuGuard (the light paths) and gpuSkyGuard give
 // Vulkan's, and the superposition and jump groups (gpuVkGroupsGuard, "gpuvkgroups="), the 90 % outline
 // (gpuVkOutlineGuard, "gpuvkoutline="), the belts' rocks (gpuVkRocksGuard, "gpuvkrocks=") and the Cloud 3D Glow dots (gpuVkCloudGuard, "gpuvkcloud=").
+// 0.92.0: the Orbit Lab's porkchop grid (render/porkchop_card.h): gpu-vkporkchop-step.txt, "gpuvkporkchop=", log lines "[vulkan] [porkchop] ", version "vulkan porkchop <hash>"
+GpuGuard& gpuVkPorkchopGuard();
 GpuGuard& gpuVkGroupsGuard();
 GpuGuard& gpuVkOutlineGuard();
 GpuGuard& gpuVkRocksGuard();

@@ -78,3 +78,10 @@ horizons-io-subjupiter.txt
 [0.88.0] sats_mean_elements_2026-11-23.extract.txt: the lines of JPL's "Planetary Satellite Mean Elements" table that src/orbit/moon_jpl_elements.inc and
 tests/test_orbit.cpp (testMoonMeanElements) use: the warning, the definition, the column list and one row for each of Earth's Moon and the 13 big moons.
 The page (saved in the private sources repo, data/jpl/) states no numerical error for the table.
+
+JPL planetary satellite GM values (0.92.0)
+------------------------------------------
+sats_phys_par.extract.txt  The rows of JPL's "Planetary Satellite Physical Parameters" page (https://ssd.jpl.nasa.gov/sats/phys_par/, saved in the sources repo as data/jpl/sats_phys_par_2026-11-23.html)
+                           for the Moon, Io, Europa, Ganymede, Callisto, Titan and Triton, and the page's table "Planet and Pluto GM Values" for Earth, Jupiter, Saturn and Neptune. These are the GM
+                           values (km^3/s^2) of the Lagrange pairs in src/orbit/lagrange.cpp; tests/test_celestial.cpp reads them again from this file.
+
