@@ -24,6 +24,7 @@ double num(std::string s) {
     for (std::size_t i; (i = s.find(minus)) != std::string::npos;) s.replace(i, minus.size(), "-");
     return std::stod(s);
 }
+std::string noCr(std::string s) { while (!s.empty() && s.back() == '\r') s.pop_back(); return s; }   // an extract checked out with CRLF (Windows)
 std::vector<std::string> words(const std::string& l) { std::istringstream in(l); std::vector<std::string> w; std::string x; while (in >> x) w.push_back(x); return w; }
 // radix-2 FFT in place (n a power of two)
 void fft(std::vector<std::complex<double>>& a) {
@@ -65,7 +66,7 @@ static void testSun094() {
         for (const auto& l : block("sun/spots/mathew_2007_table2.extract.txt", "section 2")) w6768 = w6768 || l.find("6768 A\xCC\x8A mid-photospheric absorption line") != std::string::npos;
         check(w6768, "sun094 (a): Mathew 2007's continuum is next to the Ni I 6768 A line");
         std::string jha;
-        for (const char* b : {"section 4.1", "section 4.3"}) for (const auto& l : block("sun/spots/jha_2019_ratio.extract.txt", b)) jha += l + "\n";
+        for (const char* b : {"section 4.1", "section 4.3"}) for (const auto& l : block("sun/spots/jha_2019_ratio.extract.txt", b)) jha += noCr(l) + "\n";   // (Windows: CRLF)
         check(jha.find("settle down to a value of \xE2\x89\x88" "6") != std::string::npos && render::kRatioBig == 6, "sun094 (a): Jha et al. 2019, q about 6 above 100 millionths");
         check(jha.find("remains constant\nat \xE2\x89\x88" "4.5") != std::string::npos && render::kRatioSmall == 4.5 && jha.find("area <100") != std::string::npos, "sun094 (a): Jha et al. 2019, about 4.5 below 100 millionths");
         int g = 0;
@@ -79,7 +80,7 @@ static void testSun094() {
             }
         check(g == 3, "sun094 (a): Mathew, Zakharov & Solanki 2009 Table 2, the deconvolved rms at 450.4, 555.0, 668.4 nm are the code's (" + std::to_string(g) + " of 3)");
         std::string h;
-        for (const char* b : {"abstract", "introduction"}) for (const auto& l : block("sun/granulation/hathaway_2015.extract.txt", b)) h += l + "\n";
+        for (const char* b : {"abstract", "introduction"}) for (const auto& l : block("sun/granulation/hathaway_2015.extract.txt", b)) h += noCr(l) + "\n";
         check(h.find("(wavelength of about 1200 km), which is typical of") != std::string::npos && render::kGranCellMm == 1.2, "sun094 (a): Hathaway et al. 2015, the granular peak at about 1200 km");
         check(h.find("about 10 minutes (Bray et al. 1984)") != std::string::npos && render::kGranLifeMin == 10, "sun094 (a): Hathaway et al. 2015, granules live about 10 minutes");
     }
@@ -243,8 +244,8 @@ static void testSun094() {
     {
         orbit::SunPhotoMeta m;
         std::string why, json, xml;
-        for (const auto& l : block("sun/hmi/hmi_ic_closest_20240510.extract.txt", "reply")) json += l;
-        for (const auto& l : block("sun/hmi/hmi_ic_156593381_header.extract.txt", "header")) xml += l + "\n";
+        for (const auto& l : block("sun/hmi/hmi_ic_closest_20240510.extract.txt", "reply")) json += noCr(l);
+        for (const auto& l : block("sun/hmi/hmi_ic_156593381_header.extract.txt", "header")) xml += noCr(l) + "\n";
         check(orbit::parseClosestReply(json, m, why) && m.id == 156593381 && m.date == "2024-05-09 23:59:50", "sun094 (d): Helioviewer's reply is read (" + why + ")");
         check(std::fabs(m.jd - (t085::jdOf(2024, 5, 9) + (23 + 59.0 / 60 + 50.0 / 3600) / 24)) < 1e-9, "sun094 (d): the reply's time as a Julian day");
         check(orbit::parseHeaderXml(xml, m, why) && m.crlnObs == 313.56503 && m.crltObs == -3.2012870 && m.crota2 == 0 && m.wavelnth == 6173 && m.rsunObs == 950.44952 && m.cdelt1 == 0.60000002,

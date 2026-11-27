@@ -10,6 +10,7 @@
 ## Tests run
 - orbit_tests with PL_SOURCES_DIR: 3101 checks, 0 failed (testSun094 new: it does not build on 0.93.0). Spot means match the sources to 1e-4. Spectrum peak 1.23 Mm. rms contrast 0.121/0.165/0.215 (source 0.121/0.165/0.216). Disc mean = Neckel & Labs within 1e-4. Correlation 10 min apart 0.007. Photo observer vs IAU frame: 0.06 deg. Region 3664 found at Carrington 347.8, -19.8 (SRS 348, -19).
 - check_orbit_ui.py sun094 (new, 22 s): GPU vs CPU 780 of 334,800 pixels over 8 levels (granulation, and a photo in the cache), 93 of 115,920 (whole disc with photo). review085: all 5 views pass (Sun 93 of 115,920). Validation: 0 errors.
+- First Windows run failed one check (sun094 (a), Jha's lines joined across a CRLF line end): fixed in a second commit, checked here with the extracts turned to CRLF.
 - app_tests 202,477 checks, 0 failed. check_sources.py ok (813 lines, 96 extracts). check.sh job: quick 18 of 18, ui_smoke passed. Benchmark: the new scene and waits ran here (software Vulkan: no speed meaning).
 
 ## Not done
