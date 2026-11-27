@@ -78,6 +78,7 @@ static void runSteps(SolarSystem& sys, double tspeed, int steps) {
 #include "test_camera.inc"   // 0.75.0: the 3D pinhole camera against pinhole geometry
 #include "test_rings075.inc"   // 0.75.1: Saturn's rings, each part at its own viewing slant
 #include "test_review085.inc"   // 0.85.0: the outside review of 25 Nov 2026, the Orbit Lab (PLAN_REVIEW.md R1-R4)
+#include "test_sun094.inc"      // 0.94.0: the Sun's surface: dark sunspots, granulation, NASA SDO/HMI's photo of the day
 #include "test_review0752.inc"   // 0.75.2: the outside review's corrections (gravity and spin, Simple running vs a jump, orbit numbers, rings of the other giants ...)
 
 // 0.15 stage 5c, bug fix A: which labels the picture may draw under the bars. WRITTEN BEFORE the code. References: plain geometry (a rectangle is clear when it lies wholly inside the free area)
@@ -1417,6 +1418,7 @@ static void testCometTail078() {
 
 int main() {
     testReview085();
+    testSun094();
     testCometTail078();
     testCamera075();
     testRings075();

@@ -6,7 +6,8 @@
 // as the GPU's sampler does (bilinear in a level, linear between levels, longitude repeated, latitude clamped), the level from the pixel's footprint
 // (the uv change to the next pixel right and down), albedoScaled, Lambert or McEwen's lunar law, then sRGB over the colour of space.
 // 0.85.0: times the sunlight factor (PLPLANET's last field; orbit/true_light.h); the eclipses with the Sun's measured edge per channel (render/sun_limb.h).
-//   planet_picture out.bin sun <the fields of a PLSUN line>: the CPU twin of kPlanetFS uMode 4, the Sun: Neckel & Labs 1994's edge per channel and the sunspot outlines.
+//   planet_picture out.bin sun <the fields of a PLSUN line>: the CPU twin of kPlanetFS uMode 4, the Sun: Neckel & Labs 1994's edge per channel, the sunspots
+//   (0.94.0: filled, umbra and penumbra), the granulation and NASA's photo (render/sun_surface.h, orbit/sun_photo.h).
 // Writes "PLCPU w h x0 y0\n" and w * h RGBA bytes: A = 255 inside 0.95 of the outline (the smooth edge is left out), 0 elsewhere.
 #include <algorithm>
 #include <cmath>
@@ -18,6 +19,8 @@
 #include "render/planet_maps.h"
 #include "render/shading.h"
 #include "render/sun_limb.h"
+#include "render/sun_surface.h"
+#include "orbit/sun_photo.h"
 
 namespace {
 struct Level { int w = 0, h = 0; std::vector<float> rgb; };   // 4 floats a texel: linear r, g, b and the alpha (Earth's cloud cover)
@@ -55,13 +58,44 @@ void bilinear(const Level& l, double u, double v, double out[4]) {
 }
 }  // namespace
 
-int sunPicture(const char* outPath, const std::vector<double>& f) {   // x y r K[9] n, then 4 per spot (unit vector, angular radius)
-    if (f.size() < 13 || f.size() != 13 + 4 * std::size_t(f[12])) { std::fprintf(stderr, "PLSUN: %zu fields\n", f.size()); return 2; }
+// 0.94.0: the PLSUN line: x y r K[9] n, 6 a spot (unit vector, radius, umbra radius, penumbra factor), then granulation on, cells and grid spacings per radian, k, f, photo on,
+// the photo's files ("<cache folder>/<day>": .png, .xml, .json; "-" without one). The twin of kPlanetFS uMode 4 (render/sun_surface.h, orbit/sun_photo.h).
+// The photo is read bilinearly from its full-size level (the GPU uses its mip levels where the photo is shrunk: the check's photo is smooth there).
+int sunPicture(const char* outPath, const std::vector<std::string>& a) {
+    std::vector<double> f;
+    for (const auto& s : a) f.push_back(std::atof(s.c_str()));
+    if (f.size() < 13) { std::fprintf(stderr, "PLSUN: %zu fields\n", f.size()); return 2; }
+    const int ns = static_cast<int>(f[12]);
+    const std::size_t tail = 13 + 6 * std::size_t(ns);
+    if (f.size() < tail + 7) { std::fprintf(stderr, "PLSUN: %zu fields for %d spots\n", f.size(), ns); return 2; }
     const double X = f[0], Y = f[1], R = f[2];
     float K[9]; for (int i = 0; i < 9; i++) K[i] = static_cast<float>(f[3 + i]);
-    const int ns = static_cast<int>(f[12]);
+    std::vector<render::SunSpotDraw> spots(static_cast<std::size_t>(ns));
+    for (int k = 0; k < ns; k++) { const double* s = &f[13 + 6 * std::size_t(k)]; auto& d = spots[std::size_t(k)]; d.v[0] = s[0]; d.v[1] = s[1]; d.v[2] = s[2]; d.rho = s[3]; d.rhoU = s[4]; d.pen = s[5]; }
+    const bool gran = f[tail] > 0.5;
+    const double cellsPerRad = f[tail + 1], gridPerRad = f[tail + 2];
+    render::GranTime gt; gt.k = static_cast<std::uint32_t>(std::strtoul(a[tail + 3].c_str(), nullptr, 10)); gt.f = f[tail + 4];
+    const bool photoOn = f[tail + 5] > 0.5;
+    orbit::SunPhoto photo;
+    std::string base = a[tail + 6];   // the photo's files: the rest of the line (a folder may hold spaces)
+    for (std::size_t i = tail + 7; i < a.size(); i++) base += " " + a[i];
+    if (photoOn) {
+        const auto rd = [](const std::string& p) { std::FILE* fp = std::fopen(p.c_str(), "rb"); std::string s; if (!fp) return s; char b[65536]; std::size_t n; while ((n = std::fread(b, 1, sizeof b, fp)) > 0) s.append(b, n); std::fclose(fp); return s; };
+        const std::string png = rd(base + ".png");
+        photo = orbit::loadSunPhoto(std::vector<std::uint8_t>(png.begin(), png.end()), rd(base + ".xml"), rd(base + ".json"));
+        if (!photo.ok) { std::fprintf(stderr, "PLSUN: the photo %s cannot be read: %s\n", base.c_str(), photo.why.c_str()); return 2; }
+    }
     const render::SunLimb& lim = render::sunLimb();
-    const int x0 = static_cast<int>(std::floor(X - R)), y0 = static_cast<int>(std::floor(Y - R)), w = static_cast<int>(std::ceil(2 * R)) + 2, h = w;
+    const auto& U = render::umbraRgb();
+    const auto& G = render::granContrastRgb();
+    int x0 = static_cast<int>(std::floor(X - R)), y0 = static_cast<int>(std::floor(Y - R)), w = static_cast<int>(std::ceil(2 * R)) + 2, h = w;
+    if (const char* clip = std::getenv("PL_PICTURE_CLIP")) {   // "x0 y0 x1 y1": only these pixels of the window (a disc far larger than the window, panels elsewhere)
+        int cx0 = 0, cy0 = 0, cx1 = 0, cy1 = 0;
+        if (std::sscanf(clip, "%d %d %d %d", &cx0, &cy0, &cx1, &cy1) == 4 && cx1 > cx0 && cy1 > cy0) {
+            const int x1 = std::min(x0 + w, cx1), y1 = std::min(y0 + h, cy1);
+            x0 = std::max(x0, cx0); y0 = std::max(y0, cy0); w = std::max(0, x1 - x0); h = std::max(0, y1 - y0);
+        }
+    }
     std::vector<unsigned char> out(std::size_t(w) * h * 4, 0);
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++) {
@@ -69,18 +103,28 @@ int sunPicture(const char* outPath, const std::vector<double>& f) {   // x y r K
             const render::EllipsoidHit hit = render::ellipsoidHit(K, 1, 1, (px - X) / R, (py - Y) / R);
             if (!hit.hit || hit.d > 0.95) continue;
             const render::EllipsoidHit hx = render::ellipsoidHit(K, 1, 1, (px + 1 - X) / R, (py - Y) / R), hy = render::ellipsoidHit(K, 1, 1, (px - X) / R, (py + 1 - Y) / R);
-            const auto dist = [&](const render::EllipsoidHit& a) { return std::sqrt(std::pow(a.b[0] - hit.b[0], 2) + std::pow(a.b[1] - hit.b[1], 2) + std::pow(a.b[2] - hit.b[2], 2)); };
+            const auto dist = [&](const render::EllipsoidHit& e) { return std::sqrt(std::pow(e.b[0] - hit.b[0], 2) + std::pow(e.b[1] - hit.b[1], 2) + std::pow(e.b[2] - hit.b[2], 2)); };
             const double pw = std::max(dist(hx), dist(hy));
-            double line = 0;
-            for (int k = 0; k < ns; k++) {
-                const double* sp = &f[13 + 4 * std::size_t(k)];
-                const double ang = std::acos(std::clamp(hit.b[0] * sp[0] + hit.b[1] * sp[1] + hit.b[2] * sp[2], -1.0, 1.0));
-                const double e = std::fabs(ang - sp[3]), t = std::clamp((e - 0.5 * pw) / pw, 0.0, 1.0);
-                line = std::max(line, 1 - t * t * (3 - 2 * t));   // 1 - smoothstep(0.5 pw, 1.5 pw, e)
+            double sf[3], cover;
+            render::spotsFactor(hit.b, pw, spots.data(), ns, U, sf, cover);
+            double rel = 1, wP = 0;
+            if (photoOn) orbit::photoAt(photo, hit.b, rel, wP);
+            double g = 0, A = 0;
+            if (gran) {
+                A = render::granFade(pw * cellsPerRad);
+                if (A > 0 && wP < 1 && cover < 1) {
+                    const double q[3] = {hit.b[0] * gridPerRad, hit.b[1] * gridPerRad, hit.b[2] * gridPerRad};
+                    const double an = 1.5707963267948966 * gt.f;
+                    g = std::cos(an) * (render::kGranMean - render::granRaw(q, gt.k)) / render::kGranRms + std::sin(an) * (render::kGranMean - render::granRaw(q, gt.k + 1u)) / render::kGranRms;
+                }
             }
             const double mu = std::clamp(hit.n[2], 0.0, 1.0);
             unsigned char* o = &out[4 * (std::size_t(j) * w + i)];
-            for (int c = 0; c < 3; c++) o[c] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(lim.centre[c] * std::max(render::limbP(lim.poly[c], mu), 0.0) * (1 - 0.75 * line))));
+            for (int c = 0; c < 3; c++) {
+                const double drawn = (1 + A * g * (1 - cover) * G[std::size_t(c)]) * sf[c];
+                const double v = lim.centre[c] * std::max(render::limbP(lim.poly[c], mu), 0.0) * (drawn + (rel - drawn) * wP);
+                o[c] = static_cast<unsigned char>(std::lround(255 * render::srgbEncode(v)));
+            }
             o[3] = 255;
         }
     std::FILE* fp = std::fopen(outPath, "wb");
@@ -94,8 +138,8 @@ int sunPicture(const char* outPath, const std::vector<double>& f) {   // x y r K
 int main(int argc, char** argv) {
     if (argc < 3) { std::fprintf(stderr, "usage: planet_picture out.bin <PLPLANET fields> | planet_picture out.bin sun <PLSUN fields>\n"); return 2; }
     if (std::string(argv[2]) == "sun") {
-        std::vector<double> g;
-        for (int i = 3; i < argc; i++) g.push_back(std::atof(argv[i]));
+        std::vector<std::string> g;
+        for (int i = 3; i < argc; i++) g.push_back(argv[i]);
         return sunPicture(argv[1], g);
     }
     std::vector<double> f;

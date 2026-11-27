@@ -1,0 +1,54 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/spots/area/arxiv1905.06888_jha_2019_text.txt
+# Reference: B. K. Jha, S. Mandal, D. Banerjee, "Study of sunspot penumbra to umbra area ratio using Kodaikanal white-light digitized data", Sol. Phys. 294, 72 (2019), arXiv:1905.06888: the text layer of the saved PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1905.06888
+# Date read: 2026-11-27
+# sha256 of the original: f6452bf2b57016d81f945282c218e9e4af9503e4b0103480eeb619869329f27a
+# Place in the original: abstract, Equation (8), section 4.1, section 4.3
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: orbit/sun_surface.h (the umbra and penumbra areas); tests/test_sun094.inc
+#--- begin abstract
+                                               area ratio by analyzing the recently digitized Kodaikanal white-light data (1923-
+                                               2011). We implement an automatic umbra extraction method and compute
+                                               the ratio over eight solar cycles (Cycles 16-23). Although the average ratio
+                                               doesn’t show any variation with spot latitudes, cycle phases and strengths, it
+                                               increases from 5.5 to 6 as the sunspot size increases from 100 µhem to 2000
+                                               µhem. Interestingly, our analysis also reveals that this ratio for smaller sunspots
+#--- end
+#--- begin Equation 8
+   Finally, we compute the penumbra to umbra area ratio as:
+
+                                                                          AW
+                                                       Ratio = q =           −1                                                            (8)
+                                                                          AU
+
+where AW and AU are whole spot area and umbra area. This definition is same
+as Antalová (1971) and Hathaway (2013).
+#--- end
+#--- begin section 4.1
+sizes of 20 µhem between 20−2000 µhem and calculate the average ratio (qavg ) for
+all the sunspots falling in that particular bin. Figure 4a shows the quantity qavg as
+a function of total spot area. The shaded region represents the standard error of
+2σ uncertainty. The error bars beyond area > 1500 µhem are considerably larger
+due to poor statistics in those bins. Initially, the ratio for smaller spots (area
+< 100 µhem), increases rapidly from 3.4 to 5.2. As the area increases further
+(> 100 µhem), qavg tends to settle down to a value of ≈6 (Jha, Mandal, and
+Banerjee, 2018). In fact, these results are consistent with the findings by Antalová
+#--- end
+#--- begin section 4.3
+Sunspots of different sizes tend to show different behaviour (Mandal and Baner-
+jee, 2016). In this section, we look for the temporal evolution of q from two
+class of sunspots: i) Sunspots with area <100 µhem (Figure 7a); ii) Sunspots
+with area >100 µhem (Figure 7b). The choice of this threshold at 100 µhem is
+primarily dictated by the fact that we see a jump in q value at this area value
+in Figure 4a . In order to compare our results with Hathaway (2013), we over
+plot the q values for RGO data as shown in Figure 7. For spots >100 µhem, the
+ratio neither show any significant time variation, nor any tendency to follow the
+solar cycles. The over plotted RGO data is in accordance with our values, except
+some systematically lower values during Cycles 16 to 17. One of the highlights
+of the work by Hathaway (2013), was the large secular variation of the ratio for
+smaller spots which showed 300% increment with time. However, this property
+is not visible from Kodaikanal data which shows the ratio remains constant
+at ≈4.5 throughout the duration. In fact, analysing the Coimbra Astronomical
+#--- end

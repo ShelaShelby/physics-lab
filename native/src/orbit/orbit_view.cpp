@@ -32,6 +32,10 @@
 #include "spin.h"
 #include "sun_facts.h"
 #include "sunspots.h"
+#include "sun_photo.h"
+#include "render/sun_surface.h"
+#include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_stdinc.h>
 #include "true_light.h"
 #include "units.h"
 #include "ui/look.h"
@@ -977,18 +981,49 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     // 0.85.0 (outside review, PLAN_REVIEW.md R2, R3): the Sun as a ball, its edge by Neckel & Labs 1994 (render/sun_limb.h), and the measured sunspot groups of the
     // shown date as outlines (orbit/sunspots.h), fixed at their Carrington longitudes on the Sun's IAU frame. Until 0.84.1 the edge was the lab's own blend and
     // 16 invented patches marked the spin.
+    // 0.94.0: the surface (render/sun_surface.h): the groups filled (umbra and penumbra), the granulation, and NASA SDO/HMI's photo of the day when the Sun is
+    // close up (orbit/sun_photo.h: loaded on a worker, the drawn surface meanwhile). Until 0.93.0 the groups were outlines on a smooth ball.
     {
-        std::vector<float> spotData;
+        std::vector<float> spotData, spotB;
+        render::Renderer2D::SunSurface surf;
+        const double jd = sys.julianDay();
         if (hasSunSpin && sr > 9) {
-            const SpotDay sd = sunspotsAt(sys.julianDay());
+            const SpotDay sd = sunspotsAt(jd);
             for (const SpotGroup& g : sd.groups) {
                 if (static_cast<int>(spotData.size()) >= 4 * render::Renderer2D::kMaxSunSpots) break;
                 double v[3], rho;
                 spotGeometry(g, v, rho);
+                const render::SunSpotDraw s = render::spotDraw(v, rho, g.area);
                 spotData.insert(spotData.end(), {static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2]), static_cast<float>(rho)});
+                spotB.insert(spotB.end(), {static_cast<float>(s.rhoU), static_cast<float>(s.pen)});
             }
+            surf.spotsB = spotB.data();
+            surf.gran = true;
+            surf.cellsPerRad = render::kSunRadiusMm / render::kGranCellMm;
+            surf.gridPerRad = render::kSunRadiusMm / render::kGranGridMm;
+            const render::GranTime gt = render::granTime(jd);
+            surf.granK = gt.k; surf.granF = gt.f;
         }
-        R.sunBall(star.first, star.second, sr, hasSunSpin ? sunSpin.K : nullptr, spotData.data(), static_cast<int>(spotData.size() / 4));
+        static const bool photoDirSet = [] {
+            char* dir = SDL_GetPrefPath("PhysicsLab", "PhysicsLab");
+            SunPhotoSource::get().setCacheDir(dir ? std::string(dir) + "sun_photos" : std::string());
+            if (dir) SDL_free(dir);
+            return true;
+        }();
+        (void)photoDirSet;
+        SunPhotoSource& ps = SunPhotoSource::get();
+        ps.want(jd, hasSunSpin && sr >= kSunPhotoMinPx);
+        if (const SunPhoto* p = hasSunSpin && sr >= kSunPhotoMinPx ? ps.shown() : nullptr) {
+            surf.photoVersion = ps.version();
+            surf.photoGrey = &p->grey;
+            surf.photoW = p->w; surf.photoH = p->h;
+            for (int i = 0; i < 3; i++) { surf.photoO[i] = static_cast<float>(p->O[i]); surf.photoWest[i] = static_cast<float>(p->W[i]); surf.photoNorth[i] = static_cast<float>(p->N[i]); }
+            surf.photoGeo[0] = static_cast<float>(p->cx); surf.photoGeo[1] = static_cast<float>(p->cy); surf.photoGeo[2] = static_cast<float>(p->rpx);
+            for (int i = 0; i < 6; i++) surf.photoFit[i] = static_cast<float>(p->fit[i] / 255.0);
+            surf.photoLog = ps.cacheDir() + "/" + photoDayKey(jd);
+        }
+        setSunSurfaceCardLines(ps.cardLines(jd));
+        R.sunBall(star.first, star.second, sr, hasSunSpin ? sunSpin.K : nullptr, spotData.data(), static_cast<int>(spotData.size() / 4), &surf);
     }
     if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, false);
     if (sunTiny) R.ring(star.first, star.second, 7, 1.6, sunCol.withAlpha(0.9f));   // smaller than a pixel: a ring shows where it is

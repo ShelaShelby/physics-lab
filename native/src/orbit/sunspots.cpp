@@ -94,7 +94,7 @@ std::string spotSentence(const SpotDay& d) {
     case SpotDay::NotSaid: return "No sunspot group in this date's record (a spotless day or a day not observed: the record does not say)";
     case SpotDay::Groups: break;
     }
-    return std::to_string(d.groups.size()) + (d.groups.size() == 1 ? " sunspot group" : " sunspot groups") + " in this date's record, drawn as outlines";
+    return std::to_string(d.groups.size()) + (d.groups.size() == 1 ? " sunspot group" : " sunspot groups") + " in this date's record";
 }
 
 std::vector<std::string> spotCardLines(const SpotDay& d) {
@@ -105,12 +105,19 @@ std::vector<std::string> spotCardLines(const SpotDay& d) {
                         : "From the Greenwich and USAF/NOAA sunspot group records (NASA Marshall, D. Hathaway)");
     }
     if (d.status == SpotDay::Groups) {
-        l.push_back("Each outline: one group at its measured place, a round patch of its measured area (a group holds several spots; its shape is not drawn)");
-        l.push_back("Outline only: how dark the spots are is not drawn (no measured contrast fits these records yet)");
+        l.push_back("Each group is drawn as one round spot of its measured area at its measured place: the record gives no layout of its spots");
+        l.push_back("Dark core (umbra): the measured darkness of large spots' cores against wavelength (Maltby et al. 1986); real umbrae of small spots are lighter");
+        l.push_back("Grey fringe (penumbra): its measured mean brightness for the spot's size at one red wavelength, 676.8 nm (Mathew et al. 2007), the same in every colour");
+        l.push_back("The umbra is 1/7 of a spot's area (1/5.5 below 100 millionths of the Sun's hemisphere), the measured mean (Jha, Mandal & Banerjee 2019)");
         l.push_back("Turned with the Sun as one body from the record's time (at most half a day away)");
         if (d.day >= spotDayOf(1977, 1, 1)) l.push_back("Areas from 1977 on as recorded: NASA raises them by 1.4 to match Greenwich's; the app does not");
     }
     return l;
 }
+
+// 0.94.0: the Sun's surface lines of the card (the photo or the drawn surface), set by the view each frame (orbit/sun_photo.h is in maps_core)
+namespace { std::vector<std::string> g_surfaceLines; }
+void setSunSurfaceCardLines(std::vector<std::string> lines) { g_surfaceLines = std::move(lines); }
+const std::vector<std::string>& sunSurfaceCardLines() { return g_surfaceLines; }
 
 }  // namespace orbit

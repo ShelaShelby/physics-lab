@@ -7,6 +7,7 @@
 // No graphics here: decoding is plain C++ (stb_image), so the tests can read the maps.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -53,6 +54,7 @@ struct MapImage { int w = 0, h = 0; std::vector<uint8_t> rgba; };
 // Decodes a built-in map to RGBA (4 bytes per pixel). False if it is missing or not the expected size. 0.77.0: Earth's alpha is its cloud cover
 // (NASA Earth Observatory, Blue Marble 2002 cloud layer, assets/maps/earth_clouds.jpg: byte / 255); every other map's alpha is 255 and unused.
 bool decodeMap(Map m, MapImage& out);
+bool decodeGreyPng(const unsigned char* data, std::size_t size, int& w, int& h, std::vector<std::uint8_t>& grey);   // 0.94.0: a grey PNG (orbit/sun_photo.cpp)
 
 // Where a direction falls on a map, as the shader does it: (u, v) in 0..1, u from the left edge, v from the top.
 // Planets: east longitude and latitude in radians. The sky: galactic longitude l and latitude b in radians.

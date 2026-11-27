@@ -55,6 +55,7 @@ void Renderer2D::begin(double w, double h) {
     lens_.clear();
     segments_.clear();
     sunSpots_.clear();
+    sunSpotsB_.clear();
     triStart_ = 0;
 }
 
@@ -513,7 +514,7 @@ void Renderer2D::sphere(double x, double y, double r, Color c, double lx, double
     quad(x, y, half, c, 2, static_cast<float>(lx * k), static_cast<float>(ly * k), static_cast<float>(half / r), static_cast<float>(lz * k));
 }
 
-void Renderer2D::sunBall(double x, double y, double r, const float* K, const float* spots, int nSpots) {
+void Renderer2D::sunBall(double x, double y, double r, const float* K, const float* spots, int nSpots, const SunSurface* surf) {
     PL_KIND(kdSunDisc);
     if (r <= 0) return;
     closeTriangles();
@@ -526,6 +527,22 @@ void Renderer2D::sunBall(double x, double y, double r, const float* K, const flo
     sg.spotN = spots ? std::clamp(nSpots, 0, kMaxSunSpots) : 0;
     sg.spotFirst = static_cast<int>(sunSpots_.size());
     sunSpots_.insert(sunSpots_.end(), spots, spots + 4 * sg.spotN);
+    for (int i = 0; i < sg.spotN; i++) {   // 0.94.0: without the surface's numbers a spot is drawn with no umbra and no darkening (its radius 0, factor 1)
+        sunSpotsB_.push_back(surf && surf->spotsB ? surf->spotsB[2 * i] : 0.0f);
+        sunSpotsB_.push_back(surf && surf->spotsB ? surf->spotsB[2 * i + 1] : 1.0f);
+    }
+    sunSurf_ = surf ? *surf : SunSurface();
+    sunSurf_.spotsB = nullptr;
+    if (sunSurf_.photoVersion > 0 && sunSurf_.photoVersion != sunPhotoUploaded_ && sunSurf_.photoGrey && vk_) {   // a new photo: to the GPU once
+        std::vector<std::uint8_t> rgba(std::size_t(sunSurf_.photoW) * std::size_t(sunSurf_.photoH) * 4u);
+        for (std::size_t i = 0; i < sunSurf_.photoGrey->size() && 4 * i + 3 < rgba.size(); i++) { const std::uint8_t g = (*sunSurf_.photoGrey)[i]; rgba[4 * i] = rgba[4 * i + 1] = rgba[4 * i + 2] = g; rgba[4 * i + 3] = 255; }
+        std::string why;
+        sunPhotoOnGpu_ = uploadSunPhoto(sunSurf_.photoW, sunSurf_.photoH, rgba, why);
+        if (!sunPhotoOnGpu_) std::fprintf(stderr, "the Sun's photo could not be put on the GPU: %s\n", why.c_str());
+        sunPhotoUploaded_ = sunSurf_.photoVersion;
+    }
+    if (sunSurf_.photoVersion > 0 && (!sunPhotoOnGpu_ || sunSurf_.photoVersion != sunPhotoUploaded_)) sunSurf_.photoVersion = 0;   // drawn without the photo
+    sunSurf_.photoGrey = nullptr;
     segments_.push_back(sg);
     triStart_ = verts_.size();
     static const bool logPlanet = std::getenv("PL_LOG_PLANET") != nullptr;   // for the GPU-vs-CPU picture check (tests/planet_picture.cpp sun)
@@ -533,8 +550,12 @@ void Renderer2D::sunBall(double x, double y, double r, const float* K, const flo
         std::printf("PLSUN %.4f %.4f %.4f", x, y, r);
         for (int i = 0; i < 9; i++) std::printf(" %.7g", double(sg.K[i]));
         std::printf(" %d", sg.spotN);
-        for (int i = 0; i < 4 * sg.spotN; i++) std::printf(" %.9g", double(spots[i]));
-        std::printf("\n");
+        for (int i = 0; i < sg.spotN; i++) {
+            for (int k = 0; k < 4; k++) std::printf(" %.9g", double(spots[4 * i + k]));
+            std::printf(" %.9g %.9g", double(sunSpotsB_[sunSpotsB_.size() - 2u * std::size_t(sg.spotN - i)]), double(sunSpotsB_[sunSpotsB_.size() - 2u * std::size_t(sg.spotN - i) + 1]));
+        }
+        const SunSurface& s = sunSurf_;   // 0.94.0: granulation on, cells and grid spacings per radian, k, f; photo on, its files
+        std::printf(" %d %.9g %.9g %u %.9g %d %s\n", s.gran ? 1 : 0, s.cellsPerRad, s.gridPerRad, static_cast<unsigned>(s.granK), s.granF, s.photoVersion > 0 ? 1 : 0, s.photoVersion > 0 && !s.photoLog.empty() ? s.photoLog.c_str() : "-");
     }
 }
 

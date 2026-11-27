@@ -41,7 +41,11 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 
 ## Orbit Lab
 - The stars on the exposure (0.86.0) in the Alpha Centauri scene too (it keeps its own lighting and the stars' zoom rule). The Milky Way under True sunlight: **source needed** a calibrated surface brightness of the Milky Way (the Gaia map has none), then draw it on the same exposure.
-- **source needed**: the sunspots' darkness: a measured contrast that fits group records (a whole group's mean intensity against wavelength, or umbra and penumbra contrasts with the umbral share). Mathew et al. 2007 (one wavelength, per spot and umbral radius) does not fit (REPORT 0.85.0). Until then the groups are outlines. On the owner's files list (native/PLAN_REVIEW.md).
+- **source needed**: the penumbra's contrast against wavelength (0.94.0 uses Mathew et al. 2007's one wavelength, 676.8 nm, in every channel; 4 searches, REPORT 0.94.0). Candidates not reachable: Kjeldseth-Moe & Maltby 1969 (ADS 504), Allen's Astrophysical Quantities.
+- The Greenwich rows of 1874-1976 carry each group's measured umbral area: pack it into the sunspot table and use it in place of Jha et al.'s mean split for those years.
+- The umbra is drawn at the dark core of large spots (Maltby et al. 1986): Mathew et al. 2007 Table 2 gives the mean umbra against umbral radius at 676.8 nm (a size-dependent umbra needs its wavelength shape: **source needed**).
+- NASA's photo of the Sun: no download on Linux (no HTTP library in the build). The granulation's centre-to-limb change of contrast is not drawn (**source needed**).
+- **owner decides**: the brightest granules near the Sun's middle are past the screen's white and are clipped (the disc centre is set at the white since 0.85.0).
 - **source needed**: the Oort cloud model's inner part as numbers (its lean towards the ecliptic: Vokrouhlicky et al. 2019 give it only as Fig. 7). Duncan, Quinn & Tremaine 1987 (ADS refused: 500, 504). Until then the dots' directions are spread evenly (the card says so).
 - The sunspot groups turn as one body within the half day to the shown time; differential rotation and the spots' evolution are not drawn. NOAA's SRS after the last saved date needs a new fetch (the table ends 24 Nov 2026).
 - **fix**: orbit.saturn_real_fast on the owner's PC: 1 % low 253.2 fps (0.85.1: 230.6; below 255 Hz), limited by both CPU and GPU (bench_0.85.2.txt).

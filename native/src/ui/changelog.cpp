@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.94.0", "Orbit Lab: the Sun's surface (dark sunspots, granulation, NASA's photo of the day)",
+     "Close up, the Sun is no longer a smooth ball with grey rings. Each recorded sunspot group is a dark spot with a darker core (the umbra) and a grey fringe "
+     "(the penumbra), by measured darkness and a measured split of the area. The surface shows granulation, the fine pattern of rising cells, at its measured "
+     "size, contrast and lifetime (drawn statistically: not the real cells of that day). From 6 December 2010, when you zoom in, the app downloads NASA SDO's "
+     "photo of the surface for that day (Windows; it keeps it for the next time) and shows its real spots, bright faculae and grain, in the Sun's measured "
+     "colour and edge. The Sun's card says which one is shown and its limits. Sources are listed in About."},
     {"0.93.0", "Atom Lab: atoms in fields (hydrogen in an electric field, the ground level in a magnetic field)",
      "Hydrogen in an electric field (the Stark effect): the parabolic states, their energies to second order in the field, and their clouds, drawn on the "
      "graphics card. The ground level in a magnetic field: a card on the Spectrum tab for hydrogen-1, sodium-23, rubidium-85, rubidium-87 and caesium-133 "

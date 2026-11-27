@@ -1,0 +1,33 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/spots/contrast/astro-ph_0701401_mathew_2007_text.txt
+# Reference: S. K. Mathew, V. Martinez Pillet, S. K. Solanki, N. A. Krivova, "Properties of sunspots in cycle 23. I. Dependence of brightness on sunspot size and cycle phase", A&A 465, 291 (2007), arXiv:astro-ph/0701401: the text layer of the saved PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/astro-ph/0701401
+# Date read: 2026-11-27
+# sha256 of the original: cc867ea8ed62123022c741d754b70d3b46f26dbdda5efc4711f995e7122fcc5c
+# Place in the original: section 2 (the MDI continuum at 6768 A) and Table 2
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: orbit/sun_surface.h (the penumbra); tests/test_sun094.inc
+#--- begin section 2
+Continuum full disk images recorded by the Michelson                  on size (open circles). By restricting the analysis to sunspots
+Doppler Imager (MDI; Scherrer et al. 1995) on board the               near the disk centre, we avoid the suspected effect of centre-
+SOHO spacecraft are used in this analysis. The continuum im-          to-limb variation on the umbral brightness (Albregtsen et al.
+ages are obtained from five filtergrams observed around the Ni I      1984). This is shown in Sect. 5.
+6768 Å mid-photospheric absorption line with a spectral pass              The determination of umbral-penumbral and penumbral-
+#--- end
+#--- begin Table 2
+Table 2. Fit parameters for radius-brightness relation
+
+ Dependence on umbral radius of,    Umbral radius    Constant    Exponent     Gradient       σ            χ2
+ Power law fit
+ umbral core intensity                   (all)        1.8598     −1.0679                   0.063       3.5 × 10−3
+ umbral mean intensity                   (all)        0.8297     −0.3052                   0.013       1.5 × 10−4
+ Double linear fit
+ umbral core intensity                  <10′′         0.6515                  −0.0552     0.0029       6.7 × 10−4
+                                        >10′′         0.2299                  −0.0094     0.0027       4.7 × 10−5
+ umbral mean intensity                  <10′′         0.6536                  −0.0266     0.0013       1.2 × 10−4
+                                        >10′′         0.4858                  −0.0087     0.0026       4.3 × 10−5
+ Dependence on spot radius of,
+ Linear fit
+ penumbral mean intensity               >10′′         0.8561                  −0.0016     0.0001       1.1 × 10−6
+#--- end

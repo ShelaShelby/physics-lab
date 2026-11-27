@@ -9,6 +9,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_JPEG
+#define STBI_ONLY_PNG                    // 0.94.0: NASA SDO/HMI's photo of the day (orbit/sun_photo.cpp), a grey PNG
 #define STBI_NO_STDIO
 #define STBI_NO_LINEAR
 #define STBI_NO_HDR
@@ -157,6 +158,18 @@ void skyUV(double l, double b, double& u, double& v) {
     u = 0.5 - l / (2 * kPi);
     u -= std::floor(u);
     v = 0.5 - b / kPi;
+}
+
+// 0.94.0: one grey channel from a PNG in memory (orbit/sun_photo.cpp); false when it cannot be read
+bool decodeGreyPng(const unsigned char* data, std::size_t size, int& w, int& h, std::vector<std::uint8_t>& grey) {
+    w = h = 0; grey.clear();
+    if (!data || size < 8 || size > 0x7fffffffu || std::memcmp(data, "\x89PNG", 4) != 0) return false;
+    int n = 0;
+    unsigned char* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &n, 1);
+    if (!px || w <= 0 || h <= 0) { if (px) stbi_image_free(px); w = h = 0; return false; }
+    grey.assign(px, px + std::size_t(w) * std::size_t(h));
+    stbi_image_free(px);
+    return true;
 }
 
 }  // namespace render

@@ -25,10 +25,6 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "A feeding hole spinning at 0.9 with its disc out to 2000 GM/c\xC2\xB2, Real look, Light: All light, from 20 GM/c\xC2\xB2 with a 90\xC2\xB0 view (the hardest of "
             "five views tried, REPORT 0.58.0): the camera turns round the axis and tilts through the disc's plane and back, as a drag does. The sky and disc per pixel on "
             "the graphics card where its check passed.");
-        add(true, "blackhole.moving_gas", BenchKind::BlackHoleMovingGas, -1, "Black Hole Lab, the moving gas at the fastest rate while the view turns",
-            "A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), "
-            "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "
-            "round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.");
         add(true, "blackhole.circle_spin", BenchKind::BlackHoleCircleSpin, -1, "Black Hole Lab, circling the spinning hole and its disc as a user drags, with the glide",
             "A feeding hole spinning at 0.9, Real, the disc on, a 45\xC2\xB0 view, at the closest distance where the shadow does not fill the picture: dragged "
             "round 2 rad a second and up or down through the disc's plane for 0.6 s, then let go to glide 0.6 s, over and over. Each tilt needs new light paths.");
@@ -102,15 +98,24 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "orbit.porkchop", BenchKind::OrbitPorkchop, -1, "Orbit Lab, the Data panel's porkchop plot, Earth to Mars, the dates dragged",
             "The Data panel open on the transfer planner, Earth to Mars, the largest grid the controls reach (256 x 256 = 65,536 cells, each one Lambert's problem): the "
             "departure window slides back and forth as a drag moves it, so a new grid is solved every frame (on the card once its start-up check has passed) and drawn.");
+        // 0.94.0: the Sun's surface (render/sun_surface.h): the granulation in every pixel at the closest zoom (54 cells a pixel on the graphics card), the record's spots filled
+        add(true, "orbit.sun_surface", BenchKind::OrbitSunSurface, -1, "Orbit Lab, the Sun's surface at the closest zoom, turning, time running",
+            "The Sun in 3D at true scale from the closest the camera may come (1.5 radii), 10 May 2024 (7 groups filled, region 3664 the darkest), the "
+            "granulation in every pixel (NASA's photo held off), time at 1 minute a second, the camera turning 0.5 rad a second as a drag does.");
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
         // 0.91.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026: 1 % low 684.4 fps in bench_0.85.2, at least 1.5 x 255 Hz) to make room for atom.slice_dense
         // 0.92.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.porkchop and its wait: 1 % low 524.3 and 406.2 fps in bench_0.85.2, over 1.5 x 255 Hz
         // 0.93.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for atom.stark_drag: 1 % low 435.8 fps in bench_0.85.2, over 1.5 x 255 Hz
+        // 0.94.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.sun_surface and its waits: 1 % low 650.9 fps in bench_0.85.2, over 1.5 x 255 Hz
+        add(false, "blackhole.moving_gas", BenchKind::BlackHoleMovingGas, -1, "Black Hole Lab, the moving gas at the fastest rate while the view turns",
+            "A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), "
+            "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "
+            "round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.");
         add(false, "blackhole.edge_on", BenchKind::BlackHoleEdgeOn, -1, "Black Hole Lab, Sagittarius A*'s disc seen edge on, turning",
             "Sagittarius A*, the disc on, feeding 0.11, from 57.5 GM/c\xC2\xB2 in the disc's plane (pitch 1.575 rad, the view of the 0.82.1 bug), the streaks and the "
             "clump on, Real: the camera turning slowly round the axis (0.15 rad a second).");
         add(false, "orbit.sun_edge", BenchKind::OrbitSunEdge, -1, "Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse",
-            "The Sun followed, filling the view (zoom 2.6), on 10 May 2024 00:00 UT (7 recorded sunspot groups, drawn as outlines), its edge by Neckel & Labs 1994, "
+            "The Sun followed, filling the view (zoom 2.6), on 10 May 2024 00:00 UT (7 recorded sunspot groups, filled since 0.94.0), its edge by Neckel & Labs 1994, "
             "turning; after half the time Earth at the app's eclipse date (12 Aug 2026 17:46 UT), the Moon's shadow on it with the measured edge, turning.");
         add(false, "orbit.oort_region", BenchKind::OrbitOortRegion, -1, "Orbit Lab, zoomed out to the Oort cloud's model dots",
             "The heaviest view's settings (belts and the Oort cloud's 3,000 model dots, every extra, the full sky) zoomed out to show 100,000 AU (zoom -4.4), "
@@ -248,6 +253,7 @@ double benchPlannedS() {
 // 0.87.0: 46 waits (response.blackhole_return, done once): 292.6 s planned, under the 4.9 minutes. No new scene: the real light adds no pass.
 // 0.92.0: 29 scenes (orbit.porkchop in; orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule) and 47 waits (response.porkchop_grid): 287.7 s planned, under the limit.
 // 0.93.0: 29 scenes (atom.stark_drag in; blackhole.edge_on to All scenes by the 1.5 x refresh rule).
+// 0.94.0: 29 scenes (orbit.sun_surface in; blackhole.moving_gas to All scenes by the 1.5 x refresh rule) and 49 waits (response.sun_photo.network and .cache, each once): 290.9 s planned.
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= kBenchLimitS,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,

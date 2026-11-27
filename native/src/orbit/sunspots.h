@@ -4,9 +4,9 @@
 //    format: native/data/sun/spots/format.extract.txt). One row per group per day: the corrected whole-spot area (millionths of the solar hemisphere), the Carrington
 //    longitude and the latitude. The raw files are used: NASA's derived data raise the USAF/NOAA areas after 1976 by a factor of 1.4 (msfc_greenwch_page.extract.txt); the app does not.
 //  - from 2016-10-03: NOAA SWPC's daily Solar Region Summary (SRS), archived by NOAA NCEI (preliminary data, SWPC says): location, Carrington longitude (Lo), area.
-// A group is drawn as the outline of one round patch of its measured area at its Carrington longitude and latitude: the outline of a spherical cap whose area is the
-// group's (1 - cos rho = area x 1e-6). A group holds several spots: the outline is where the group is and how much of the Sun it covers, not its shape.
-// The spots' darkness is not drawn: no measured contrast fits these records (REPORT 0.85.0; ROADMAP: source needed). The outlines are labelled "outline".
+// A group is drawn as one round spot of its measured area at its Carrington longitude and latitude: a spherical cap whose area is the group's
+// (1 - cos rho = area x 1e-6). A group holds several spots: the round spot is where the group is and how much of the Sun it covers, not its shape (no record gives it).
+// 0.94.0: the spots are drawn dark (umbra and penumbra, render/sun_surface.h). Until 0.93.0 only their outlines were drawn (no fitting contrast had been found).
 // Carrington longitudes are fixed on the Sun's IAU frame (orbit/spin.cpp: W = 84.176 + 14.1844 d, the rate Carrington's longitudes turn at): the group turns with
 // the Sun as one body from the record's time to the shown time (at most half a day: no differential rotation in between). East longitudes (tests/test_review085.inc
 // checks the records' own disc places against this frame).
@@ -46,5 +46,7 @@ std::vector<std::string> spotCardLines(const SpotDay& d);
 // for the tests: the rows of a day exactly as stored (latitude x 10, longitude x 10, area)
 std::vector<std::array<int, 3>> spotRowsOfDay(int day);
 int spotDayOf(int y, int m, int d);               // days from 1874-01-01
+void setSunSurfaceCardLines(std::vector<std::string> lines);   // 0.94.0: the photo or the drawn surface (orbit/sun_photo.h), for the card
+const std::vector<std::string>& sunSurfaceCardLines();
 
 }  // namespace orbit

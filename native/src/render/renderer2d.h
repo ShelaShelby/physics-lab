@@ -102,6 +102,7 @@ public:
     void useVulkan(VkDraw2D* d);                       // (render/renderer2d_vk.cpp: renderer2d.cpp itself needs no Vulkan to link)
     bool vulkan() const { return vk_ != nullptr; }
     bool loadMapsVulkan(std::string& why);
+    bool uploadSunPhoto(int w, int h, const std::vector<std::uint8_t>& rgba, std::string& why);   // 0.94.0: NASA SDO/HMI's photo (kSunPhotoSlot)
     // 0.61.0 (Vulkan, step 3 of 5): the card programs on Vulkan (render/vk_card.h), made here, each under its own guard (app/gpu_guard.h: groups,
     // outline, rocks and the Glow dots at once; the Slice, the jump and the Density cloud by their labs' paths): compute(), outlineCompute(),
     // rockCompute(), cloudGpuOk(), atomCard() and moleculeCard() then give Vulkan's objects. why: a line for each program that could not be made.
@@ -129,9 +130,25 @@ public:
     void sphere(double x, double y, double r, Color c, double lightX, double lightY, double lightZ, double lightK = 1.0);  // a ball lit from the unit direction (right, down, towards you) on screen; 0.85.0: lightK the sunlight factor (PlanetLight::k)
     // 0.85.0 (R2, R3): the Sun as a ball (kPlanetFS uMode 4): its edge by Neckel & Labs 1994 (render/sun_limb.h), its disc centre the screen's white. K turns screen
     // directions into the Sun's own frame (IAU: rows its 0 meridian, 90 E, north pole), or nullptr (the screen frame). spots: n groups, 4 floats each (unit vector
-    // in the Sun's frame, angular radius in radians), drawn as outlines; at most kMaxSunSpots.
-    void sunBall(double x, double y, double r, const float* K, const float* spots, int nSpots);
+    // in the Sun's frame, angular radius in radians); at most kMaxSunSpots.
+    // 0.94.0: the surface (render/sun_surface.h): each spot also has its umbra's radius and penumbra's factor (spotsB, 2 floats a spot), the granulation and
+    // NASA SDO/HMI's photo of the day (orbit/sun_photo.h; uploaded to the GPU when its version is new).
+    struct SunSurface {
+        const float* spotsB = nullptr;        // 2 floats a spot: umbra radius (radians), penumbra factor
+        bool gran = false;
+        double cellsPerRad = 0;               // granulation cells (1.2 Mm) per radian of the ball (the fade)
+        double gridPerRad = 0;                // the pattern's grid spacings per radian (render/sun_surface.h kGranGridMm)
+        std::uint32_t granK = 0;              // the pattern's number and the time's fraction (render/sun_surface.h granTime)
+        double granF = 0;
+        int photoVersion = 0;                 // 0: no photo; the renderer uploads the picture when this changes
+        const std::vector<std::uint8_t>* photoGrey = nullptr;
+        int photoW = 0, photoH = 0;
+        float photoO[3] = {}, photoWest[3] = {}, photoNorth[3] = {}, photoGeo[3] = {}, photoFit[6] = {};
+        std::string photoLog;                 // the photo's files for the CPU twin (PL_LOG_PLANET): "<cache folder>/<day>"
+    };
+    void sunBall(double x, double y, double r, const float* K, const float* spots, int nSpots, const SunSurface* surf = nullptr);
     static constexpr int kMaxSunSpots = 64;
+    static constexpr int kSunPhotoSlot = 31;    // 0.94.0: the photo's texture (VkDraw2D map slots 0-31; the maps use 1-18)
     void sunDisc(double x, double y, double r, Color c);                    // the Sun: brighter middle, darker edge
     void fadeDisc(double x, double y, double r, Color c);                   // a soft dot: full colour in the middle, fading to nothing at radius r
 
@@ -407,7 +424,11 @@ private:
     struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; float albedoK = 1.0f; float lightK = 1.0f; int spotFirst = 0, spotN = 0; RockFrame rf; MeshProjection mp; bool grains = false; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
-    std::vector<float> sunSpots_;             // 0.85.0: this frame's sunspot outlines (Segment::spotFirst, spotN)
+    std::vector<float> sunSpots_;             // 0.85.0: this frame's sunspot groups (Segment::spotFirst, spotN)
+    std::vector<float> sunSpotsB_;            // 0.94.0: their umbra radius and penumbra factor, 2 floats a spot
+    SunSurface sunSurf_;                      // 0.94.0: this frame's Sun's surface (one Sun a frame; its pointers are not kept)
+    int sunPhotoUploaded_ = 0;                // the photo version on the GPU (0: none)
+    bool sunPhotoOnGpu_ = false;
     std::vector<float> inst_;                 // square centres for all square draws of this frame
     std::size_t triStart_ = 0;
     int texW_[static_cast<int>(Map::Count)] = {};    // the maps' widths (the sky's: the Black Hole Lab's lens)

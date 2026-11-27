@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.93.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.94.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -221,8 +221,12 @@ add_custom_command(
           -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_maps.cmake
   DEPENDS ${PL_MAP_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_maps.cmake
   COMMENT "Embedding the picture maps")
-add_library(maps_core STATIC src/render/planet_maps.cpp ${CMAKE_BINARY_DIR}/embedded_maps.cpp)
+add_library(maps_core STATIC src/render/planet_maps.cpp ${CMAKE_BINARY_DIR}/embedded_maps.cpp src/orbit/sun_photo.cpp)   # 0.94.0: NASA SDO/HMI's photo of the day
 target_include_directories(maps_core PUBLIC src)
+target_link_libraries(maps_core PUBLIC Threads::Threads)
+if(WIN32)
+  target_link_libraries(maps_core PUBLIC winhttp)   # 0.94.0: the photo's download (orbit/sun_photo.cpp); other builds do not download
+endif()
 target_include_directories(maps_core SYSTEM PRIVATE third_party)
 
 # ---- tests ----
@@ -611,8 +615,8 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_orbit PROPERTIES TIMEOUT 900 COST 312)
       # ui_orbit_card: the Orbit Lab on the card against the processor (Saturn's rings, the fly-by, the lines) and against the formulas (the rings' slant, the air's edge, the night side)
       add_test(NAME ui_orbit_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit_card
-               check_orbit_ui.py:rings check_orbit_ui.py:flyby check_orbit_ui.py:cardlines check_orbit_ui.py:ringslant check_orbit_ui.py:airedge check_orbit_ui.py:nightside check_orbit_ui.py:planets check_orbit_ui.py:review085)
-      set_tests_properties(ui_orbit_card PROPERTIES TIMEOUT 900 COST 461)
+               check_orbit_ui.py:rings check_orbit_ui.py:flyby check_orbit_ui.py:cardlines check_orbit_ui.py:ringslant check_orbit_ui.py:airedge check_orbit_ui.py:nightside check_orbit_ui.py:planets check_orbit_ui.py:review085 check_orbit_ui.py:sun094)
+      set_tests_properties(ui_orbit_card PROPERTIES TIMEOUT 900 COST 490)
       # ui_atom: the Atom Lab: the element chip, the toolbar, the honest captions; the Slice's Glow dots on the card against the processor
       add_test(NAME ui_atom COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom
                check_atom_chip.py check_atom_toolbar.py check_022.py:honest check_atom_chip.py:classicsliceglow)

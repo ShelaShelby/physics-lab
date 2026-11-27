@@ -14,6 +14,7 @@
 #include "app/gpu_guard.h"
 #include "shading.h"
 #include "sun_limb.h"
+#include "sun_surface.h"
 #include "vk_blackhole.h"
 #include "vk_card.h"
 #include "vk_draw2d.h"
@@ -241,6 +242,11 @@ void Renderer2D::glareVeilCard(int W, int H, double cx, double cy, double K, int
 }
 int Renderer2D::skyLensState() const { return vkbh_ ? vkbh_->lensState() : 2; }
 double Renderer2D::skyWhiteWait() { if (!vkbh_) return 0; const double w = vkbh_->whiteWait(); skyStats_ = vkbh_->skyStats(); return w; }   // (0.70.0: the stats too, at once)
+
+bool Renderer2D::uploadSunPhoto(int w, int h, const std::vector<std::uint8_t>& rgba, std::string& why) {   // 0.94.0: linear grey (UNORM), with mip levels
+    if (!vk_) { why = "no Vulkan"; return false; }
+    return vk_->upload(kSunPhotoSlot, w, h, rgba, false, why);
+}
 
 bool Renderer2D::loadMapsVulkan(std::string& why) {
     if (!vk_) { why = "no Vulkan"; return false; }
@@ -485,10 +491,30 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
                 V.setF(VkDraw2D::kPlanet, "uSunC", sc, 3);
                 const int spotN = sg.mode == 4 ? sg.spotN : 0;
                 V.setI(VkDraw2D::kPlanet, "uSpotN", &spotN, 1);
-                if (spotN > 0) V.setF(VkDraw2D::kPlanet, "uSpot", sunSpots_.data() + 4 * sg.spotFirst, 4, spotN);
+                if (spotN > 0) { V.setF(VkDraw2D::kPlanet, "uSpot", sunSpots_.data() + 4 * sg.spotFirst, 4, spotN); V.setF(VkDraw2D::kPlanet, "uSpotB", sunSpotsB_.data() + 2 * sg.spotFirst, 2, spotN); }
+                if (sg.mode == 4) {   // 0.94.0: the Sun's surface (render/sun_surface.h, orbit/sun_photo.h)
+                    const SunSurface& s = sunSurf_;
+                    const auto& U = umbraRgb();
+                    const auto& G = granContrastRgb();
+                    const float u3[3] = {static_cast<float>(U[0]), static_cast<float>(U[1]), static_cast<float>(U[2])};
+                    const float g3[3] = {static_cast<float>(G[0]), static_cast<float>(G[1]), static_cast<float>(G[2])};
+                    const float gran[4] = {static_cast<float>(s.gridPerRad), static_cast<float>(s.granF), static_cast<float>(s.cellsPerRad), s.gran ? 1.0f : 0.0f};
+                    const int k = static_cast<int>(s.granK & 0x7fffffffu), photo = s.photoVersion > 0 ? 1 : 0;
+                    V.setF(VkDraw2D::kPlanet, "uUmbra", u3, 3);
+                    V.setF(VkDraw2D::kPlanet, "uGranC", g3, 3);
+                    V.setF(VkDraw2D::kPlanet, "uGran", gran, 4);
+                    V.setI(VkDraw2D::kPlanet, "uGranK", &k, 1);
+                    V.setI(VkDraw2D::kPlanet, "uPhoto", &photo, 1);
+                    V.setF(VkDraw2D::kPlanet, "uPhotoO", s.photoO, 3);
+                    V.setF(VkDraw2D::kPlanet, "uPhotoW", s.photoWest, 3);
+                    V.setF(VkDraw2D::kPlanet, "uPhotoN", s.photoNorth, 3);
+                    V.setF(VkDraw2D::kPlanet, "uPhotoGeo", s.photoGeo, 3);
+                    V.setF(VkDraw2D::kPlanet, "uPhotoFit", s.photoFit, 1, 6);
+                }
             }
-            // (a plain ball binds the white texture: the shader does not read it then)
-            V.draw(VkDraw2D::kPlanet, VkDraw2D::kNormal, vb, sg.first, sg.count, 0, 0, 0, vkMap_[sg.map] ? sg.map : 0);
+            // (a plain ball binds the white texture: the shader does not read it then; 0.94.0: the Sun binds its photo when it has one)
+            const int tex = sg.mode == 4 ? (sunSurf_.photoVersion > 0 ? kSunPhotoSlot : 0) : (vkMap_[sg.map] ? sg.map : 0);
+            V.draw(VkDraw2D::kPlanet, VkDraw2D::kNormal, vb, sg.first, sg.count, 0, 0, 0, tex);
             break;
         }
         case Kind::Triangles: {

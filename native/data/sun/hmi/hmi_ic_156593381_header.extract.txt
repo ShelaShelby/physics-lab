@@ -1,0 +1,146 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/hmi/hmi_ic_156593381_header.xml
+# Reference: Helioviewer API v2 getJP2Header for image 156593381: the FITS header of NASA SDO/HMI continuum intensity of 2024-05-09 23:59:50 UT, as received
+# URL: https://api.helioviewer.org/v2/getJP2Header/?id=156593381
+# Date read: 2026-11-27
+# sha256 of the original: 339cc79f506521e471714bc3ad25744b2ba7282603d11b0055ef5f49df5d5724
+# Place in the original: the whole file
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: orbit/sun_photo.h (the header keys); tests/test_sun094.inc (the photo place test)
+#--- begin header
+<?xml version="1.0" encoding="utf-8"?>
+<meta>
+<fits>
+<SIMPLE>1</SIMPLE>
+<BITPIX>32</BITPIX>
+<NAXIS>2</NAXIS>
+<NAXIS1>4096</NAXIS1>
+<NAXIS2>4096</NAXIS2>
+<EXTEND>1</EXTEND>
+<DATE>2024-05-10T01:18:17.000</DATE>
+<DATE-OBS>2024-05-09T23:59:50.300</DATE-OBS>
+<TELESCOP>SDO</TELESCOP>
+<INSTRUME>HMI_FRONT2</INSTRUME>
+<WAVELNTH>6173.00</WAVELNTH>
+<CAMERA>2</CAMERA>
+<BUNIT>DN</BUNIT>
+<ORIGIN>SDO</ORIGIN>
+<CONTENT>CONTINUUM INTENSITY</CONTENT>
+<QUALITY>1024</QUALITY>
+<BLD_VERS>-905</BLD_VERS>
+<HCAMID>3</HCAMID>
+<TOTVALS>12262520</TOTVALS>
+<DATAVALS>8636954</DATAVALS>
+<MISSVALS>3625566</MISSVALS>
+<SATVALS>13437</SATVALS>
+<DATAMIN>142.75906</DATAMIN>
+<DATAMAX>55224.367</DATAMAX>
+<DATAMEDN>40202.073</DATAMEDN>
+<DATAMEAN>36224.660</DATAMEAN>
+<DATARMS>12794.618</DATARMS>
+<DATASKEW>-1.7915780</DATASKEW>
+<DATAKURT>2.5337064</DATAKURT>
+<CTYPE1>HPLN-TAN</CTYPE1>
+<CTYPE2>HPLT-TAN</CTYPE2>
+<CRPIX1>2048.50</CRPIX1>
+<CRPIX2>2048.50</CRPIX2>
+<CRVAL1>0.00000</CRVAL1>
+<CRVAL2>0.00000</CRVAL2>
+<CDELT1>0.60000002</CDELT1>
+<CDELT2>0.60000002</CDELT2>
+<CUNIT1>arcsec</CUNIT1>
+<CUNIT2>arcsec</CUNIT2>
+<CROTA2>0.00000</CROTA2>
+<CRDER1>0.00000</CRDER1>
+<CRDER2>0.00000</CRDER2>
+<CSYSER1>0</CSYSER1>
+<CSYSER2>0</CSYSER2>
+<WCSNAME>Helioprojective-cartesian</WCSNAME>
+<DSUN_OBS>1.5104518e+11</DSUN_OBS>
+<DSUN_REF>1.4959786e+11</DSUN_REF>
+<RSUN_REF>6.9600000e+08</RSUN_REF>
+<CRLN_OBS>313.56503</CRLN_OBS>
+<CRLT_OBS>-3.2012870</CRLT_OBS>
+<HGLN_OBS>0</HGLN_OBS>
+<CAR_ROT>2284</CAR_ROT>
+<OBS_VR>2497.2622</OBS_VR>
+<OBS_VW>28208.547</OBS_VW>
+<OBS_VN>5288.0029</OBS_VN>
+<RSUN_OBS>950.44952</RSUN_OBS>
+<T_OBS>2024.05.10_00:00:49.828_TAI</T_OBS>
+<T_REC>2024.05.10_00:00:45.000_TAI</T_REC>
+<TRECEPOC>1977.01.01_00:00:00.000_TAI</TRECEPOC>
+<TRECSTEP>45.0000</TRECSTEP>
+<TRECUNIT>secs</TRECUNIT>
+<CADENCE>45.0000</CADENCE>
+<DATASIGN>1</DATASIGN>
+<HFLID>1022</HFLID>
+<HCFTID>10</HCFTID>
+<QLOOK>1</QLOOK>
+<CAL_FSN>230562565</CAL_FSN>
+<LUTQUERY>hmi.lookup_corrected_expanded[230562565][][3][38][46][0][78][6]</LUTQUERY>
+<TSEL>20.0000</TSEL>
+<TFRONT>20.0000</TFRONT>
+<TINTNUM>24</TINTNUM>
+<SINTNUM>10</SINTNUM>
+<DISTCOEF></DISTCOEF>
+<ROTCOEF></ROTCOEF>
+<ODICOEFF>6</ODICOEFF>
+<OROCOEFF>4</OROCOEFF>
+<POLCALM>1</POLCALM>
+<CODEVER0>$Id: HMI_observables.c,v 1.58 2018</CODEVER0>
+<CODEVER1>$Id: interpol_code.c,v 1.6 2017</CODEVER1>
+<CODEVER2>$Id: interpol_code.c,v 1.6 2017</CODEVER2>
+<CODEVER3>$Id: polcal.c,v 1.8 2016</CODEVER3>
+<RECNUM>9599135</RECNUM>
+<DRMS_ID>lm_jps.Ic_45s:9599135:continuum</DRMS_ID>
+<PRIMARYK>T_REC, CAMERA</PRIMARYK>
+<LICENSE>LICENSE</LICENSE>
+<HEADSUM>lINWmHMUlHMUlHMU</HEADSUM>
+<LONGSTRN>OGIP 1.0</LONGSTRN>
+<BLANK>-2147483648</BLANK>
+<BZERO>0.00000</BZERO>
+<BSCALE>1.00000</BSCALE>
+<CHECKSUM>0VeJ2UZH0UbH0UZH</CHECKSUM>
+<DATASUM>1798504822</DATASUM>
+<DATE_OBS>2024-05-09T23:59:50.300</DATE_OBS>
+<XCEN>0.0000000</XCEN>
+<YCEN>0.0000000</YCEN>
+<history>
+Polynomial Coefficients used for Doppler velocity correction: 2.342091e+
+02 -9.773314e-04 -1.452047e-05 -4.420043e-10
+FITSHEAD2STRUCT run at: Thu May  9 19:27:15 2024
+</history>
+<comment>
+FITS (Flexible Image Transport System) format is defined in 'Astronomy
+and Astrophysics', volume 376, page 359; bibcode: 2001A&amp;A...376..359H
+De-rotation: ON; Un-distortion: ON; Re-centering: ON; Re-sizing: OFF; co
+rrection for cosmic-ray hits; correction front/side intensity implemente
+d for mod L; RSUNerr=5.0 pixels; dpath=/home/jsoc/cvs/Development/JSOC/p
+roj/lev1.5_hmi/apps/; linearity=1 with coefficients updated on 2014/01/1
+5; smooth=1; propagate eclipse bit from level 1; use of larger crop radi
+us look-up tables
+This FITS file may contain long string keyword values that are
+continued over multiple keywords.  The HEASARC convention uses the &amp;
+character at the end of each substring which is then continued
+on the next keyword which has the name CONTINUE.
+FITSHEAD2STRUCT
+</comment>
+</fits>
+<helioviewer>
+<HV_ROTATION>0.00000</HV_ROTATION>
+<HV_JP2GEN_VERSION>0.8</HV_JP2GEN_VERSION>
+<HV_JP2GEN_BRANCH_REVISION>No valid revision number found. Bazaar not installed? Using HV_WRITTENBY manually included revision number: 84 [2011/01/10, https://launchpad.net/jp2gen] : % SPAWN: Error managing child process.:  No such file or directory</HV_JP2GEN_BRANCH_REVISION>
+<HV_HVS_DETAILS_FILENAME>hvs_default_hmi.pro</HV_HVS_DETAILS_FILENAME>
+<HV_HVS_DETAILS_FILENAME_VERSION>1.0</HV_HVS_DETAILS_FILENAME_VERSION>
+<HV_COMMENT>JP2 file created locally at Lockheed LMSAL using hv_hmi_list2jp2_gs at Thu May  9 19:27:15 2024.
+Contact Helioviewer LMSAL Franchise (slater@lmsal.com) for more details/questions/comments regarding this JP2 file.
+HVS (Helioviewer setup) file used to create this JP2 file: hvs_default_hmi.pro (version 1.0).
+FITS to JP2 source code provided by ESA/NASA Helioviewer Project [contact the Helioviewer Project at webmaster@helioviewer.org][NASA-GSFC] and is available for download at https://launchpad.net/jp2gen.
+Please contact the source code providers if you suspect an error in the source code.
+Full source code for the entire Helioviewer Project can be found at https://launchpad.net/helioviewer.</HV_COMMENT>
+<HV_SUPPORTED>TRUE</HV_SUPPORTED>
+</helioviewer>
+</meta>
+#--- end

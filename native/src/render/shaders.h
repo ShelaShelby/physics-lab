@@ -395,8 +395,19 @@ uniform int uLunar;          // 0.50: 1 = the Moon: McEwen's lunar photometric f
 uniform float uLightK;       // 0.85.0 (R1): the sunlight factor (1 au / d)^2 times the exposure (orbit/true_light.h); 1 = even lighting
 uniform vec3 uLimb[6];       // 0.85.0 (R2): the Sun's edge, Neckel & Labs 1994: coefficient n of mu^n for r, g, b, each channel summing to 1 (render/sun_limb.h)
 uniform vec3 uSunC;          // 0.85.0 (uMode 4): the Sun's disc centre, linear sRGB, brightest channel 1
-uniform int uSpotN;          // 0.85.0 (R3, uMode 4): the sunspot groups' outlines: centre on the Sun's ball (its own frame, unit vector) and angular radius (radians)
+uniform int uSpotN;          // 0.85.0 (R3, uMode 4): the sunspot groups: centre on the Sun's ball (its own frame, unit vector) and angular radius (radians)
 uniform vec4 uSpot[64];
+uniform vec4 uSpotB[64];     // 0.94.0: the umbra's angular radius, the penumbra's factor (render/sun_surface.h spotDraw)
+uniform vec3 uUmbra;         // 0.94.0: the umbra's factor per channel (Maltby et al. 1986; render/sun_surface.h umbraRgb)
+uniform vec3 uGranC;         // 0.94.0: the granulation's rms contrast per channel (Mathew, Zakharov & Solanki 2009; granContrastRgb)
+uniform vec4 uGran;          // 0.94.0: (grid spacings per radian of the Sun's ball, the time's fraction f, 1.2 Mm cells per radian, 1 = granulation on)
+uniform int uGranK;          // 0.94.0: the pattern number k (render/sun_surface.h granTime)
+uniform int uPhoto;          // 0.94.0: 1 = NASA SDO/HMI's photo in uTex (orbit/sun_photo.h)
+uniform vec3 uPhotoO;        // the photo's observer direction, west and north, in the Sun's frame
+uniform vec3 uPhotoW;
+uniform vec3 uPhotoN;
+uniform vec3 uPhotoGeo;      // the disc's centre x, y and radius, in the photo's pixels (pixel centres at whole numbers, y down)
+uniform float uPhotoFit[6];  // the photo's own limb fit, grey / 255 against mu
 out vec4 fragColor;
 const float PI = 3.14159265358979;
 // 0.50: IEC 61966-2-1 (sRGB) transfer functions; C++ twin render/shading.h (srgbDecode, srgbEncode)
@@ -406,6 +417,26 @@ vec3 srgbEncode(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * 
 // Gauss-Legendre over the cut circles, t from 0 to pi with r = r0 + (r1 - r0)(1 - cos t) / 2; the whole circles exactly).
 const float GLX[8] = float[8](0.0950125098, 0.2816035508, 0.4580167777, 0.6178762444, 0.7554044084, 0.8656312024, 0.9445750231, 0.9894009350);
 const float GLW[8] = float[8](0.1894506105, 0.1826034150, 0.1691565194, 0.1495959888, 0.1246289713, 0.0951585117, 0.0622535239, 0.0271524594);
+// 0.94.0: the granulation pattern; C++ twin render/sun_surface.h pcgHash, granRaw
+uint pcgHash(uint v) { uint s = v * 747796405u + 2891336453u; uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u; return (w >> 22u) ^ w; }
+float granRaw(vec3 qIn, uint k) {
+    uint hk = pcgHash(k);
+    vec3 q = qIn + vec3(float(pcgHash(hk + 1u)), float(pcgHash(hk + 2u)), float(pcgHash(hk + 3u))) * (1.0 / 4294967296.0);   // the pattern's own grid offset
+    vec3 fq = floor(q);
+    float f1 = 9.0;
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++) {
+                vec3 c = fq + vec3(float(dx), float(dy), float(dz));
+                uint h = pcgHash(uint(int(c.x)) + pcgHash(uint(int(c.y)) + pcgHash(uint(int(c.z)) + hk)));
+                uint h2 = pcgHash(h);
+                uint h3 = pcgHash(h2);
+                vec3 p = c + vec3(float(h), float(h2), float(h3)) * (1.0 / 4294967296.0);
+                float d = length(q - p);
+                f1 = min(f1, d);
+            }
+    return f1;
+}
 vec3 limbP(float mu) { vec3 p = vec3(0.0); float m = 1.0; for (int n = 0; n < 6; n++) { p += uLimb[n] * m; m *= mu; } return p; }
 vec3 limbFlux() { vec3 f = vec3(0.0); for (int n = 0; n < 6; n++) f += 2.0 * uLimb[n] / float(n + 2); return f; }
 vec3 sunCoveredLimb(float a, float b, float th) {
@@ -489,14 +520,43 @@ void main() {
     if (edge <= 0.0) discard;
     vec3 n = normalize(transpose(uK) * (b * S));                  // its surface normal on the screen: right, up, towards you
     if (uMode == 4) {   // 0.85.0 (R2, R3): the Sun. Its edge by Neckel & Labs 1994 per channel (render/sun_limb.h), mu = cos of the angle from the line of sight
+        // 0.94.0: the surface (render/sun_surface.h, orbit/sun_photo.h): the record's spots filled (umbra, penumbra), the granulation, NASA's photo
         vec3 c = uSunC * max(limbP(clamp(n.z, 0.0, 1.0)), vec3(0.0));
-        float line = 0.0;   // the sunspot groups' outlines (orbit/sunspots.h): a line about a pixel wide where the angle from a group's centre is its radius
+        vec3 f = vec3(1.0);
+        float cover = 0.0;
         for (int i = 0; i < 64; i++) {
             if (i >= uSpotN) break;
             float ang = acos(clamp(dot(b, uSpot[i].xyz), -1.0, 1.0));
-            line = max(line, 1.0 - smoothstep(0.5 * pw, 1.5 * pw, abs(ang - uSpot[i].w)));
+            float inW = 1.0 - smoothstep(uSpot[i].w - 0.5 * pw, uSpot[i].w + 0.5 * pw, ang);
+            float inU = 1.0 - smoothstep(uSpotB[i].x - 0.5 * pw, uSpotB[i].x + 0.5 * pw, ang);
+            f *= vec3(1.0) - vec3(inW * (1.0 - uSpotB[i].y)) - inU * (vec3(uSpotB[i].y) - uUmbra);
+            cover = max(cover, inW);
         }
-        c *= 1.0 - 0.75 * line;
+        float wP = 0.0, rel = 1.0;
+        vec2 ppx = vec2(uPhotoGeo.x + dot(b, uPhotoW) * uPhotoGeo.z, uPhotoGeo.y - dot(b, uPhotoN) * uPhotoGeo.z);
+        vec2 pts = vec2(textureSize(uTex, 0));
+        float pg = texture(uTex, (ppx + vec2(0.5)) / pts).r;   // (sampled by every pixel: its derivatives choose the mip level)
+        if (uPhoto == 1) {
+            float muO = dot(b, uPhotoO);
+            if (muO > 0.2) {
+                wP = smoothstep(0.2, 0.3, muO);   // (orbit/sun_photo.h kPhotoMuNone, kPhotoMuFull)
+                float fit = 0.0, m = 1.0;
+                for (int q = 0; q < 6; q++) { fit += uPhotoFit[q] * m; m *= muO; }
+                rel = pg / max(fit, 1.0 / 255.0);
+            }
+        }
+        float g = 0.0, A = 0.0;
+        if (uGran.w > 0.5) {
+            A = smoothstep(1.5, 3.0, 1.0 / max(pw * uGran.z, 1e-6));   // 1 at 3 pixels a cell and more, 0 at 1.5 and less
+            if (A > 0.0 && wP < 1.0 && cover < 1.0) {
+                vec3 q = b * uGran.x;
+                uint k = uint(uGranK);
+                float a = 1.5707963 * uGran.y;
+                g = cos(a) * (0.52047 - granRaw(q, k)) / 0.17230 + sin(a) * (0.52047 - granRaw(q, k + 1u)) / 0.17230;
+            }
+        }
+        vec3 drawn = (vec3(1.0) + A * g * (1.0 - cover) * uGranC) * f;
+        c *= mix(drawn, vec3(rel), wP);
         fragColor = vec4(srgbEncode(c), vColor.a * edge);
         return;
     }

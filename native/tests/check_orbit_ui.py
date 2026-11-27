@@ -4,7 +4,8 @@
 #   airedge   0.50: just outside Earth's limb the picture is the sky (no blue rim of air)
 #   nightside 0.50: Jupiter's night side is the sky's colour (no ambient light)
 #   planets   0.77.0: the GPU picture of planets and moons with maps (their measured brightness) against the CPU twin (tests/planet_picture.cpp)
-#   review085 0.85.0: true sunlight, an eclipse with the Sun's measured edge, the Sun with its sunspot outlines, against the same twin
+#   review085 0.85.0: true sunlight, an eclipse with the Sun's measured edge, the Sun with its sunspots (0.94.0: filled), against the same twin
+#   sun094    0.94.0: the Sun's surface close up (granulation, the spots filled) and with a photo in the cache (a made-up smooth picture), against the same twin
 #   rings, ringslant, flyby, cardlines: Saturn's rings, the fly-by and the lines on the card against the processor or the formulas (see the parts)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -139,6 +140,82 @@ def part_review085(binary, work):
         check(float(f[2]) > 60, f"the Sun: drawn big enough to compare ({f[2]} px)")
         check(int(f[12]) == 7, f"the Sun on 10 May 2024: the record's 7 groups (NOAA SRS of that date) are drawn ({f[12]})")
         compare_cpu(tool, work, r, "sun", ["sun"] + f)
+
+def write_grey_png(path, w, h, rows):
+    # an 8-bit grey PNG (no filter), standard library only
+    import struct, zlib
+    raw = b"".join(b"\x00" + bytes(r) for r in rows)
+    def chunk(k, d):
+        c = struct.pack(">I", len(d)) + k + d
+        return c + struct.pack(">I", zlib.crc32(k + d) & 0xffffffff)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
+
+def fake_photo(folder, day):
+    # a smooth made-up "photo" with the reply's and header's form (orbit/sun_photo.cpp reads them): 1024 x 1024 (scale 4 of 4096), the disc darkened
+    # towards its edge, two soft dark spots and a soft bright patch. The observer at Carrington 313.565, -3.201 (the real header of 10 May 2024).
+    import math
+    os.makedirs(folder, exist_ok=True)
+    n, s = 1024, 4
+    cx = cy = (2048.5 - (s + 1) / 2) / s
+    rpx = 950.44952 / (0.6 * s)
+    blobs = [(0.30, -0.25, 0.06, -0.55), (-0.35, 0.20, 0.04, -0.4), (0.55, 0.40, 0.05, 0.12)]
+    rows = []
+    for j in range(n):
+        row = bytearray(n)
+        for i in range(n):
+            x, y = (i - cx) / rpx, (cy - j) / rpx
+            r2 = x * x + y * y
+            if r2 >= 1:
+                continue
+            mu = math.sqrt(1 - r2)
+            v = 1 - 0.55 * (1 - mu) - 0.15 * (1 - mu) ** 2
+            for bx, by, bw, a in blobs:
+                v *= 1 + a * math.exp(-((x - bx) ** 2 + (y - by) ** 2) / (2 * bw * bw))
+            row[i] = max(0, min(255, int(round(220 * v))))
+        rows.append(row)
+    write_grey_png(os.path.join(folder, day + ".png"), n, n, rows)
+    open(os.path.join(folder, day + ".xml"), "w").write("<fits><NAXIS1>4096</NAXIS1><NAXIS2>4096</NAXIS2><CRPIX1>2048.50</CRPIX1><CRPIX2>2048.50</CRPIX2><CDELT1>0.60000002</CDELT1>"
+        "<CROTA2>0.00000</CROTA2><RSUN_OBS>950.44952</RSUN_OBS><CRLN_OBS>313.56503</CRLN_OBS><CRLT_OBS>-3.2012870</CRLT_OBS><WAVELNTH>6173.00</WAVELNTH>"
+        "<CONTENT>CONTINUUM INTENSITY</CONTENT></fits>")
+    open(os.path.join(folder, day + ".json"), "w").write('{"id":"1","date":"' + day + ' 00:00:05","name":"HMI Int"}')
+
+def part_sun094(binary, work):
+    # 0.94.0: the Sun's surface (render/sun_surface.h, orbit/sun_photo.h): the GPU against the CPU twin (tests/planet_picture.cpp sun), at most 1 % of the pixels
+    # over 8 levels per view. 10 May 2024 00:00 UT, paused, 2D at true scale. (1) Zoom 4 (the Sun's radius about 5,080 px, the window its middle): the
+    # granulation (cells about 9 px), no photo (an empty cache, the download off). (2) The same with a made-up smooth photo in the cache for that day.
+    # (3) Zoom 2.6 (the whole disc, 202 px): the photo shrunk (the GPU's mip levels; the twin reads the full level: the photo is smooth) and the far side's spots.
+    # (The 3D camera's closest view on this 1280 x 800 window makes the cells 1.5 px: faded out. review085 checks the 7 groups filled at zoom 2.6 without a photo.)
+    tool = os.path.join(os.path.dirname(os.path.abspath(binary)), "planet_picture")
+    check(os.path.exists(tool), "the CPU twin planet_picture is built next to the app")
+    if not os.path.exists(tool):
+        return
+    for tag, photo, zoom in (("drawn", False, "4.0"), ("photo_close", True, "4.0"), ("photo_disc", True, "2.6")):
+        cache = os.path.join(work, "sun094_cache_" + tag)
+        if os.path.isdir(cache):
+            import shutil
+            shutil.rmtree(cache)
+        os.makedirs(cache, exist_ok=True)
+        if photo:
+            fake_photo(cache, "2024-05-10")
+        env = {"PL_NEWUI": "on", "PL_SELECT": "Sun", "PL_ZOOM": zoom, "PL_LOG_PLANET": "1", "PL_SKYOFF": "1", "PL_DATE": "2024-05-10", "PL_TIME": "00:00",
+               "PL_PAUSED": "1", "PL_SUNPHOTO_OFFLINE": "1", "PL_SUNPHOTO_CACHE": cache}
+        r = run_app(binary, work, "sun094_" + tag, env, frames=60)
+        suns = [l.split()[1:] for l in r.out.splitlines() if l.startswith("PLSUN ")]
+        check(bool(suns), f"sun094 {tag}: the app logged its ball ({len(suns)} PLSUN lines)")
+        if not suns:
+            continue
+        f = suns[-1]
+        n = int(f[12])
+        check(n == 7, f"sun094 {tag}: the 7 groups of 10 May 2024 are drawn ({n})")
+        tail = f[13 + 6 * n:]
+        check(len(tail) == 7 and tail[0] == "1", f"sun094 {tag}: the granulation is on ({tail[:1]})")
+        check((tail[5] == "1") == photo, f"sun094 {tag}: the photo is {'shown' if photo else 'not shown'} ({tail[5]}, {tail[6]})")
+        print(f"sun094 {tag}: the Sun's radius {float(f[2]):.0f} px, cells per radian {tail[1]}")
+        if zoom == "4.0":   # the disc is far larger than the window: the twin draws only a part no panel covers (the card and Controls are on the right)
+            os.environ["PL_PICTURE_CLIP"] = "40 120 580 740"
+        compare_cpu(tool, work, r, "sun094_" + tag, ["sun"] + f, minpx=20000)
+        os.environ.pop("PL_PICTURE_CLIP", None)
 
 def balls(binary, work, tool, cases):
     for sel, zoom, extra in cases:
@@ -445,7 +522,7 @@ def main():
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("airedge", part_airedge), ("nightside", part_nightside), ("planets", part_planets), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines), ("review085", part_review085)):
+    for name, fn in (("airedge", part_airedge), ("nightside", part_nightside), ("planets", part_planets), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines), ("review085", part_review085), ("sun094", part_sun094)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

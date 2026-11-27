@@ -1,0 +1,22 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/granulation/arxiv1508.03022_hathaway_2015_text.txt
+# Reference: D. H. Hathaway, T. Teil, A. A. Norton, I. Kitiashvili, "The Sun's photospheric convection spectrum", ApJ 811, 105 (2015), arXiv:1508.03022: the text layer of the saved PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1508.03022
+# Date read: 2026-11-27
+# sha256 of the original: 789b67f84a1c5e5e77e241e8c95b75ac107616ecbfdafa554e18c135eb35f770
+# Place in the original: abstract and introduction
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: orbit/sun_surface.h (the granulation cell size and lifetime); tests/test_sun094.inc
+#--- begin abstract
+                                                    smoothly to a peak at a wavenumber of about 120 (wavelength of about 35 Mm), which is typical
+                                                    of supergranules. The spectrum levels off out to wavenumbers of about 400, and then rises again
+                                                    to a peak at a wavenumber of about 3500 (wavelength of about 1200 km), which is typical of
+                                                    granules. The velocity spectrum is dominated by the poloidal flow component (horizontal flows
+#--- end
+#--- begin introduction
+were observed with solar telescopes by the 1860s.           Optical Telescope (SOT) on the Hinode space-
+These cellular flows have diameters of about 1Mm,           craft. Their horizontal flow spectra show a promi-
+flow speeds of about 3000 m s−1 , and lifetimes of          nent peak in power at wavenumbers typical for su-
+about 10 minutes (Bray et al. 1984).                        pergranules, along with a continuum of power out
+#--- end

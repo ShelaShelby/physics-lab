@@ -1,0 +1,13 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/hmi/hmi_ic_closest_20240510.json
+# Reference: Helioviewer API v2 getClosestImage for 2024-05-10T00:00:00Z, sourceId 18 (SDO HMI continuum intensity), as received
+# URL: https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-10T00:00:00Z&sourceId=18
+# Date read: 2026-11-27
+# sha256 of the original: 12777e5d4c68f7c0077d0dc72453b36a07fe0b7999c8be8e3e42879e8a58d757
+# Place in the original: the whole file
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: orbit/sun_photo.cpp (the reply it parses); tests/test_sun094.inc
+#--- begin reply
+{"id":"156593381","date":"2024-05-09 23:59:50","name":"HMI Int","scale":0.6058048192587249,"scaleCorrection":0.9904180371727188,"width":4096,"height":4096,"refPixelX":2048.5,"refPixelY":2048.5,"offsetX":0,"offsetY":0,"rotation":0,"rsun":1584.0811586382558,"dsun":151045180000,"sunCenterOffsetParams":[],"layeringOrder":1}
+#--- end

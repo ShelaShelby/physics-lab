@@ -245,7 +245,7 @@ if ($Parts -contains 'bh') {
     }
 }
 
-# ---- 3c, 3f: the Orbit Lab's true sunlight, eclipse and the Sun's edge against the CPU twin planet_picture (check_orbit_ui.py review085) ----
+# ---- 3c, 3f: the Orbit Lab's true sunlight, eclipse and the Sun's edge against the CPU twin planet_picture (check_orbit_ui.py review085); 0.94.0: NASA's photo downloaded and drawn ----
 if ($Parts -contains 'planets') {
     $tool = Join-Path $Folder 'planet_picture.exe'
     if (-not (Test-Path $tool)) { Add-Check '3c.planets' $false 'planet_picture.exe is not in the folder' }
@@ -272,7 +272,7 @@ if ($Parts -contains 'planets') {
             $c = [PlBmp]::CompareCpu($bin, $r.Bmp)
             Add-Check "3c.planets.$tag" ($c[0] -gt 5000 -and $c[1] -le 0.01 * $c[0]) "GPU against CPU: $($c[1]) of $($c[0]) pixels over 8 levels (at most 1 %; largest $($c[2])); radius $($f[3]) px"
         }
-        $r = Invoke-App 'planets_sun' @{ PL_NEWUI = 'on'; PL_SELECT = 'Sun'; PL_ZOOM = '2.6'; PL_LOG_PLANET = '1'; PL_SKYOFF = '1'; PL_DATE = '2024-05-10'; PL_TIME = '00:00'; PL_PAUSED = '1' } 40 300
+        $r = Invoke-App 'planets_sun' @{ PL_NEWUI = 'on'; PL_SELECT = 'Sun'; PL_ZOOM = '2.6'; PL_LOG_PLANET = '1'; PL_SKYOFF = '1'; PL_DATE = '2024-05-10'; PL_TIME = '00:00'; PL_PAUSED = '1'; PL_SUNPHOTO_OFFLINE = '1'; PL_SUNPHOTO_CACHE = (Join-Path $res 'sun_photos_empty') } 40 300
         $suns = @($r.Out -split "`r?`n" | Where-Object { $_.StartsWith('PLSUN ') })
         if ($suns.Count -and (Test-Path $r.Bmp)) {
             $f = @(($suns[-1] -split '\s+') | Select-Object -Skip 1)
@@ -284,6 +284,26 @@ if ($Parts -contains 'planets') {
                 Add-Check '3c.planets.sun' ($c[0] -gt 5000 -and $c[1] -le 0.01 * $c[0]) "the Sun's edge and groups, GPU against CPU: $($c[1]) of $($c[0]) pixels over 8 levels (largest $($c[2]))"
             } else { Add-Check '3c.planets.sun' $false "planet_picture ran ($($p.Err.Trim()))" }
         } else { Add-Check '3c.planets.sun' $false "the app logged the Sun ($($suns.Count) PLSUN lines)" }
+        # 0.94.0: NASA SDO/HMI's photo of 10 May 2024 downloaded (WinHTTP, on its worker) into a fresh cache, then the Sun with it: GPU (the Radeon) against CPU.
+        # 4000 frames: the download (about 1.3 MB) and the picture's decoding finish within them; the check says when not
+        $pc = Join-Path $res 'sun_photos'
+        if (Test-Path $pc) { Remove-Item -Recurse -Force $pc }
+        $r = Invoke-App 'planets_sunphoto' @{ PL_NEWUI = 'on'; PL_SELECT = 'Sun'; PL_ZOOM = '2.6'; PL_LOG_PLANET = '1'; PL_SKYOFF = '1'; PL_DATE = '2024-05-10'; PL_TIME = '00:00'; PL_PAUSED = '1'; PL_SUNPHOTO_CACHE = $pc } 4000 300
+        $got = Test-Path (Join-Path $pc '2024-05-10.png')
+        Add-Check '3f.sun_photo_download' $got "the photo of 10 May 2024 downloaded and saved ($(if ($got) { [math]::Round((Get-Item (Join-Path $pc '2024-05-10.png')).Length / 1MB, 2) } else { 0 }) MB)"
+        $suns = @($r.Out -split "`r?`n" | Where-Object { $_.StartsWith('PLSUN ') })
+        if ($suns.Count -and (Test-Path $r.Bmp)) {
+            $f = @(($suns[-1] -split '\s+') | Select-Object -Skip 1)
+            $n = [int]$f[12]
+            $on = $f[13 + 6 * $n + 5]
+            Add-Check '3f.sun_photo_shown' ($on -eq '1') "the last frame drew the photo ($on)"
+            $bin = Join-Path $res 'planet_cpu_sunphoto.bin'
+            $p = Invoke-Tool $tool (@($bin, 'sun') + $f) 'planet_cpu_sunphoto' @{} 300 $res
+            if ($p.Code -eq 0) {
+                $c = [PlBmp]::CompareCpu($bin, $r.Bmp)
+                Add-Check '3c.planets.sunphoto' ($c[0] -gt 5000 -and $c[1] -le 0.01 * $c[0]) "the Sun with NASA's photo, GPU against CPU: $($c[1]) of $($c[0]) pixels over 8 levels (largest $($c[2]))"
+            } else { Add-Check '3c.planets.sunphoto' $false "planet_picture ran ($($p.Err.Trim()))" }
+        } else { Add-Check '3f.sun_photo_shown' $false "the app logged the Sun ($($suns.Count) PLSUN lines)" }
     }
 }
 
@@ -299,7 +319,7 @@ if ($Parts -contains 'bench') {
     Add-Check '3d.bench' ($null -ne $file) "the benchmark ran and saved its result ($(if ($file) { $file.Name } else { 'no file' }); $([math]::Round($r.Seconds)) s)"
     if ($file) {
         Copy-Item $file.FullName (Join-Path $res $file.Name) -Force
-        foreach ($ln in (Get-Content $file.FullName | Where-Object { $_ -match 'Hz|refresh|ui\.resize_blackhole|rest\.orbit|rest\.blackhole_glare|blackhole\.close_spin|orbit\.true_light|orbit\.sun_edge|orbit\.oort_region|orbit\.porkchop|response\.porkchop_grid' } | Select-Object -First 40)) { Add-Info '3d.bench' $ln.Trim() }
+        foreach ($ln in (Get-Content $file.FullName | Where-Object { $_ -match 'Hz|refresh|ui\.resize_blackhole|rest\.orbit|rest\.blackhole_glare|blackhole\.close_spin|orbit\.true_light|orbit\.sun_edge|orbit\.oort_region|orbit\.porkchop|response\.porkchop_grid|orbit\.sun_surface|response\.sun_photo' } | Select-Object -First 40)) { Add-Info '3d.bench' $ln.Trim() }
     }
 }
 

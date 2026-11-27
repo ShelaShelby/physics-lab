@@ -21,7 +21,8 @@ Rules for new checks are in CLAUDE.md (Build and test). Git keeps every deleted 
 | check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision); 0.79.0: the streaks' factor at spin 0.99, and toneCompare's case "streaks" (the disc's surface, streaks and clump, at most 1 % of pixels over 8 levels) (0.81.0 to 0.85: Film's see-through disc, removed in 0.86.0 with that drawing, R6); 0.84.0: toneCompare's cases close, closespin, pole and closetable (the held camera's own shift at 2.2 GM/c², no spin, spin 0.99, over the pole, the table's pass); 0.87.0: cases hot, edgesky, edgetable (the disc's real light: the colour correction, the limb darkening at 85°), every case with its returning light, and the pixels whose radius range reaches past the disc's edge left out (the shader's coverage) |
 | check_blackhole.py:precisioncard | 74 | KEEP | ui_blackhole_sky | GPU vs CPU: the card's light paths against the double-precision reference (split from precision); 0.87.0: PLBHRET, the returning light's table made on the card against the processor's (spin 0 and 0.99) |
 | check_orbit_ui.py:planets | 22 (new in 0.77.0) | KEEP | ui_orbit_card | GPU vs CPU: six balls with maps (measured brightness, Earth's clouds and air) against tests/planet_picture.cpp |
-| check_orbit_ui.py:review085 | 26 (new in 0.85.0, alone on the build machine) | KEEP | ui_orbit_card | GPU vs CPU: True sunlight (Earth, Jupiter, Neptune followed), an eclipse with the Sun's measured edge, the Sun with its sunspot outlines, against tests/planet_picture.cpp |
+| check_orbit_ui.py:review085 | 26 (new in 0.85.0, alone on the build machine) | KEEP | ui_orbit_card | GPU vs CPU: True sunlight (Earth, Jupiter, Neptune followed), an eclipse with the Sun's measured edge, the Sun with its sunspot groups (0.94.0: filled), against tests/planet_picture.cpp |
+| check_orbit_ui.py:sun094 | 22 (new in 0.94.0, alone on the build machine) | KEEP | ui_orbit_card | GPU vs CPU (a new drawing the owner asked for): the Sun's granulation close up, a photo in the cache close up and on the whole disc, against tests/planet_picture.cpp |
 
 ## The groups in 0.76.0 (seconds, build machine, 4 at a time)
 
@@ -217,6 +218,7 @@ The checks that need real hardware. They run on the owner's PC (AMD Radeon RX 90
 | vkcards | vk_compare_tests on the real driver: every comparison within its limit | vk_cards |
 | bh | the sky's start-up checks, the camera curve (near, far, spin, streaks, close, closespin, pole, closetable, hot, edgesky, edgetable), the full picture at 2560 x 1369, the shadow's edge, the edge-on views near pitch 90 degrees | check_blackhole.py:sky, precision, edgeon |
 | planets | True sunlight (Earth, Jupiter, Neptune), the 2024 eclipse, the Sun with its 7 sunspot groups, against planet_picture | check_orbit_ui.py:review085 |
+| planets | the Sun's surface: granulation, NASA's photo (a made-up one in the cache), against planet_picture | check_orbit_ui.py:sun094 |
 | bench | the full benchmark (PL_BENCH=start), its result file kept | new |
 | logs | every [vulkan] line of each run's gpu-paths-log.txt and of the owner's own (read only); a path off, died or drawn anew is a FAIL | new |
 | validation | the four labs with the Khronos validation layers, if installed | check_shell.py:smoke |

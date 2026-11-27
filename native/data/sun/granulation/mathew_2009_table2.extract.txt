@@ -1,0 +1,22 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/sun/granulation/arxiv0906.2451_mathew_2009_text.txt
+# Reference: S. K. Mathew, V. Zakharov, S. K. Solanki, "Stray light correction and contrast analysis of Hinode broad band images", A&A (2009), doi:10.1051/0004-6361/200911975, arXiv:0906.2451: the text layer of the saved PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/0906.2451v1
+# Date read: 2026-11-27
+# sha256 of the original: 7112ce77de5cfedcd6df8841d5916c2f40765f801dcd9027202303b816cf705e
+# Place in the original: Table 2 (rms contrast of the granulation, observed and deconvolved)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: orbit/sun_surface.h (the granulation contrast); tests/test_sun094.inc
+#--- begin Table 2
+1996). This method invokes an iterative process and updates the         Table 2. rms contrast of the images and mean BP contrast values
+current estimate of the image by the product of previous decon-         obtained before and after deconvolution.
+volution results and the correlation between re-convolution of
+the later image and the PSF. The convergence of restoration is                      Wavelength         Observed     Deconvolved
+checked from the chi-square of the fit which was obtained by                           (Å)          rms     hCi    rms    hCi
+comparing the observed data and the re-convolved deconvolu-                         3883 (CN)       0.134 0.379    0.218 0.784
+tion results. The filled circles in Fig. 1 show the azimuthally av-                 4305 (GB)       0.111 0.293    0.192 0.702
+eraged intensity profile across the Mercury image after the de-                     4504 (BC)       0.122 0.028    0.215 0.077
+                                                                                    5550 (GC)       0.075 0.038    0.158 0.097
+convolution. The intensity lies close to zero throughout almost                     6684 (RC)       0.054 0.038    0.111 0.069
+#--- end

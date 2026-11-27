@@ -207,6 +207,7 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         // 0.85.0 (R2, R3): the measured edge and the measured sunspot groups (until 0.84.1: invented patches and the app's own edge rule)
         c.lines.push_back("Drawn in its measured colour (nearly white); its darker, redder edge is the measured law of Neckel & Labs 1994 (Solar Physics 153, 91), "
                           "the middle at the screen's white");
+        for (auto& l : sunSurfaceCardLines()) c.lines.push_back(l);   // 0.94.0: NASA's photo or the drawn surface
         for (auto& l : spotCardLines(sunspotsAt(sys.julianDay()))) c.lines.push_back(l);
         c.lines.push_back("Wobbles a little, mostly pulled by Jupiter");
         c.lines.push_back("Lifetime (rough): about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years");

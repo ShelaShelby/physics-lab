@@ -44,7 +44,7 @@ Rules for every job below: the tests are written first and fail on the old build
   (e) GPU (mode 3 in shaders.h) against the CPU: at most 1 % of pixels over 8 levels.
 - **GPU path**: 18 coefficients as a uniform block in the Sun's shader (mode 3) and in the eclipse shading. A Hard scene orbit.sun_edge: the Sun filling the view, then a solar eclipse from Earth.
 
-## R3. Sunspots: real spots on dates where they were measured, a plain Sun with a sentence where not (0.85.0) -- DONE in 0.85.0 as outlines; LEFT: the spots' darkness (no fitting measured contrast found in 3 tries, REPORT 0.85.0)
+## R3. Sunspots: real spots on dates where they were measured, a plain Sun with a sentence where not (0.85.0) -- DONE in 0.85.0 as outlines; the spots' darkness DONE in 0.94.0 (umbra: Maltby et al. 1986; penumbra: Mathew et al. 2007 at one wavelength; area split: Jha et al. 2019; REPORT 0.94.0)
 - **Sources**: (1) the Royal Greenwich Observatory - USAF/NOAA sunspot group records, from NASA Marshall (D. Hathaway): one row per group per day, May 1874 to 2 Oct 2016 (g2016.txt is the last file; g2017.txt does not exist).
   Columns (format.txt, extract native/data/sun/spots/format.extract.txt): date and time, group number, observed and corrected whole-spot area (millionths of the hemisphere), distance from disc centre,
   position angle, Carrington longitude, latitude, central meridian distance. The umbral area exists only for 1874-1976. MissingDays.txt lists the days with no record.
@@ -176,6 +176,6 @@ Rules for every job below: the tests are written first and fail on the old build
 ## Files the owner saves (the cloud could not fetch them)
 - Chandrasekhar 1950, Radiative Transfer, Table XXIV (the exact electron-scattering limb darkening; the 1946 third approximation is saved).
 - The Debrecen Photoheliographic Data (individual spots and umbrae 1974-2018; the site refused: 403 and no answer, 2 tries).
-- A measured sunspot contrast that fits group records: Albregtsen & Maltby 1981 (umbral intensity against wavelength), Maltby et al. 1986 (ApJ 306, 284), Solanki 2003 (A&ARv 11, 153). 0.85.0 found only Mathew et al. 2007 (one wavelength, per spot).
+- (0.94.0: found and saved: Albregtsen & Maltby 1981, Maltby et al. 1986, Solanki 2003.) Still missing: a measured penumbral contrast against wavelength (Kjeldseth-Moe & Maltby 1969, Solar Physics 8: ADS 504).
 - Duncan, Quinn & Tremaine 1987 (AJ 94, 1330): ADS's scan service answered 500 and 504 (0.85.0). The SWPC warehouse of SRS files (no answer, 503; the NCEI copy works).
 - Shettle & Fenn 1979, AFGL-TR-79-0214 (DTIC refused twice). Hess, Koepke & Schult 1998, OPAC, BAMS 79, 831 (AMS refused once). Not needed if the Handbook chapter is enough.

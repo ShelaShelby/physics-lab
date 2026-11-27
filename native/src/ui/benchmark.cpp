@@ -1,5 +1,6 @@
 #include "ui/benchmark.h"
 #include "orbit/sunspots.h"
+#include "orbit/sun_photo.h"
 #include "orbit/alphacen.h"
 #include "ui/reading.h"
 #include "ui/shell.h"
@@ -142,6 +143,19 @@ void orbitSunClose(AppState& app) {
     app.view.select({orbit::Selection::Star}, true);
     app.view.ox = app.view.oy = 0;
     setZoom(app, zoomOr(kSunZoom));
+}
+// 0.94.0: orbit.sun_surface: the Sun from the closest the camera may come (1.5 radii, as orbitTrueLightStars), 10 May 2024, time running at 1 minute a second,
+// NASA's photo held off (the drawn surface, its granulation in every pixel, is the heavier picture)
+void orbitSunSurface(AppState& app) {
+    orbitClose(app, "Saturn", kSaturnZoom);
+    jumpToDate(app, kSpotDayMs);
+    app.view.select({orbit::Selection::Star}, true);
+    app.view.ox = app.view.oy = 0;
+    const double W = app.canvasW > 0 ? app.canvasW : 1280, H = app.canvasH > 0 ? app.canvasH : 800;
+    setZoom(app, zoomOr(std::log10(orbit::focalFor(H) / (1.5 * units::kSunRadius) * 34 * units::kSimLength / std::min(W, H)) - 1e-9));
+    app.set.tspeed = std::log10(60.0 / units::kSimTime);    // 1 real second = 60 simulated seconds
+    app.paused = false;
+    orbit::SunPhotoSource::get().hold(true);
 }
 void orbitOortRegion(AppState& app) { orbitHeaviest(app); setZoom(app, zoomOr(kOortZoom)); }
 // 0.86.0: orbit.true_light_stars: True sunlight, Stars Full, Neptune followed from the closest zoom the camera may come (1.5 radii, as orbitFlyby): the exposure
@@ -726,6 +740,7 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
 void setupScene(AppState& app, BenchState& b, int idx) {
     const app::BenchSceneText& t = sceneText(idx);
     using K = app::BenchKind;
+    orbit::SunPhotoSource::get().hold(false);   // 0.94.0: only orbit.sun_surface holds NASA's photo off
     switch (t.kind) {
         case K::OrbitHeaviest: orbitHeaviest(app); break;
         case K::OrbitRocks8: orbitStress(app); break;
@@ -742,6 +757,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitCometTails: orbitCometTails(app); break;   // 0.78.0
         case K::OrbitTrueLight: orbitTrueLight(app); b.scenePhase = 0; break;   // 0.85.0
         case K::OrbitSunEdge: orbitSunClose(app); b.scenePhase = 0; break;
+        case K::OrbitSunSurface: orbitSunSurface(app); break;   // 0.94.0
         case K::OrbitOortRegion: orbitOortRegion(app); break;
         case K::OrbitTrueLightStars: orbitTrueLightStars(app); break;   // 0.86.0
         case K::OrbitPorkchop:                                               // 0.92.0: the Data panel open on the transfer planner, Earth to Mars, the largest grid
@@ -835,7 +851,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
         case K::OrbitPorkchop:                                                   // 0.92.0: the departure window dragged back and forth (a triangle wave over 5.7 s), a new grid each frame
             celestialBenchPorkchop(app, 0.35 * u);
             break;
-        case K::OrbitOortRegion: case K::OrbitTrueLightStars:
+        case K::OrbitOortRegion: case K::OrbitTrueLightStars: case K::OrbitSunSurface:
         case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds: case K::OrbitCometTails:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
@@ -1099,7 +1115,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
     switch (t.kind) {
         case K::Atom: return atom::benchShortText(app.atom);
         case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitEarthClouds: case K::OrbitSky: case K::OrbitFlyby: case K::OrbitCometTails:
-        case K::OrbitTrueLight: case K::OrbitSunEdge: case K::OrbitOortRegion: case K::OrbitTrueLightStars:
+        case K::OrbitTrueLight: case K::OrbitSunEdge: case K::OrbitOortRegion: case K::OrbitTrueLightStars: case K::OrbitSunSurface:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
             return z;
         case K::OrbitAlphaCen:
@@ -1192,7 +1208,12 @@ const std::vector<WaitDef>& waitDefs() {
         {"response.blackhole_dolly", "The sharp picture after a wheel step", "a feeding hole spinning at 0.9 (the disc on), at 20 GM/c\xC2\xB2: one wheel notch closer, "
                                                                         "with the eased step (0.83.0); until the sharp picture of the new distance"},
         {"response.sunspot_table", "The Sun's first close view (the sunspot table read)", "the Orbit Lab at its defaults, the built-in sunspot table not read yet "
-                                                                    "(orbit/sunspots.h, 255,250 rows): the Sun picked, close up on 10 May 2024; until the picture with its spot outlines"},
+                                                                    "(orbit/sunspots.h, 255,250 rows): the Sun picked, close up on 10 May 2024; until the picture with its spots (0.94.0: filled)"},
+        {"response.sun_photo.network", "NASA's photo of the Sun, downloaded", "the Orbit Lab at its defaults on 10 May 2024, that day's photo removed from the cache and "
+                                                                     "from memory: the Sun picked, close up; until NASA SDO/HMI's photo is downloaded on its worker, read and drawn "
+                                                                     "(a build or a PC without the download: until the drawn surface is settled)", 1},
+        {"response.sun_photo.cache", "NASA's photo of the Sun, from the cache", "the same, the photo saved by the line above: the Sun picked, close up; until it is read "
+                                                                     "from the disk on its worker and drawn", 1},
         {"response.porkchop_grid", "A new porkchop grid", "the Data panel on the transfer planner, Earth to Mars, the largest grid (65,536 cells): the departure window moved 40 days; until the new grid is solved and drawn (the card once its start-up check has passed)", 1},
         {"response.orbit_date", "A jump to a far date in Real physics", "Planet physics Real: from today to 1850-06-01, 2095-01-01 and 1805-03-01; until the picture of that date is drawn"},
     };
@@ -1254,6 +1275,17 @@ void waitPrepare(AppState& app, int w, int t) {
         app.view = orbit::OrbitView();
         app.paused = true;
         orbit::sunspotTableReset();
+    } else if (id == "response.sun_photo.network" || id == "response.sun_photo.cache") {   // 0.94.0: the photo dropped (and for the first, its saved files)
+        app.lab = 0;
+        resetToToday(app);
+        jumpToDate(app, kSpotDayMs);
+        app.set = orbit::ViewSettings(); app.set.view3D = true;
+        app.view = orbit::OrbitView();
+        app.paused = true;
+        orbit::SunPhotoSource& ps = orbit::SunPhotoSource::get();
+        ps.hold(false);
+        ps.dropMemory();
+        if (id == "response.sun_photo.network") ps.dropCacheDay(orbit::photoDayKey(orbit::photoDayJD("2024-05-10")));
     } else if (id == "response.porkchop_grid") {                 // 0.92.0: the transfer planner open, its first grid made
         app.lab = 0;
         resetToToday(app);
@@ -1286,6 +1318,7 @@ void waitAct(AppState& app, int w, int t) {
     else if (id == "response.blackhole_streaks") { blackhole::streakFieldRemake(); app.blackhole.gasPattern = true; }
     else if (id == "response.blackhole_tilt") blackhole::turn(app.blackhole, 0.1, 0.1);   // (from 80 to 85.7 degrees from the axis; each try starts from waitPrepare)
     else if (id == "response.sunspot_table") { app.view.select({orbit::Selection::Star}, true); app.view.ox = app.view.oy = 0; setZoom(app, kSunZoom); }
+    else if (id == "response.sun_photo.network" || id == "response.sun_photo.cache") { app.view.select({orbit::Selection::Star}, true); app.view.ox = app.view.oy = 0; setZoom(app, kSunZoom); }
     else if (id == "response.porkchop_grid") celestialBenchPorkchop(app, 40.0 / 900.0);   // the departure window 40 days on
     else if (id == "response.orbit_date") {
         static const int64_t dates[3] = {-3773779200000LL, 3944678400000LL, -5201798400000LL};   // 1850-06-01, 2095-01-01, 1805-03-01 (00:00 UTC)
@@ -1537,6 +1570,7 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
     if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-STATE after %s\n", stateLine(app).c_str());
     b.gpu.destroy();
     b.cancelled = cancelled;
+    orbit::SunPhotoSource::get().hold(false);   // 0.94.0
     if (cancelled) { b.stage = BenchState::Stage::Closed; b.run.reset(); return; }
     saveAndCopy(app, b);
     b.stage = BenchState::Stage::Done;
@@ -1676,6 +1710,7 @@ bool benchLabFinished(AppState& app, render::Renderer2D& R) {
         return L.s.k >= L.cloudCap() && !L.s.trans;
     }
     if (app.lab == 0 && celestialBusy()) return false;     // 0.92.0: a porkchop grid being solved
+    if (app.lab == 0 && orbit::SunPhotoSource::get().busy()) return false;   // 0.94.0: NASA's photo of the Sun being downloaded or read
     if (app.lab == 0 && app.jumpWaiting) return false;     // 0.67.0: a far jump's walk under way (its picture is not drawn yet)
     if (app.lab == 0 && !orbit::linesCardSettled(R.vulkan())) return false;   // 0.68.0: the card's lines still being made and checked (drawn anew each frame)
     if (app.lab == molecule::kLabIndex) {
