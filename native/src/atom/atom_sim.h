@@ -70,6 +70,11 @@ struct AtomParams {
     double bfield = 0;                   // T: 0 (off, the default: nothing in the lab changes) to 100
     std::string blook = "Across";        // where the light is seen from: Across (the field) / Along
     int zline = -1;                      // the line shown split: an index into zeeman::labLines(Z, N, zeemanKind()); -1: the strongest line of the level now
+    // 0.93.0: the electric field (atom/stark.h), hydrogen-1 with one electron only. Not saved: the app always opens with the field off.
+    double efield = 0;                   // V/m: 0 (off, the default) to the saddle-point field of starkN
+    int starkN = 3;                      // the highest n the Stark card shows (2 .. 5); the field's top is that n's saddle-point field
+    std::string pstate = "Off";          // the cloud of a parabolic state of the orbital's n: Off / "n1 n2 m" (e.g. "1 0 0"); Cloud and Cloud 3D only
+    int sline = 0;                       // the line the Stark card splits: an index into starkLines() (n_u -> n_l with n_u <= starkN)
     std::string dirac = "On";            // Relativity (0.10.8): On (0.49.3: the default, outside review; Dirac levels with the Lamb shift of n = 1, 2, atom/dirac.h) / Off (the non-relativistic levels, one per n).
     // What the app starts with, and what "Defaults" gives
     static AtomParams appDefaults() { AtomParams p; p.cstyle = "Glow"; p.cdens = "High"; p.style = "Density"; return p; }   // (0.22: the nucleus as its charge density)
@@ -391,7 +396,14 @@ public:
     // ---- quantum beats ----
     bool overlapPair() const { return superOn() && overlap_; }   // 0.64.0: the superposition's two states overlap (one energy): its Slice stays the processor's
     // 0.65.0: the Slice whose dots the Slice's card program can make (one state, or an orthogonal superposition): not every electron, a Dirac state or an overlapping pair
-    bool sliceCardKind() const { return sliceDots() && !manyOn() && !overlapPair(); }   // (0.91.0: a Dirac state too)
+    bool sliceCardKind() const { return (sliceDots() && !manyOn() && !overlapPair()) || starkCloudOn(); }   // (0.91.0: a Dirac state too; 0.93.0: a parabolic state's cloud)
+    // 0.93.0: the electric field (atom/stark.h)
+    bool starkOk() const { return p.elec == "Hydrogen-like" && p.Z == 1 && p.N == 0 && !chartOn(); }   // hydrogen-1 with one electron
+    bool starkCloudOn() const;                            // a parabolic state's cloud is shown: starkOk, Cloud or Cloud 3D, no superposition, not the Dirac model, pstate valid for the orbital's n
+    bool starkPar(int& n1, int& n2, int& m) const;        // pstate read for the orbital's n (false: Off or not one of its states)
+    double starkFieldAu() const;                          // the field in atomic units of the reduced-mass atom's own scale: F (E_h / (e a0)), from efield
+    double starkTopVm() const;                            // the slider's top: the saddle-point field of starkN, V/m
+    std::vector<std::pair<int, int>> starkLines() const;  // (n_u, n_l) with 1 <= n_l < n_u <= starkN, Lyman first
     bool superOn() const { return p.super == "On" && p.view != "Orbit" && !manyOn(); }
     // ---- 0.49.3 (outside review): the Dirac cloud of the one-electron atom (atom/dirac_cloud.h) ----
     bool diracCloudOn() const;                            // Hydrogen-like, a cloud view (not Orbit or the chart), no superposition, and the model is Dirac (Auto: from kRelativityZ)
@@ -473,6 +485,9 @@ private:
     const GraspLevel* gNow_ = nullptr;                    // 0.47.2: the GRASP level drawn (its aligned-state shape), else nullptr
     bool aloneNow_ = false;                               // 0.91.0: sliceAlone() for this batch
     std::vector<int> valSetNow_;                          // 0.47.3: a level atom: the subshells of its outer electrons in manyNow_ (drawn denser, as the alkalis' outer electron)
+    long addDotsStark(long want);                         // 0.93.0: a parabolic state's dots (stark::samplePar; the card's batch where its check passed)
+    long addDotsCardStark(long want);
+    const void* starkNow_ = nullptr;                      // 0.93.0: the parabolic state's sampler for the batch addDots is making (stark::ParSampler), else null
     int idNow_ = -1;                                      // 0.57.0: stateId() for the batch addDots is making (one electron, no superposition, not Dirac), else -1
     // 0.57.0: the card's batch of Slice attempts in flight (at most one): what it was made for, so its dots are taken only for that cloud and state
     struct SliceJob { int job = 0; std::uint32_t seed = 0; int tries = 0; long want = 0; int id = -1, Z = 0, axis = 0; double off = 0; std::uint64_t epoch = 0;

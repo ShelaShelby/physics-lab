@@ -1,0 +1,29 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/fields/steck_rubidium85_d_line.txt
+# Reference: Daniel A. Steck, "Rubidium 85 D Line Data", revision 2.3.4 (8 August 2025); the original is the text of the PDF (pdftotext -layout)
+# URL: https://steck.us/alkalidata/rubidium85numbers.pdf
+# Date read: 2026-11-27
+# sha256 of the original: ad7c5e2dc4c31c5ea71874817b6fba605f475f27e18ff673ef3d09ddf922144f
+# Place in the original: the revision line, the g-factor table (g_J of the ground state, g_I, the clock shift) and the hyperfine table (A of the ground state)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/atom/breit_rabi.cpp (groundStates, the formula); tests/test_breit_rabi.inc
+#--- begin the revision
+This is revision 2.3.4, 8 August 2025.
+#--- end
+#--- begin g_J of the ground state
+     Electron orbital g-factor                    gL                               0.999 993 54
+                                              gJ (5 S1/2 )
+                                                   2
+                                                                                 2.002 331 070(26)                 [27]
+#--- end
+#--- begin A of the ground state
+      Magnetic Dipole Constant, 52 S1/2          A52 S1/2           h · 1.011 910 813 0(20) GHz           [27]
+#--- end
+#--- begin g_I
+     Nuclear g-factor                             gI                          −0.000 293 640 00(60)                [27]
+#--- end
+#--- begin the clock shift
+     Clock transition Zeeman shift            ∆ωclock /B    2
+                                                                                2π · 1293.98 Hz/G   2
+#--- end

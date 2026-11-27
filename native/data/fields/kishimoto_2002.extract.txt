@@ -1,0 +1,14 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/fields/kishimoto_et_al_2002_arxiv_physics0204038.txt
+# Reference: Y. Kishimoto et al., arXiv:physics/0204038 (2002); the original is the text of the arXiv PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/physics/0204038
+# Date read: 2026-11-27
+# sha256 of the original: 1dbfe5700c5167d347d31c8ad0028507c76231ea748f89cd506ebd104602c1d5
+# Place in the original: the introduction: the classical saddle-point field F_c = W^2/4
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/atom/stark.h, src/atom/stark.cpp (saddleFieldAu); tests/test_stark.inc
+#--- begin the saddle-point field
+occurs mostly around the classical saddle-point field-value given by Fc = W 2 /4
+(in a.u.), where W is the binding energy of the Rydberg states. There often
+#--- end

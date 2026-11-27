@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.93.0", "Atom Lab: atoms in fields (hydrogen in an electric field, the ground level in a magnetic field)",
+     "Hydrogen in an electric field (the Stark effect): the parabolic states, their energies to second order in the field, and their clouds, drawn on the "
+     "graphics card. The ground level in a magnetic field: a card on the Spectrum tab for hydrogen-1, sodium-23, rubidium-85, rubidium-87 and caesium-133 "
+     "draws the hyperfine sublevels against the field (the Breit-Rabi formula, checked against a full diagonalisation), with the low-field g_F and the clock "
+     "transition's shift. The limits are on the card. Sources are listed in About. Fixed: a start-up test that counted the graphics card's programs by hand."},
     {"0.92.0", "Orbit Lab: celestial mechanics in the Data panel (Lagrange points, Kirkwood gaps, a transfer planner with a porkchop plot, ephemeris tables, an integrator check)",
      "The Data panel's table list for the Orbit Lab now has five tools. Lagrange points: pick a pair (the Sun with a planet, or a planet with one of its big moons) and see the five points in a table (kilometres and "
      "units of the separation) and, if you tick it, on the picture in 2D and 3D; L4 and L5 are checked with Routh's criterion. The model is two bodies on circular orbits and a third with no mass. Kirkwood gaps: a "

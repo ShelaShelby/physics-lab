@@ -57,6 +57,7 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_blackhole.py:smooth | 596 (GitHub) | DELETE | - | frame times and new pictures per frame: smoothness (failed in 0.75.3, job rule: delete) |
 | check_atom_chip.py:card | 319 | KEEP | ui_atom_card | GPU vs CPU: the Slice's dots and the jump's groups against the processor (guard runs trimmed to one step per program); 0.91.0: and the Slice's Dirac program's 6 planes (112 s on the build machine) |
 | check_atom_chip.py:carddirac | 80 | KEEP | ui_atom_card | GPU vs CPU (0.91.0, the job asked for it): the Slice of a Dirac state from the card's Dirac program against the processor's, the still cut's two pictures (1 % over 8 levels) |
+| check_atom_chip.py:cardstark | 62 (new in 0.93.0, alone) | KEEP | ui_atom_card | GPU vs CPU (0.93.0, the job asked for it): the cloud of a parabolic state in the electric field (atom.stark_drag's set-up) from the card's Stark program against the processor's, the still cloud's two pictures (1 % over 8 levels) |
 | check_5l.py:toolbar | 295 | DELETE | - | toolbar clicks at sizes and themes: repeats |
 | check_orbit_ui.py:facts_long | 286 | DELETE | - | the longest fact in two lines: layout |
 | check_6c.py:fullzoom | 260 | DELETE | - | draw counts at full zoom: a speed check (the owner's benchmark) |

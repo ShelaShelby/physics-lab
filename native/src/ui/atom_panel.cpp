@@ -28,6 +28,8 @@
 #include "atom/atom_tools.h"
 #include "atom/hfs.h"
 #include "atom/zeeman.h"
+#include "atom/stark.h"
+#include "atom/breit_rabi.h"
 #include "atom/atom_learn.h"
 #include "atom/asd.h"
 #include "atom/dirac.h"
@@ -969,6 +971,176 @@ static void zeemanCard(AppState& app) {
     cap(b);   // (for the automatic checks, PL_LOG_CARD)
 }
 
+// 0.93.0: hydrogen in the electric field (atom/stark.h), on the Spectrum tab while the field is on: (1) the level diagram, every parabolic state of n = 1 .. starkN
+// against the field from 0 to the top of the slider (the n = starkN saddle field), each n in its own band with the shifts on one common enlarged scale (so their
+// sizes compare; the gaps between the bands are not to scale), a mark at the field of the moment; (2) the components of the chosen line n_u -> n_l at that field:
+// a bar per component at its shift, as tall as its strength |<u| r_q |l>|^2, pi (a square) and sigma (triangles), hover for the numbers.
+static void starkCard(AppState& app) {
+    namespace st = atom::stark;
+    const AtomLab& L = app.atom;
+    const AtomParams& p = L.p;
+    const double mu = st::reducedMassH(), F = L.starkFieldAu(), top = st::saddleFieldAu(p.starkN, mu), cmPerH = atom::kHartreeEV / atom::kHcEVnm * 1e7;
+    char b[240];
+    std::snprintf(b, sizeof b, "Hydrogen in %.4g kV/cm (F = %.4g atomic units, %.3g of the n = %d saddle-point field).", p.efield / 1e5, F, F / top, p.starkN);
+    ImGui::TextWrapped("%s", displayable(b).c_str());
+    const Theme th = panelTheme();
+    const float s = S(), W = ImGui::GetContentRegionAvail().x / s;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImFont* Fo = fonts().regular;
+    const float fs = 11 * s;
+    ImVec2 o = ImGui::GetCursorScreenPos();
+    auto P = [&](double x, double y) { return ImVec2(o.x + float(x) * s, o.y + float(y) * s); };
+    auto text = [&](const std::string& t0, double x, double y, double align, ImU32 c) {
+        const std::string t = displayable(t0);
+        const ImVec2 ts = Fo->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str());
+        dl->AddText(Fo, fs, ImVec2(o.x + float(x) * s - ts.x * float(align), o.y + float(y) * s - Fo->GetFontBaked(fs)->Ascent), c, t.c_str());
+    };
+    // (1) the level diagram
+    const int N = p.starkN;
+    const double band = 34, x0 = 44, x1 = W - 12, y0 = 22, H = y0 + band * N + 10;
+    double big = 1e-30;
+    for (int n = 1; n <= N; n++) for (const st::Par& q : st::manifold(n)) big = std::max(big, std::fabs(st::energyAu(q, top, mu) - st::energyAu(q, 0, mu)));
+    const double half = band * 0.45, sc = half / big;
+    text("each n's levels against the field (0 to the n = " + std::to_string(N) + " saddle field); the shifts enlarged alike, the gaps between n not to scale", 12, 12, 0, U32(th.muted));
+    std::string hover;
+    for (int n = 1; n <= N; n++) {
+        const double yc = y0 + band * (N - n + 0.5);
+        text("n = " + std::to_string(n), 8, yc + 4, 0, U32(th.muted));
+        dl->AddLine(P(x0, yc), P(x1, yc), U32(th.muted, 0.25f), 1);
+        for (const st::Par& q : st::manifold(n)) {
+            if (q.m < 0) continue;                               // (m and -m have the same energy: drawn once)
+            ImVec2 prev;
+            for (int i = 0; i <= 48; i++) {
+                const double f = top * i / 48.0, y = yc - (st::energyAu(q, f, mu) - st::energyAu(q, 0, mu)) * sc;
+                const ImVec2 pt = P(x0 + (x1 - x0) * i / 48.0, y);
+                if (i > 0) dl->AddLine(prev, pt, q.m == 0 ? U32(th.fg) : U32(th.fg, 0.55f), q.m == 0 ? 1.4f * s : 1.0f * s);
+                prev = pt;
+            }
+            const double ynow = yc - (st::energyAu(q, F, mu) - st::energyAu(q, 0, mu)) * sc, xnow = x0 + (x1 - x0) * F / top;
+            if (ImGui::IsMouseHoveringRect(P(xnow - 4, ynow - 3), P(xnow + 4, ynow + 3))) {
+                std::snprintf(b, sizeof b, "%s of n = %d: shift %+.6g cm⁻¹ at this field (linear %+.6g, second order %+.6g)", st::name(q).c_str(), n,
+                              (st::energyAu(q, F, mu) - st::energyAu(q, 0, mu)) * cmPerH, st::linearAu(q) * F / mu * cmPerH, st::secondAu(q) * F * F / (mu * mu * mu) * cmPerH);
+                hover = b;
+            }
+        }
+    }
+    const double xnow = x0 + (x1 - x0) * F / top;
+    dl->AddLine(P(xnow, y0 - 4), P(xnow, y0 + band * N), U32(th.accent), 1.5f * s);
+    text("0", x0, H + 4, 0.5, U32(th.muted));
+    text(numText(top * st::fieldUnitVm() / 1e5, 3) + " kV/cm", x1, H + 4, 1, U32(th.muted));
+    ImGui::Dummy(ImVec2(W * s, float(H + 12) * s));
+    mutedWrapped("Bright lines: m = 0; faint lines: |m| > 0 (m and −m have the same energy). The upper states have the electron pushed against the field (n1 > n2).", 12.0f / 16);
+    // (2) the line's components
+    const std::vector<std::pair<int, int>> lines = L.starkLines();
+    if (lines.empty()) return;
+    const std::pair<int, int> ln = lines[std::size_t(std::max(0, std::min(p.sline, static_cast<int>(lines.size()) - 1)))];
+    const std::vector<st::Component> comps = st::lineComponents(ln.first, ln.second, F, mu);
+    const double e0 = mu * (0.5 / (ln.second * ln.second) - 0.5 / (ln.first * ln.first)), nm0 = atom::kHcEVnm / (e0 * atom::kHartreeEV);
+    std::snprintf(b, sizeof b, "The line n = %d → %d (%.4f nm without the field) split into its components:", ln.first, ln.second, nm0);
+    ImGui::TextWrapped("%s", displayable(b).c_str());
+    o = ImGui::GetCursorScreenPos();
+    double span = 1e-30, smax = 0;
+    for (const st::Component& c : comps) { span = std::max(span, std::fabs(c.shiftAu) * cmPerH * 1.15); smax = std::max(smax, c.strength); }
+    if (!(F > 0)) span = 1;
+    const double base = 100, tp = 22;
+    auto X = [&](double cm) { return 12 + (cm / span + 1) / 2 * (W - 24); };
+    text("shift from the line, cm⁻¹ (±" + numText(span, 3) + ")", 12, 12, 0, U32(th.muted));
+    dl->AddLine(P(12, base), P(W - 12, base), U32(th.muted, 0.6f), 1);
+    dl->AddLine(P(X(0), tp), P(X(0), base), U32(th.muted, 0.35f), 1);
+    const Rgb lc = lamColor(nm0);
+    const ImU32 lineCol = isVisibleNm(nm0) ? IM_COL32(lc.r, lc.g, lc.b, 255) : U32(th.fg);
+    int seen = 0;
+    for (const st::Component& c : comps) {
+        if (!(c.strength > 1e-12 * smax) || !(smax > 0)) continue;
+        seen++;
+        const double x = X(c.shiftAu * cmPerH), h = (base - tp - 10) * c.strength / smax;
+        dl->AddRectFilled(P(x - 1.2, base - h), P(x + 1.2, base), lineCol);
+        zeemanMark(dl, P(x, base - h - 5), 3.5f * s, c.q, U32(th.fg));
+        if (ImGui::IsMouseHoveringRect(P(x - 4, tp - 6), P(x + 4, base))) {
+            std::snprintf(b, sizeof b, "%s %s → %s: shift %+.6g cm⁻¹ (%+.5g nm); strength %.5g a0² of %.5g in the whole line", c.q == 0 ? "π" : c.q > 0 ? "σ+" : "σ−",
+                          st::name(c.up).c_str(), st::name(c.lo).c_str(), c.shiftAu * cmPerH, -nm0 * nm0 * c.shiftAu * cmPerH * 1e-7, c.strength, st::fieldFreeStrength(ln.first, ln.second));
+            hover = b;
+        }
+    }
+    text("π (Δm = 0): square; σ (Δm = ±1): triangles. Bar height: |⟨u|r_q|l⟩|² (not the polarisation seen from one side).", 12, base + 18, 0, U32(th.muted));
+    if (!hover.empty()) ui::SetTooltip("%s", displayable(hover).c_str());
+    ImGui::Dummy(ImVec2(W * s, float(base + 26) * s));
+    mutedWrapped(st::limitsText(), 12.0f / 16);
+    std::snprintf(b, sizeof b, "starkcard F=%.6g N=%d line=%d-%d comps=%d seen=%d", F, N, ln.first, ln.second, static_cast<int>(comps.size()), seen);
+    cap(b);   // (for the automatic checks, PL_LOG_CARD)
+}
+
+// 0.93.0: the ground level's hyperfine sublevels against the magnetic field (the Breit-Rabi formula, atom/breit_rabi.h), for the five atoms it has values for
+static void breitRabiCard(AppState& app) {
+    namespace br = atom::breitrabi;
+    const AtomLab& L = app.atom;
+    const br::GroundState* g = br::find(L.p.Z, L.p.N);
+    if (!g) return;
+    const auto half = [](int two) { return two % 2 == 0 ? std::to_string(two / 2) : std::to_string(two) + "/2"; };   // 2F or 2m_F as "1" or "3/2"
+    const double B = L.p.bfield, bTop = std::max(4 * br::bOfX(*g, 1), 1.15 * B), dE = br::splittingHz(*g);
+    char b[320];
+    std::snprintf(b, sizeof b, "%s: F = %s and %s, %.10g MHz apart at zero field; x = 1 at %.4g mT. Field now %.4g T (x = %.4g).", g->name, half(g->twoI + 1).c_str(), half(g->twoI - 1).c_str(),
+                  dE / 1e6, br::bOfX(*g, 1) * 1e3, B, br::xOf(*g, B));
+    ImGui::TextWrapped("%s", displayable(b).c_str());
+    const Theme th = panelTheme();
+    const float s = S(), W = ImGui::GetContentRegionAvail().x / s;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImFont* Fo = fonts().regular;
+    const float fs = 11 * s;
+    const ImVec2 o = ImGui::GetCursorScreenPos();
+    auto P = [&](double x, double y) { return ImVec2(o.x + float(x) * s, o.y + float(y) * s); };
+    auto text = [&](const std::string& t0, double x, double y, double align, ImU32 c) {
+        const std::string t = displayable(t0);
+        const ImVec2 ts = Fo->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str());
+        dl->AddText(Fo, fs, ImVec2(o.x + float(x) * s - ts.x * float(align), o.y + float(y) * s - Fo->GetFontBaked(fs)->Ascent), c, t.c_str());
+    };
+    const int steps = 96;
+    double eMax = 1e-30;
+    for (const br::Sub& q : br::formula(*g, bTop)) eMax = std::max(eMax, std::fabs(q.eHz));
+    eMax = std::max(eMax, dE * 0.6);
+    const double x0 = 56, x1 = W - 12, y0 = 22, Hh = 200, yc = y0 + Hh / 2;
+    auto X = [&](double bb) { return x0 + (x1 - x0) * bb / bTop; };
+    auto Y = [&](double e) { return yc - e / eMax * Hh / 2; };
+    text("E / h of every sublevel against the field, GHz (0 at the zero-field centre)", 12, 12, 0, U32(th.muted));
+    dl->AddLine(P(x0, y0), P(x0, y0 + Hh), U32(th.muted, 0.6f), 1);
+    dl->AddLine(P(x0, yc), P(x1, yc), U32(th.muted, 0.25f), 1);
+    text(numText(eMax / 1e9, 3), x0 - 4, y0 + 4, 1, U32(th.muted));
+    text(numText(-eMax / 1e9, 3), x0 - 4, y0 + Hh, 1, U32(th.muted));
+    std::string hover;
+    const std::vector<br::Sub> now = br::formula(*g, B);
+    for (std::size_t k = 0; k < now.size(); k++) {
+        const br::Sub& q0 = now[k];
+        const ImU32 c = q0.twoF == g->twoI + 1 ? U32(th.fg) : U32(th.accent);
+        ImVec2 prev;
+        for (int i = 0; i <= steps; i++) {
+            const double bb = bTop * i / steps;
+            const ImVec2 pt = P(X(bb), Y(br::formulaHz(*g, q0.twoF, q0.twoM, bb)));
+            if (i > 0) dl->AddLine(prev, pt, c, 1.2f * s);
+            prev = pt;
+        }
+        const double yn = Y(q0.eHz), xn = X(B);
+        if (ImGui::IsMouseHoveringRect(P(xn - 5, yn - 3), P(xn + 5, yn + 3))) {
+            std::snprintf(b, sizeof b, "F = %s, m_F = %s%s: E/h = %+.9g MHz at %.4g T (low-field g_F = %.6g)", half(q0.twoF).c_str(), q0.twoM > 0 ? "+" : q0.twoM < 0 ? "−" : "", half(std::abs(q0.twoM)).c_str(), q0.eHz / 1e6, B, br::gF(*g, q0.twoF));
+            hover = b;
+        }
+    }
+    dl->AddLine(P(X(B), y0 - 4), P(X(B), y0 + Hh), U32(th.accent), 1.5f * s);
+    text("0", x0, y0 + Hh + 14, 0.5, U32(th.muted));
+    text(numText(bTop * 1e3, 3) + " mT", x1, y0 + Hh + 14, 1, U32(th.muted));
+    if (!hover.empty()) ui::SetTooltip("%s", displayable(hover).c_str());
+    ImGui::Dummy(ImVec2(W * s, float(y0 + Hh + 22) * s));
+    // the check the lab can show: the formula against the exact 2 x 2 diagonalisation, at this field
+    const std::vector<br::Sub> dg = br::diagonalise(*g, B);
+    double worst = 0;
+    for (std::size_t k = 0; k < now.size() && k < dg.size(); k++) worst = std::max(worst, std::fabs(now[k].eHz - dg[k].eHz));
+    std::snprintf(b, sizeof b, "Upper F: plain lines; lower F: coloured. The Breit-Rabi formula and the Hamiltonian diagonalised agree here to %.3g Hz. "
+                  "Clock transition (m_F = 0 to 0) shift at small fields: %.6g Hz/G².", worst, br::clockShiftHzPerT2(*g) * 1e-8);
+    mutedWrapped(b, 12.0f / 16);
+    mutedWrapped(br::limitsText() + " Values: " + g->source + ".", 12.0f / 16);
+    std::snprintf(b, sizeof b, "brcard Z=%d N=%d B=%.6g subs=%d worst=%.3g", L.p.Z, L.p.N, B, static_cast<int>(now.size()), worst);
+    cap(b);   // (for the automatic checks, PL_LOG_CARD)
+}
+
 // ---------------------------------------------------------------- the panel
 // 0.16 stage 1a: the lab's own light spectrum (what the Dirac setting changes): the explanation, the picture, its note and, with Dirac On, the level rows. The old panel and the new UI's data sheet (Spectrum tab) call this one function.
 static void labSpectrumCard(AppState& app) {
@@ -1061,7 +1233,15 @@ void atomSheetCard(AppState& app, const std::string& id) {
             cardRun("zeeman", [&] { zeemanCard(app); });
             ImGui::SeparatorText("Spectrum without the field");
         }
+        if (L.p.efield > 0 && L.starkOk()) {                   // 0.93.0: hydrogen's levels and line in the electric field
+            cardRun("stark", [&] { starkCard(app); });
+            ImGui::SeparatorText("Spectrum without the field");
+        }
         cardRun("spectrum", [&] { realSpectrumCard(L.p.Z, L.p.N, L.p.dirac == "On"); });
+        if (atom::breitrabi::find(L.p.Z, L.p.N)) {              // 0.93.0: the ground level's hyperfine sublevels in the magnetic field
+            ImGui::SeparatorText("Ground level in a magnetic field");
+            cardRun("breitrabi", [&] { breitRabiCard(app); });
+        }
         ImGui::SeparatorText("Light spectrum");   // 0.16 stage 1a: the lab's own spectrum, below the NIST card (the old panel's "Light spectrum" section)
         cardRun("labspectrum", [&] { labSpectrumCard(app); });
     }

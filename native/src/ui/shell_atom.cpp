@@ -13,6 +13,7 @@
 #include "atom/dirac.h"
 #include "atom/levels.h"
 #include "atom/zeeman.h"
+#include "atom/stark.h"
 #include "orbit/format.h"
 #include "ui/atom_panel.h"
 #include "ui/fonts.h"
@@ -510,6 +511,74 @@ static void fieldSection(AppState& app, Panel& p) {
     }
 }
 
+// 0.93.0: the "Electric field" section (atom/stark.h), hydrogen-1 with one electron: the field on a slider from 0 (off, the default) to the saddle-point field of
+// the highest n shown, the highest n (2 .. 5), the cloud of a parabolic state of the orbital's n, and the line the Stark card splits (data sheet, Spectrum tab).
+static void starkSection(AppState& app, Panel& p) {
+    namespace st = atom::stark;
+    atom::AtomLab& L = app.atom;
+    const atom::AtomParams& P = L.p;
+    const Metrics& m = F().m;
+    if (!L.starkOk()) { pCaption(p, "The electric field is worked out for hydrogen-1 with one electron (Electrons: Hydrogen-like). Pick hydrogen to use it."); return; }
+    char b[160];
+    const double top = L.starkTopVm(), F0 = L.starkFieldAu();
+    if (P.efield > 0) std::snprintf(b, sizeof b, "%.4g kV/cm (%.3g of the n = %d saddle field)", P.efield / 1e5, P.efield / top, P.starkN); else std::snprintf(b, sizeof b, "Off (0 V/m)");
+    pStat(p, "Field", b);
+    float v = static_cast<float>(P.efield / top * 1000);
+    if (pSlider(p, "atom.efield", &v, 0.0f, 1000.0f)) L.setParam("efield", v < 0.5f ? 0.0 : static_cast<double>(v) / 1000 * top);
+    std::snprintf(b, sizeof b, "0 to the saddle-point field of n = %d: %.4g kV/cm (%.4g atomic units). Above it the electron of that n can leave over the saddle.", P.starkN, top / 1e5,
+                  st::saddleFieldAu(P.starkN, st::reducedMassH()));
+    pCaption(p, b);
+    {
+        const float w = (p.w - static_cast<float>(m.s8)) / 2;
+        const ImVec2 q = here(p);
+        if (button("atom.starkN.prev", q, ImVec2(w, static_cast<float>(m.control)), "Fewer levels", Face::Quiet, false)) L.setParam("starkN", static_cast<double>(P.starkN - 1));
+        noteItem("atom.starkN.prev");
+        if (button("atom.starkN.next", ImVec2(q.x + w + m.s8, q.y), ImVec2(w, static_cast<float>(m.control)), "More levels", Face::Quiet, false)) L.setParam("starkN", static_cast<double>(P.starkN + 1));
+        noteItem("atom.starkN.next");
+        p.y += m.control + m.s4;
+    }
+    pStat(p, "Highest n shown", std::to_string(P.starkN));
+    const std::vector<std::pair<int, int>> lines = L.starkLines();
+    if (!lines.empty()) {
+        const std::pair<int, int> ln = lines[std::size_t(std::max(0, std::min(P.sline, static_cast<int>(lines.size()) - 1)))];
+        std::snprintf(b, sizeof b, "n = %d to %d", ln.first, ln.second);
+        pStat(p, "Line shown split", b);
+        const float w = (p.w - static_cast<float>(m.s8)) / 2;
+        const ImVec2 q = here(p);
+        const int k = P.sline, nl = static_cast<int>(lines.size());
+        if (button("atom.sline.prev", q, ImVec2(w, static_cast<float>(m.control)), "−", Face::Quiet, false)) L.setParam("sline", static_cast<double>(k > 0 ? k - 1 : nl - 1));
+        noteItem("atom.sline.prev");
+        if (button("atom.sline.next", ImVec2(q.x + w + m.s8, q.y), ImVec2(w, static_cast<float>(m.control)), "+", Face::Quiet, false)) L.setParam("sline", static_cast<double>((k + 1) % nl));
+        noteItem("atom.sline.next");
+        p.y += m.control + m.s4;
+    }
+    // the cloud of a parabolic state of the orbital's n
+    const int fo = L.fullOrb();
+    const int n = fo >= 0 ? atom::orbitals()[std::size_t(fo)].n : 1;
+    ui::AtomChoices opts{{"Off", "Off"}};
+    for (const st::Par& s : st::manifold(n)) opts.push_back({std::to_string(s.n1) + " " + std::to_string(s.n2) + " " + std::to_string(s.m), std::to_string(s.n1) + "," + std::to_string(s.n2) + "," + std::to_string(s.m)});
+    int a1 = 0, a2 = 0, am = 0;
+    const std::string cur = L.starkPar(a1, a2, am) ? P.pstate : "Off";
+    std::snprintf(b, sizeof b, "Cloud: a parabolic state (n1, n2, m) of n = %d", n);
+    choiceRow(app, p, "pstate", b, opts, cur, 4);
+    if (cur != "Off") {
+        const st::Par s{n, a1, a2, am};
+        std::snprintf(b, sizeof b, "%s: <z> = %.4g a0 (the electron sits %s the field's push), first-order shift %+.4g F hartree.", st::name(s).c_str(), 1.5 * n * (a1 - a2),
+                      a1 > a2 ? "up, against" : a1 < a2 ? "down, with" : "evenly, neither with nor against", st::linearAu(s));
+        pCaption(p, b);
+        if (!L.starkCloudOn()) pCaption(p, "Shown in the Cloud and Cloud 3D views with the non-relativistic model (no superposition). The Slice shows the orbital without the field.");
+    }
+    if (P.efield > 0) {
+        std::snprintf(b, sizeof b, "F = %.4g atomic units. The split levels and the line: data sheet, Spectrum tab.", F0);
+        pCaption(p, b);
+    } else pCaption(p, "Turn the field up to split the levels (data sheet, Spectrum tab).");
+    notesFold(p, "efield", {st::limitsText()});
+    if (shellLogOn()) {
+        std::snprintf(b, sizeof b, "stark F=%.6g Vm=%.6g top=%.6g N=%d sline=%d pstate=%s cloud=%d", F0, P.efield, top, P.starkN, P.sline, cur.c_str(), L.starkCloudOn() ? 1 : 0);
+        auditNote(b);
+    }
+}
+
 void atomControls(AppState& app, Panel& p, const SectionFn& section) {
     atom::AtomLab& L = app.atom;
     const Metrics& m = F().m;
@@ -683,6 +752,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         if (shellLogOn()) { std::string all = "jumpcheck"; for (const std::string& line : lines) all += " | " + line; auditNote(all); }
     }
     if (!chart && section("field", "Magnetic field", false)) fieldSection(app, p);   // 0.54.0 (closed at first: the field is off by default)
+    if (!chart && section("efield", "Electric field", false)) starkSection(app, p);   // 0.93.0 (closed at first: the field is off by default)
 }
 
 }  // namespace ui::shellimpl

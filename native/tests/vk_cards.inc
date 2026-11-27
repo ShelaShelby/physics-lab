@@ -3,6 +3,7 @@
 // output (their feature is gone); every check against the processor stays as it was. The validation layers are on whenever they are installed: every
 // message of severity error fails. (Until 0.68.1 tests/gl_vulkan.inc.)
 #include "atom/atom_card.h"
+#include "atom/stark.h"
 #include "molecule/mol_cloud.h"
 #include "molecule/molecule_card_paths.h"
 #include "render/atom_card.h"
@@ -178,6 +179,33 @@ static void vkSliceJump(render::AtomCard& vk) {
         const double lim = 1.63 / std::sqrt(double(std::max<std::size_t>(rad.size(), 1)));
         std::printf("Vulkan Dirac Slice Z=%d %d%c j2=%d: %zu dots, KS distance %.5f (99 %% bound %.5f), %ld on the plane\n", k.Z, k.n, "spdf"[k.l], k.j2, rad.size(), d, lim, onPlane);
         check("Vulkan Dirac Slice: the card's radii follow the plane's distribution (Kolmogorov-Smirnov) and every dot lies on its plane", rad.size() == std::size_t(k.tries) && d < lim && onPlane == long(rad.size()));
+    }
+    // 0.93.0: a parabolic state's cloud (its own program): the same numbers as stark::samplePar, the part exactly and each point within its derived limit
+    check("Vulkan: the Stark cloud's program is made", vk.build(render::AtomCard::kStark, nullptr, why));
+    bool sOk = true;
+    long sTries = 0;
+    for (const atom::StarkCase& k : atom::starkCheckCases()) {
+        std::vector<float> res;
+        const int j = vk.beginStark(atom::starkJobOf(k));
+        if (!(j > 0 && vkt::poll([&] { return vk.pollSlice(j, res); }) == render::JobState::Done)) { sOk = false; continue; }
+        const atom::SliceCompare c = atom::compareStark(k, res);
+        std::printf("Vulkan Stark cloud n=%d (%d, %d, %d): %s\n", k.n, k.n1, k.n2, k.m, atom::sliceCompareText(c).c_str());
+        sOk = sOk && c.ok();
+        sTries += k.tries;
+    }
+    check("Vulkan Stark cloud: every point within its limit against stark::samplePar with the same numbers (atom/atom_card.h compareStark)", sOk && sTries > 0);
+    // the card's own statistic: <z> of 100,000 of its points against the exact <z> (atom/stark.h meanZ) within 4 standard errors (the spread from the same points)
+    for (const atom::StarkCase base : atom::starkCheckCases()) {
+        atom::StarkCase k = base; k.tries = 100000; k.seed = 0x13579BDFu;
+        std::vector<float> res;
+        const int j = vk.beginStark(atom::starkJobOf(k));
+        if (!(j > 0 && vkt::poll([&] { return vk.pollSlice(j, res); }) == render::JobState::Done)) { check("Vulkan Stark cloud statistics: the batch ran", false); continue; }
+        double sz = 0, szz = 0;
+        for (int t = 0; t < k.tries; t++) { const double z = res[std::size_t(4 * t + 2)]; sz += z; szz += z * z; }
+        const double N = k.tries, mz = sz / N, se = std::sqrt(std::max(0.0, szz / N - mz * mz) / N);
+        const double want = atom::stark::meanZ(atom::stark::parSampler(atom::stark::Par{k.n, k.n1, k.n2, k.m}));
+        std::printf("Vulkan Stark cloud n=%d (%d, %d, %d): <z> %.5f, exact %.5f, standard error %.5f\n", k.n, k.n1, k.n2, k.m, mz, want, se);
+        check("Vulkan Stark cloud: the card's <z> equals the exact <z> within 4 standard errors", std::fabs(mz - want) <= 4 * se);
     }
     long wrong = 0, dots = 0;
     for (const atom::JumpCheckCase& k : atom::jumpCheckCases()) {

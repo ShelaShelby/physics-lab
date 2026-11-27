@@ -24,7 +24,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - One-electron atom: **source needed** the Lamb shift for n >= 3. Dirac clouds: 90 % outline, superpositions, m != j. Hyperfine beyond 1s.
 - Ions between neutral and one-electron (tools/dhf). Clouds for the 7s and 7p shells of the heaviest atoms. More than 240,000 dots for heavy atoms.
 - The photon's dipole pattern for the many-electron atoms (the lab does not follow m or M there) and the light's polarisation.
-- Atoms in fields: hydrogen's Stark effect, Breit-Rabi at low fields, a broadened synthetic spectrum, a Boltzmann-plot temperature, the cloud of one M sublevel.
+- Atoms in fields (rest): a broadened synthetic spectrum, a Boltzmann-plot temperature, the cloud of one M sublevel.
 - Data tables: <r>, <1/r>, <r²>, P(r), Q(r) of the DHF orbitals (**source needed**: Desclaux's tables), higher alkali Rydberg levels (new ASD fetch), Q-values (AME2020).
 - Labels drawn in depth order (needs a renderer change).
 - Benchmark: atom.bfield_drag was dropped in 0.83.0. The field slider remakes nothing heavy (only the readout, the spectrum's lines and the Zeeman tables).

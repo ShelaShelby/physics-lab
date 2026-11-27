@@ -3071,6 +3071,73 @@ void main() {
 }
 )";
 
+// 0.93.0: a parabolic state's cloud of hydrogen in an electric field (atom/stark.h samplePar, the exact reference): point t takes the generator's numbers
+// 4t .. 4t + 3. The part (x f1 f2 or f1 y f2) from the first, exact: k0 < uShareK = ceil(share 2^32). x and y by bisection on the tail's logarithm,
+// ln(Q(x) / Q(0)) - x = ln(1 - u) (Q: the tail's polynomial, its coefficients divided by Q(0)); phi from the fourth. Every point is kept (w = 1).
+static const char* const kStarkCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) writeonly buffer Out { vec4 res[]; };
+uniform uint uSeed;
+uniform int uTries;
+uniform uint uShareK;
+uniform float uN;
+uniform ivec4 uNq;
+uniform vec4 uXmax;
+uniform float uQ[64];
+
+uint mulberry(uint n) {
+    uint s = uSeed + (n + 1u) * 0x6D2B79F5u;
+    uint t = (s ^ (s >> 15u)) * (1u | s);
+    t = (t + ((t ^ (t >> 7u)) * (61u | t))) ^ t;
+    return t ^ (t >> 14u);
+}
+// cos and sin of 2 pi t, t in [0, 1) (as kSliceDotsCS)
+vec2 cosSinTurn(float t) {
+    float q = floor(4.0 * t + 0.5);
+    float a = 6.28318530717958648 * (t - 0.25 * q);
+    float a2 = a * a;
+    float c = 1.0 + a2 * (-0.5 + a2 * (1.0 / 24.0 + a2 * (-1.0 / 720.0 + a2 * (1.0 / 40320.0))));
+    float s = a * (1.0 + a2 * (-1.0 / 6.0 + a2 * (1.0 / 120.0 + a2 * (-1.0 / 5040.0 + a2 * (1.0 / 362880.0)))));
+    int k = int(q) & 3;
+    if (k == 0) return vec2(c, s);
+    if (k == 1) return vec2(-s, c);
+    if (k == 2) return vec2(-c, -s);
+    return vec2(s, -c);
+}
+// ln(e^-x Q(x) / Q(0)) for tail w (Horner, highest coefficient first)
+float tailLn(int w, int nq, float x) {
+    float s = uQ[w * 16 + nq - 1];
+    for (int i = 14; i >= 0; i--) if (i < nq - 1) s = s * x + uQ[w * 16 + i];
+    return log(max(s, 1.0e-30)) - x;
+}
+float invertTail(int w, int nq, float xmax, uint k) {
+    if (k == 0u) return 0.0;                               // 1 - u = 1: x = 0 (as the processor)
+    float lnT = log(float(0u - k) * 2.3283064365386963e-10);
+    float a = 0.0, b = xmax;
+    for (int it = 0; it < 64; it++) {
+        float m = 0.5 * (a + b);
+        if (m == a || m == b) break;
+        if (tailLn(w, nq, m) > lnT) a = m; else b = m;
+    }
+    return 0.5 * (a + b);
+}
+
+void main() {
+    int t = int(gl_GlobalInvocationID.x);
+    if (t >= uTries) return;
+    uint n0 = 4u * uint(t);
+    uint k0 = mulberry(n0), k1 = mulberry(n0 + 1u), k2 = mulberry(n0 + 2u), k3 = mulberry(n0 + 3u);
+    bool one = k0 < uShareK;
+    int wx = one ? 0 : 2, wy = one ? 1 : 3;
+    float X = invertTail(wx, uNq[wx], uXmax[wx], k1);
+    float Y = invertTail(wy, uNq[wy], uXmax[wy], k2);
+    float xi = uN * X, eta = uN * Y;
+    float rho = sqrt(xi * eta);
+    vec2 cs = cosSinTurn(float(k3) * 2.3283064365386963e-10);
+    res[t] = vec4(rho * cs.x, rho * cs.y, 0.5 * (xi - eta), one ? 1.0 : 2.0);
+}
+)";
+
 // 0.64.0: Saturn's rings per pixel on the graphics card (Vulkan), the processor's triangles (orbit/ring_draw.h ringTriangles) as the reference: the same
 // 128 angular steps with straight chords (a pixel's radius is measured along its step's middle direction and divided by cos(half a step), so the chords'
 // edges are the processor's), the same half (the step's middle towards you or away), the same drawn bands (inner and outer edge in planet radii, opacity,

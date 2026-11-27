@@ -54,7 +54,7 @@ void AtomCardPaths::frame(render::Renderer2D& R, AtomLab& L) {
             P.gen = G.generation();
             if (P.state == -1) { const int keepFrames = P.frames; P = Path(); P.gen = G.generation(); P.frames = keepFrames; }
         }
-        const bool shown = which == 0 ? L.p.view == "Slice" : (L.manyOn() && L.p.view == "Cloud 3D" && L.p.cstyle == "Glow" && L.s.trans);   // (the jump's: only once a jump is under way)
+        const bool shown = which == 0 ? (L.p.view == "Slice" || L.starkCloudOn()) : (L.manyOn() && L.p.view == "Cloud 3D" && L.p.cstyle == "Glow" && L.s.trans);   // (the jump's: only once a jump is under way)
         if (P.state == 0) {
             if (!R.computeShaders()) { off(which, R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "no Vulkan renderer"); continue; }
             if (G.started() && !G.allowed()) { off(which, G.offText().empty() ? std::string("its guard switched it off") : G.offText()); continue; }
@@ -117,6 +117,8 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
         if (!C.build(which, &steps[which], why)) { G.finished(false, why); off(which, why); return; }
         // 0.91.0: the Slice's Dirac program with it (the same guard and check)
         if (which == 0 && !C.build(render::AtomCard::kDirac, &steps[which], why)) { G.finished(false, why); off(which, why); return; }
+        // 0.93.0: and the Stark cloud's program (the same guard and check)
+        if (which == 0 && !C.build(render::AtomCard::kStark, &steps[which], why)) { G.finished(false, why); off(which, why); return; }
         P.step = 1;
         return;
     }
@@ -150,6 +152,7 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
         if (which == 0) {
             for (const SliceCheckCase& k : sliceCheckCases()) P.jobs[P.nJobs++] = C.beginSlice(sliceJobOf(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, k.tries, k.stride, k.first));
             for (const DiracCase& k : diracCheckCases()) P.jobs[P.nJobs++] = C.beginDirac(diracJobOf(k));   // 0.91.0
+            for (const StarkCase& k : starkCheckCases()) P.jobs[P.nJobs++] = C.beginStark(starkJobOf(k));   // 0.93.0 (16 batches in all: the card's limit)
         } else {
             g_jumpFixed.clear();
             for (const JumpCheckCase& k : jumpCheckCases()) {
@@ -175,8 +178,13 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
             if (st == render::JobState::Pending) continue;
             P.jobs[i] = 0; P.doneJobs++;
             if (st == render::JobState::Failed) { P.allOk = false; P.worst = "a batch failed on the card"; continue; }
-            const std::size_t nSlice = sliceCheckCases().size();
-            if (which == 0 && std::size_t(i) >= nSlice) {                  // 0.91.0: a Dirac case
+            const std::size_t nSlice = sliceCheckCases().size(), nDirac = diracCheckCases().size();
+            if (which == 0 && std::size_t(i) >= nSlice + nDirac) {         // 0.93.0: a Stark cloud's case
+                const StarkCase k = starkCheckCases()[std::size_t(i) - nSlice - nDirac];
+                acc[i] = compareStark(k, res);
+                if (!acc[i].ok()) P.allOk = false;
+                std::printf("PLATOMCARDCASE stark %d n=%d (%d, %d, %d): %s\n", i, k.n, k.n1, k.n2, k.m, sliceCompareText(acc[i]).c_str());
+            } else if (which == 0 && std::size_t(i) >= nSlice) {           // 0.91.0: a Dirac case
                 const DiracCase k = diracCheckCases()[std::size_t(i) - nSlice];
                 acc[i] = compareDirac(k, res);
                 if (!acc[i].ok()) P.allOk = false;
@@ -251,7 +259,7 @@ std::string AtomCardPaths::pathText(int which, const AtomLab& L, bool computeOk)
     if (which == 0 ? !L.gpuSlice : !L.gpuJump) return what + "the processor (" + (which == 0 ? "GPU Slice dots" : "GPU jump groups") + " switched off)";
     if (P.state == 1) return what + "the graphics card (its start-up check passed: " + P.check + ")";
     if (P.state == -1) return what + "the processor, because " + P.why;
-    return what + "the graphics card once its start-up check has passed (made when " + (which == 0 ? "the Slice view" : "a jump in the every-electron Glow cloud") + " is first shown)";
+    return what + "the graphics card once its start-up check has passed (made when " + (which == 0 ? "the Slice view or a parabolic state's cloud" : "a jump in the every-electron Glow cloud") + " is first shown)";
 }
 
 }  // namespace atom

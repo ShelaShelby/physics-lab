@@ -758,6 +758,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
             app.atom.hold = true;
             if (envHas("PL_BENCH_ZOOM") && t.atomWhich >= atom::kBenchAllEnlarged) app.atom.setParam("zoom", envNum("PL_BENCH_ZOOM", 0) + (t.atomWhich == atom::kBenchNucleusDensity ? app.atom.zoomForNucleus() : 0));
             app.tempK = 293.15;                          // the Temperature card's little box is drawn every frame: the same temperature for every run
+            if (t.atomWhich == atom::kBenchStarkDrag) shellShowAtomSheet("spectrum");   // 0.93.0: the Stark card drawn with the cloud
             break;
         case K::MoleculeDensity: case K::MoleculeVibDensity: case K::MoleculeSpaceVib: moleculeSetup(app, t.kind); break;
         case K::BlackHole: blackholeScene(app); break;
@@ -874,7 +875,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
         case K::Atom:
             app.atom.hold = true;                                               // the decay clock held: the nucleus stays the one the scene names (oganesson-294 lives about a millisecond)
             atom::benchFrame(app.atom, t.atomWhich, b.sceneFrame, b.measFrame);
-            if ((t.atomWhich >= atom::kBenchAllEnlarged && t.atomWhich <= atom::kBenchJumpAll) || t.atomWhich == atom::kBenchEmitAll) app.atom.s.yaw = 0.8 * u;   // turning 0.8 rad a second, as a steady drag
+            if ((t.atomWhich >= atom::kBenchAllEnlarged && t.atomWhich <= atom::kBenchJumpAll) || t.atomWhich == atom::kBenchEmitAll || t.atomWhich == atom::kBenchStarkDrag) app.atom.s.yaw = 0.8 * u;   // turning 0.8 rad a second, as a steady drag
             if (t.atomWhich == atom::kBenchEmitAll) {                        // 0.83.0: Emit and Absorb pressed in turn every 0.5 s; a flight still going is ended first
                 atom::AtomLab& L = app.atom;
                 if (u >= b.nextPress) {
@@ -1063,6 +1064,8 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             if (t.atomWhich == atom::kBenchSideAll || t.atomWhich == atom::kBenchSideAllClassic) return atom::classicCardPathText(g_vk != nullptr, "the side view's dots");   // 0.65.0
             if (t.atomWhich == atom::kBenchSliceAll)                        // 0.65.0
                 return "the Slice's dots: made by the processor (the many-electron sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
+            if (t.atomWhich == atom::kBenchStarkDrag)                       // 0.93.0: the parabolic state's sampler on the card (the Slice's program)
+                return atom::atomCardPaths().pathText(0, L, app.computeOk) + " (the Stark cloud's sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
             if (t.atomWhich == atom::kBenchSliceDense)                      // 0.91.0
                 return "the Slice's dots: the outer electron's only, made by the processor (the many-electron sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
             if (t.atomWhich == atom::kBenchSliceDirac)                      // 0.91.0: the Dirac state's sampler on the card too (the Slice's program)

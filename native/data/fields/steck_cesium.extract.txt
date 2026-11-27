@@ -1,0 +1,29 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/fields/steck_cesium_d_line.txt
+# Reference: Daniel A. Steck, "Cesium D Line Data", revision 2.3.4 (8 August 2025); the original is the text of the PDF (pdftotext -layout)
+# URL: https://steck.us/alkalidata/cesiumnumbers.pdf
+# Date read: 2026-11-27
+# sha256 of the original: 42c8c17b393896cd86831060756af0f5095e0478a1d19514bf3ed9f920592c38
+# Place in the original: the revision line, the g-factor table (g_J of the ground state, g_I, the clock shift) and the hyperfine table (A of the ground state)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/atom/breit_rabi.cpp (groundStates, the formula); tests/test_breit_rabi.inc
+#--- begin the revision
+This is revision 2.3.4, 8 August 2025.
+#--- end
+#--- begin g_J of the ground state
+     Electron orbital g-factor                     gL                           0.999 995 87
+                                               gJ (6 S1/2 )
+                                                    2
+                                                                             2.002 540 261(27)                [29, 36, 37]
+#--- end
+#--- begin A of the ground state
+           Magnetic Dipole Constant, 62 S1/2            A62 S1/2    h · 2.298 157 942 5 GHz (exact)           [29]
+#--- end
+#--- begin g_I
+     Nuclear g-factor                              gI                      −0.000 398 853 95(52)                     [29]
+#--- end
+#--- begin the clock shift
+     Clock transition Zeeman shift             ∆ωclock /B   2
+                                                                             2π · 427.45 Hz/G   2
+#--- end

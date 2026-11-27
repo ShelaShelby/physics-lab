@@ -67,9 +67,6 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "blackhole.everything", BenchKind::BlackHoleEverything, -1, "Black Hole Lab, every heavy option at once, turning",
             "A feeding hole at spin 0.99, Real, the disc out to 2000 GM/c\xC2\xB2, the streaks and the clump at the fastest rate (10^7), the camera at 2.2 GM/c\xC2\xB2 "
             "(the closest) with a 360\xC2\xB0 view (the widest), the eye's glare (heavier here than All light, REPORT 0.83.0), turning 0.15 rad a second.");
-        add(true, "blackhole.edge_on", BenchKind::BlackHoleEdgeOn, -1, "Black Hole Lab, Sagittarius A*'s disc seen edge on, turning",
-            "Sagittarius A*, the disc on, feeding 0.11, from 57.5 GM/c\xC2\xB2 in the disc's plane (pitch 1.575 rad, the view of the 0.82.1 bug), the streaks and the "
-            "clump on, Real: the camera turning slowly round the axis (0.15 rad a second).");
         add(true, "orbit.saturn_real_fast", BenchKind::OrbitSaturnRealFast, -1, "Orbit Lab, a fly-by of Saturn with Real physics at the fastest time",
             "orbit.flyby (Saturn followed from the closest zoom, every extra on, Stars Full with constellations) with Planet physics Real, relativity on and the "
             "fastest time; the camera turning 0.5 rad a second and tilting through the ring plane.");
@@ -79,6 +76,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "atom.slice_dense", BenchKind::Atom, atom::kBenchSliceDense, "Atom Lab, the Slice's outer electron alone, the cut dragged",
             "0.91.0: sodium-23, every electron, its outer electron put in 3d, Slice view, Outer electron's dots: Outer electron alone (every dot the outer electron's), Glow, "
             "Ultra (the most dots), zoom 0: the cut moves 0.01 every frame from -0.90 to +0.90 and back, as atom.slice_drag.");
+        add(true, "atom.stark_drag", BenchKind::Atom, atom::kBenchStarkDrag, "Atom Lab, the electric field dragged at n = 5",
+            "Hydrogen-1, Cloud 3D, 5s as the parabolic state (4, 0, 0) (its dots made on the card), Glow, Ultra, zoom 0, levels up to n = 5: the field "
+            "slider moves from 0 to its top (the saddle-point field of n = 5) and back every 240 frames. The data sheet open on Spectrum draws the Stark levels "
+            "and lines each frame. The camera turning 0.8 rad a second.");
         add(true, "ui.settings_over_blackhole", BenchKind::UiSettingsOverBlackHole, -1, "Panels, Settings over the Black Hole Lab's moving gas, scrolled",
             "blackhole.moving_gas's view (spin 0.9, the streaks and the clump at the fastest rate, 10 GM/c\xC2\xB2, 60\xC2\xB0, turning) with the Settings page open "
             "over it and scrolled down and up every 2.6 s. The picture keeps drawing behind Settings.");
@@ -104,6 +105,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
         // 0.91.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026: 1 % low 684.4 fps in bench_0.85.2, at least 1.5 x 255 Hz) to make room for atom.slice_dense
         // 0.92.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.porkchop and its wait: 1 % low 524.3 and 406.2 fps in bench_0.85.2, over 1.5 x 255 Hz
+        // 0.93.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for atom.stark_drag: 1 % low 435.8 fps in bench_0.85.2, over 1.5 x 255 Hz
+        add(false, "blackhole.edge_on", BenchKind::BlackHoleEdgeOn, -1, "Black Hole Lab, Sagittarius A*'s disc seen edge on, turning",
+            "Sagittarius A*, the disc on, feeding 0.11, from 57.5 GM/c\xC2\xB2 in the disc's plane (pitch 1.575 rad, the view of the 0.82.1 bug), the streaks and the "
+            "clump on, Real: the camera turning slowly round the axis (0.15 rad a second).");
         add(false, "orbit.sun_edge", BenchKind::OrbitSunEdge, -1, "Orbit Lab, the Sun close up (measured edge, the day's sunspots), then an eclipse",
             "The Sun followed, filling the view (zoom 2.6), on 10 May 2024 00:00 UT (7 recorded sunspot groups, drawn as outlines), its edge by Neckel & Labs 1994, "
             "turning; after half the time Earth at the app's eclipse date (12 Aug 2026 17:46 UT), the Moon's shadow on it with the measured edge, turning.");
@@ -242,6 +247,7 @@ double benchPlannedS() {
 // 0.86.0: 30 scenes: orbit.true_light_stars in place of blackhole.film_soft (removed with Film's see-through disc, R6), the same 291.0 s.
 // 0.87.0: 46 waits (response.blackhole_return, done once): 292.6 s planned, under the 4.9 minutes. No new scene: the real light adds no pass.
 // 0.92.0: 29 scenes (orbit.porkchop in; orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule) and 47 waits (response.porkchop_grid): 287.7 s planned, under the limit.
+// 0.93.0: 29 scenes (atom.stark_drag in; blackhole.edge_on to All scenes by the 1.5 x refresh rule).
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= kBenchLimitS,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,

@@ -12,6 +12,7 @@ namespace ui {
 void shellFrame(AppState& app, int winW, int winH, double fps, double frameDt);
 float shellTopBarH();                                    // the top bar's height in window pixels (the Learn page starts below it); 0 before the first frame
 bool shellSpace(AppState& app, bool textInput);          // the Space key: plays / pauses unless a text field has the keyboard. True: it did
-void shellNoteDrag();                                    // the user dragged the picture: the centre shift holds still until something opens or closes
+void shellNoteDrag();
+void shellShowAtomSheet(const char* cardTab);             // 0.93.0 (the benchmark's atom.stark_drag): opens the Atom Lab's data sheet on one of its card tabs ("spectrum" ...)                                    // the user dragged the picture: the centre shift holds still until something opens or closes
 
 }  // namespace ui

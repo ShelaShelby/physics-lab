@@ -22,7 +22,7 @@ std::string jumpShaderId();
 // cannot be made (every program absent: the processor's paths).
 class AtomCard : public ISliceCompute {
 public:
-    enum Program { kSlice = 0, kJump = 1, kDirac = 2 };   // 0.91.0: kDirac, the Slice of a Dirac state (built and checked with the Slice's program, under its guard)
+    enum Program { kSlice = 0, kJump = 1, kDirac = 2, kStark = 3 };   // 0.91.0: kDirac, the Slice of a Dirac state (built and checked with the Slice's program, under its guard). 0.93.0: kStark, a parabolic state's cloud (the same guard)
     ~AtomCard() override {}
     static const char* programName(int which);                   // "the Slice's dots shader", "the jump's groups shader"
     // compile and link one program: two steps told to steps (begin, end with the driver's log and the time); false: it failed (why)

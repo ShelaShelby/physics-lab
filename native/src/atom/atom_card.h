@@ -48,6 +48,14 @@ render::DiracSliceJob diracJobOf(const DiracCase& c);
 SliceCompare compareDirac(const DiracCase& c, const std::vector<float>& res);
 std::vector<DiracCase> diracCheckCases();   // the start-up check's planes: the benchmark's uranium 4f (j = 7/2 lined up), a far cut of hydrogen 3d5/2, U 1s round
 
+// 0.93.0: a parabolic state's cloud on the card (render/atom_card_types.h StarkJob, shaders.h kStarkCS), its exact reference stark::samplePar: `tries`
+// points from `seed`, point t takes the numbers 4t .. 4t + 3 and is always kept. The state is (n1, n2, m) of hydrogen.
+struct StarkCase { int n = 1, n1 = 0, n2 = 0, m = 0; std::uint32_t seed = 0; int tries = 0; };
+render::StarkJob starkJobOf(const StarkCase& c);
+// the card's points against samplePar's with the same numbers: the part exactly, each point within its limit (atom_card.cpp, derived step by step)
+SliceCompare compareStark(const StarkCase& c, const std::vector<float>& res);
+std::vector<StarkCase> starkCheckCases();   // the start-up check's states: (4, 0, 0) and (1, 2, -1) of n = 5, (0, 0, 3) of n = 4
+
 // The jump's check: a pattern of fixed groups (a few not shown) for jn dots and the shares (old, new); the processor's answer is AtomLab::jumpGroups's rule,
 // a dot shown when its fixed random number is below its population's share (atom_sim.cpp jumpUniform), which the card must give exactly
 double jumpUniformOf(int pop, long i);   // atom_sim.cpp: a jump's dot's fixed random number, (z >> 11) / 2^53 of splitmix64(i + (pop << 40))

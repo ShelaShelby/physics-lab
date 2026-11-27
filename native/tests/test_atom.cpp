@@ -4544,6 +4544,8 @@ static void testManyDots() {
 #include "test_atom078.inc"   // 0.78.0: the photon's dipole pattern
 #include "test_atom0541.inc"  // 0.54.1: the nucleus Density look projected exactly; the outer electron's dots at their true share
 #include "test_atom0910.inc"  // 0.91.0: the Slice's outer electron alone; every level a cloud; the Slice samplers on the GPU; hydrogen's recoil
+#include "test_stark.inc"     // 0.93.0: hydrogen's Stark effect
+#include "test_breit_rabi.inc"   // 0.93.0: the ground state's hyperfine levels in a magnetic field
 
 // 0.48 (review 4): Rf to Og have a family only by their column of the table (Smits et al., Phys. Rep. 1035 (2023), section 6.6: Og may be a solid semiconductor, Cn may act as a noble gas)
 static void testSuperheavyFamilies() {
@@ -4692,6 +4694,8 @@ int main() {
     testOrthogonal0910();
     testLevelClouds0910();
     testRecoil0910();
+    testStark();
+    testBreitRabi();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

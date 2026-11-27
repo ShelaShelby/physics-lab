@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.92.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.93.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -112,6 +112,8 @@ add_library(atom_core STATIC
   src/atom/dirac.cpp
   src/atom/threej.cpp
   src/atom/zeeman.cpp
+  src/atom/stark.cpp
+  src/atom/breit_rabi.cpp
   src/atom/dirac_cloud.cpp
   src/atom/hfs.cpp
   src/atom/lifetime.cpp
@@ -438,7 +440,7 @@ if(PL_BUILD_APP)
                       # storage buffers keep the bindings of their text)
                       "cloud_vert:kCloudVS" "moldot_vert:kMolDotVS" "cgrid_vert:kCloudGridVS" "mgrid_vert:kMolGridVS" "grid_frag:kCloudGridFS"
                       "groups_comp:kGroupsCS" "outdens_comp:kOutlineDensityCS" "outlevel_comp:kOutlineLevelCS" "rocks_comp:kRocksCS" "grains_comp:kGrainsCS" "slice_comp:kSliceDotsCS"
-                      "jump_comp:kJumpShowCS" "dirac_comp:kDiracSliceCS" "moldots_comp:kMolDotsCS" "porkchop_comp:kPorkchopCS"   # 0.92.0: the porkchop grid
+                      "jump_comp:kJumpShowCS" "dirac_comp:kDiracSliceCS" "stark_comp:kStarkCS" "moldots_comp:kMolDotsCS" "porkchop_comp:kPorkchopCS"   # 0.92.0: the porkchop grid
                       # 0.62.0 (Vulkan step 4): the Black Hole Lab's, the same way (kKerrSkyFS from its parts, as render/kerr_sky.cpp; the light paths' compute
                       # shader in double precision: shaderFloat64)
                       "lens_frag:kLensHeadPart+kGasPart+kDiscLightPart+kLensMainPart" "kerr_frag:kKerrHeadPart+kDiscLightPart+kKerrMainPart" "skytiny_frag:kKerrSkyTinyFS" "skymath_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyMathPart"
@@ -617,7 +619,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_atom PROPERTIES TIMEOUT 900 COST 249)
       # ui_atom_card: the Atom Lab's card programs against the processor (the Slice's dots, the jump's groups, the nucleus' Density look) and their guards
       add_test(NAME ui_atom_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_card
-               check_atom_chip.py:card check_atom_chip.py:carddirac check_6c.py:nucdens check_6c.py:nucdenscard)
+               check_atom_chip.py:card check_atom_chip.py:carddirac check_atom_chip.py:cardstark check_6c.py:nucdens check_6c.py:nucdenscard)
       set_tests_properties(ui_atom_card PROPERTIES TIMEOUT 900 COST 183)
       # ui_atom_classic: the Classic dots on the card against the processor: Cloud 3D and the side view
       add_test(NAME ui_atom_classic COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_classic

@@ -92,6 +92,7 @@ double benchZoom(int which) {
         case kBenchSideAll: case kBenchSideAllClassic: return -0.5;   // (zoomed from there to +0.5 and back while it runs: benchFrame)
         case kBenchSliceGlowUltra: case kBenchSliceClassicUltra: return -0.5;
         case kBenchSliceDense: return 0.0;         // 0.91.0: zoom 0 only (other zooms not tried)
+        case kBenchStarkDrag: return 0.0;          // 0.93.0: zoom 0 only (other zooms not tried)
         case kBenchSliceSuper: return 0.0;         // 0.63.0: tried -0.5, 0, 0.5, 1.0, 1.5 (1 % low 2.70, 2.70, 2.95, 3.35, 2.86 fps here): 0 and -0.5 the slowest
         default: return 0.0;
     }
@@ -167,6 +168,19 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
         L.setParam("view", std::string("Slice"));
         L.placeValence(3, 2);
         L.setParam("sdots", std::string("Outer electron alone"));
+        L.resetView();
+        L.setParam("zoom", benchZoom(which));
+        fill(L);
+        still(L);
+        return;
+    }
+    if (which == kBenchStarkDrag) {                     // 0.93.0: the electric field's slider dragged at the highest n shown (5), the cloud of a parabolic state of n = 5
+        fresh(L, 1, 0, w, h);                            // hydrogen-1 (the Stark section is offered for Z = 1, N = 0 alone)
+        L.p.cdens = "Ultra"; L.p.cstyle = "Glow";
+        L.setParam("view", std::string("Cloud 3D"));
+        L.setParam("orb", std::string("5s"));
+        L.setParam("starkN", 5.0);
+        L.setParam("pstate", std::string("4 0 0"));
         L.resetView();
         L.setParam("zoom", benchZoom(which));
         fill(L);
@@ -334,6 +348,7 @@ const BenchInfo& benchSceneInfo(int which) {
         {"The Slice of one state dragged, Classic, Ultra", "0.64.0"},
         {"Emit and Absorb in turn with every electron, the heaviest level atom, Ultra", "0.83.0"},
         {"The Slice's outer electron alone dragged, sodium 3d, Glow, Ultra", "0.91.0"},
+        {"The electric field's slider dragged at n = 5, hydrogen's parabolic state (4, 0, 0), Cloud 3D, Glow, Ultra", "0.93.0"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
@@ -369,6 +384,9 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
     } else if (which == 14 || which == kBenchSliceSuper || which == kBenchSliceAll || which == kBenchSliceDirac || which == kBenchSliceGlowUltra || which == kBenchSliceClassicUltra || which == kBenchSliceDense) {   // (0.63.0: the superposition's Slice dragged the same way)
         const int k = sceneFrame % 360, tri = k <= 180 ? k : 360 - k;                                   // up from -0.90 to +0.90 and back, 0.01 a frame
         L.setParam("cut", std::round((-0.9 + 0.01 * tri) * 100) / 100);
+    } else if (which == kBenchStarkDrag) {              // 0.93.0: the field from 0 to the top (the saddle-point field of n = 5) and back in 240 frames, as a slider drag
+        const int k = sceneFrame % 240, tri = k <= 120 ? k : 240 - k;
+        L.setParam("efield", L.starkTopVm() * tri / 120.0);
     } else if (which == kBenchSideAll || which == kBenchSideAllClassic) {   // 0.64.0: the side view zoomed in and out as a user's wheel does, -0.5 to +0.5 and back
         const int k = sceneFrame % 50, tri = k <= 25 ? k : 50 - k;
         L.setParam("zoom", -0.5 + 0.04 * tri);

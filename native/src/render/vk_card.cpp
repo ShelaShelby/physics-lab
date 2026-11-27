@@ -30,6 +30,7 @@
 #include "r2d_nucdens_comp.h"
 #include "r2d_jump_comp.h"
 #include "r2d_dirac_comp.h"
+#include "r2d_stark_comp.h"
 #include "r2d_porkchop_comp.h"
 #include "r2d_moldots_comp.h"
 #include "r2d_cgrid_vert.h"
@@ -1274,11 +1275,11 @@ public:
     explicit AtomCardVk(VkCards& c) : c_(c) {}
     ~AtomCardVk() override { reset(); }
     bool build(int which, KerrSteps* steps, std::string& why) override {
-        which = which == kDirac ? kDirac : (which & 1);
+        which = slot(which);
         if (k_[which].pipe) return true;
         const std::string name = programName(which), cName = "compile " + name, lName = "link " + name;
-        const std::uint32_t* w = which == kSlice ? k_r2d_slice_comp : which == kDirac ? k_r2d_dirac_comp : k_r2d_jump_comp;
-        const std::size_t bytes = which == kSlice ? sizeof k_r2d_slice_comp : which == kDirac ? sizeof k_r2d_dirac_comp : sizeof k_r2d_jump_comp;
+        const std::uint32_t* w = which == kSlice ? k_r2d_slice_comp : which == kDirac ? k_r2d_dirac_comp : which == kStark ? k_r2d_stark_comp : k_r2d_jump_comp;
+        const std::size_t bytes = which == kSlice ? sizeof k_r2d_slice_comp : which == kDirac ? sizeof k_r2d_dirac_comp : which == kStark ? sizeof k_r2d_stark_comp : sizeof k_r2d_jump_comp;
         // on Vulkan the text was compiled at build time: "compile" makes the shader module from its SPIR-V, "link" the pipeline
         if (steps) steps->begin(cName);
         double t = nowS();
@@ -1289,13 +1290,14 @@ public:
         if (!good) { why = "the SPIR-V of " + name + " is broken: " + w2; return false; }
         if (steps) steps->begin(lName);
         t = nowS();
-        const bool forced = forcedFail(which == kSlice || which == kDirac ? "slice" : "jump");
+        const bool forced = forcedFail(which == kJump ? "jump" : "slice");
         const bool made = !forced && c_.makeKernel(w, bytes, k_[which], w2);
         if (steps) steps->end(lName, std::string(made ? "the pipeline made" : "FAILED") + " in " + msText(nowS() - t) + (made ? std::string() : ": " + (forced ? std::string("made to fail on purpose (PL_VK_CARDFAIL)") : w2)));
         if (!made) { why = forced ? std::string("the pipeline of ") + name + " was made to fail on purpose (PL_VK_CARDFAIL)" : "the Vulkan driver did not make the pipeline of " + name; return false; }
         return true;
     }
-    bool built(int which) const override { return k_[which == kDirac ? kDirac : (which & 1)].pipe != VK_NULL_HANDLE; }
+    static int slot(int which) { return which == kDirac || which == kStark ? which : (which & 1); }
+    bool built(int which) const override { return k_[slot(which)].pipe != VK_NULL_HANDLE; }
     void reset() override {
         while (!jobs_.empty()) release(jobs_.back().id);
         for (VkCards::Kernel& k : k_) c_.dropKernel(k);
@@ -1351,6 +1353,25 @@ public:
         c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
         j.ticket = c_.flush(false);
         if (!j.ticket) { c_.dropBuffer(j.out); c_.dropBuffer(j.in); return 0; }
+        jobs_.push_back(j);
+        return j.id;
+    }
+    // 0.93.0: a parabolic state's cloud (shaders.h kStarkCS): everything in the uniforms, the same 4 floats a point as beginSlice
+    int beginStark(const StarkJob& s) override {
+        if (!built(kStark) || !c_.ok() || s.tries <= 0 || s.tries > (1 << 20) || jobs_.size() >= 16) return 0;
+        for (int w = 0; w < 4; w++) if (s.nq[w] < 1 || s.nq[w] > 16 || !(s.xmax[w] > 0)) return 0;
+        firstBatch();
+        Job j;
+        j.id = nextId_++;
+        j.bytes = static_cast<long>(s.tries) * 16;
+        if (!c_.makeBuffer(VkDeviceSize(j.bytes), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.out, "the Stark cloud's dots")) return 0;
+        VkUniforms& u = k_[kStark].u;
+        u.u("uSeed", &s.seed, 1); u.i("uTries", &s.tries, 1); u.u("uShareK", &s.shareK, 1); u.f("uN", &s.n, 1);
+        u.i("uNq", s.nq, 4); u.f("uXmax", s.xmax, 4); u.f("uQ", s.q, 1, 64);
+        if (!c_.dispatch(k_[kStark], {&j.out}, static_cast<std::uint32_t>((s.tries + 63) / 64))) { c_.dropBuffer(j.out); return 0; }
+        c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
+        j.ticket = c_.flush(false);
+        if (!j.ticket) { c_.dropBuffer(j.out); return 0; }
         jobs_.push_back(j);
         return j.id;
     }
@@ -1425,7 +1446,7 @@ private:
         return c_.dispatch(k_[kJump], {&fixedBuf, &outBuf}, static_cast<std::uint32_t>((words + 63) / 64));
     }
     VkCards& c_;
-    VkCards::Kernel k_[3];
+    VkCards::Kernel k_[4];
     std::vector<Job> jobs_;
     int nextId_ = 1;
     VkCards::Buf fixed_, out_;

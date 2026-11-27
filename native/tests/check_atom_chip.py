@@ -124,6 +124,38 @@ def dirac_part(binary, work):
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 
+def stark_part(binary, work):
+    # 0.93.0: the cloud of a parabolic state in the electric field (the benchmark's atom.stark_drag set-up: hydrogen 5s as (4, 0, 0), Cloud 3D, Glow, Ultra, the
+    # field dragged, then still from frame 150) from the card's Stark program against the processor's (the Slice's programs made to fail on purpose,
+    # PL_ATOM_CARDFAIL): the card's check passes with its 3 Stark planes, and the two pictures differ in at most 1 % of the pixels by more than 8 levels.
+    os.makedirs(work, exist_ok=True)
+    fails = checks = 0
+    def check(ok, what):
+        nonlocal fails, checks
+        checks += 1
+        if not ok:
+            fails += 1
+            print("FAIL", what)
+    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "48", "PL_ATOM_BENCHSTOP": "150"}
+    card = run_app(binary, work, "stark_card", env, frames=320, size="1280x800")
+    cpu = run_app(binary, work, "stark_cpu", dict(env, PL_ATOM_CARDFAIL="1"), frames=320, size="1280x800")
+    st = [ln for ln in card.out.splitlines() if ln.startswith("PLATOMCARDCASE stark")]
+    check("PLATOMCARD slice state=1" in card.out and len(st) == 3, f"stark: the Slice's programs pass their check with the 3 Stark planes ({st})")
+    check("PLATOMCARD slice state=1" not in cpu.out, "stark: the processor's run keeps the processor's dots (its check made to fail)")
+    a, b = Bmp(card.bmp), Bmp(cpu.bmp)
+    n = over = lit = 0
+    for y in range(0, a.h, 2):
+        for x in range(0, a.w, 2):
+            n += 1
+            pa, pb = a.px(x, y)[:3], b.px(x, y)[:3]
+            over += max(abs(p - q) for p, q in zip(pa, pb)) > 8
+            lit += max(pa) > 40
+    print(f"stark: the still cloud: {over} of {n} pixels over 8 levels ({lit} lit)")
+    check(lit > 0.01 * n, f"stark: the cloud is drawn ({lit} of {n} pixels lit)")
+    check((a.w, a.h) == (b.w, b.h) and n > 0 and over <= 0.01 * n, f"stark: the card's picture and the processor's of the still cloud: {over} of {n} pixels over 8 levels")
+    print(f"{checks} checks, {fails} failed")
+    return 1 if fails else 0
+
 def card_part(binary, work):
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
@@ -233,6 +265,8 @@ def main():
         return card_part(binary, work)
     if len(sys.argv) > 3 and sys.argv[3] == "carddirac":
         return dirac_part(binary, work)
+    if len(sys.argv) > 3 and sys.argv[3] == "cardstark":
+        return stark_part(binary, work)
     if len(sys.argv) > 3 and sys.argv[3] in CLASSIC_SCENES:
         return classic_part(binary, work, CLASSIC_SCENES[sys.argv[3]])
     os.makedirs(work, exist_ok=True)

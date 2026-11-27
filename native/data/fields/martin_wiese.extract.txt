@@ -1,0 +1,25 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/fields/martin_wiese_atomic_spectroscopy.txt
+# Reference: W. C. Martin and W. L. Wiese, "Atomic Spectroscopy" (NIST web version of chapter 10 of the Atomic, Molecular, and Optical Physics Handbook, G. W. F. Drake, Ed., AIP Press 1996); the original is the text of the PDF (pdftotext -layout)
+# URL: https://www.nist.gov/document/atomic-spectroscopy-compendium-basic-ideas-notation-data-and-formulas
+# Date read: 2026-11-27
+# sha256 of the original: 054587edb221fabfe5d7036862ae7beaca1c65b8753fd2724976e8e3abcb6860
+# Place in the original: the title page and section 4 (the hydrogen 1s hyperfine splitting)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/atom/breit_rabi.cpp (groundStates, the formula); tests/test_breit_rabi.inc (hydrogen's splitting)
+#--- begin the title
+                                                 Atomic Spectroscopy
+                                                      W. C. Martin and W. L. Wiese
+
+                                                National Institute of Standards and Technology
+                                                        Gaithersburg, Maryland 20899
+
+                Originally published as Chapter 10 in Atomic, Molecular, and Optical Physics Handbook, G.W.F. Drake, Ed. (AIP
+                Press, Woodbury, NY, 1996). Minor style changes have been made in this web version.
+#--- end
+#--- begin section 4: the 1s hyperfine splitting
+          The Coulomb interaction between the nucleus and the single electron is dominant, so that the largest
+          energy separations are associated with levels having different n. The hyperfine splitting of the 1H 1s
+          ground level [1420.405 751 766 7(10) MHz] results from the interaction of the proton and electron
+#--- end

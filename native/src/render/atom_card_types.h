@@ -43,6 +43,19 @@ struct DiracSliceJob {
     std::vector<float> tab;
 };
 
+// 0.93.0: one batch of a parabolic state's cloud (atom/stark.h samplePar): point t takes the numbers 4t .. 4t + 3, every point kept. Tails 0, 1: part 1's
+// x and y; 2, 3: part 2's. Each tail's coefficients divided by its Q(0), rounded once; xmax: where its tail is below 2^-40 (the bisection's top).
+// The card writes x, y, z (Bohr radii) and the part (1 or 2) per point.
+struct StarkJob {
+    std::uint32_t seed = 0;
+    int tries = 0;
+    std::uint32_t shareK = 0;      // part 1 where the first number's k0 < shareK = ceil(share 2^32)
+    float n = 1;
+    int nq[4] = {0, 0, 0, 0};      // coefficients of each tail, at most 16
+    float xmax[4] = {0, 0, 0, 0};
+    float q[64] = {};
+};
+
 // What the atom code asks of the card for the Slice (null or !ready(): the processor makes the dots). Never blocks: begin starts a batch and returns its
 // number (0: could not start); poll gives Pending (ask again later), Done (res holds 4 floats per attempt: x, y, z and 1 kept / 0 rejected / -1 the
 // radius came out 0) or Failed.
@@ -52,6 +65,7 @@ public:
     virtual bool ready() const = 0;
     virtual int beginSlice(const SliceDotsJob& j) = 0;
     virtual int beginDirac(const DiracSliceJob&) { return 0; }        // 0.91.0: a Dirac state's batch (0: could not start); polled with pollSlice, the same 4 floats an attempt
+    virtual int beginStark(const StarkJob&) { return 0; }             // 0.93.0: a parabolic state's batch (0: could not start); polled with pollSlice
     virtual JobState pollSlice(int job, std::vector<float>& res) = 0;
     virtual void cancelSlice(int job) = 0;
 };

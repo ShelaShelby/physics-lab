@@ -9,6 +9,7 @@
 #include "lifetime.h"
 #include "levels.h"
 #include "zeeman.h"
+#include "stark.h"
 
 #include <algorithm>
 #include <atomic>
@@ -113,6 +114,11 @@ void AtomLab::setParam(const std::string& key, double v) {
     else if (key == "mix") { lo = 0; hi = 100; }
     else if (key == "bfield") { p.bfield = std::isfinite(v) ? std::max(0.0, std::min(100.0, v)) : 0; return; }   // 0.54.0: nothing else changes (no new state)
     else if (key == "zline") { const int n = static_cast<int>(zeeman::labLines(p.Z, p.N, zeemanKind()).size()); p.zline = v < 0 || n == 0 ? -1 : std::min(n - 1, static_cast<int>(v)); return; }
+    // 0.93.0: the electric field and the Stark card's choices: nothing else changes (the parabolic state's cloud does not depend on the field's size)
+    else if (key == "efield") { p.efield = std::isfinite(v) ? std::max(0.0, std::min(starkTopVm(), v)) : 0; return; }
+    else if (key == "starkN") { p.starkN = std::isfinite(v) ? std::max(2, std::min(5, static_cast<int>(std::lround(v)))) : 3; p.efield = std::min(p.efield, starkTopVm());
+                                p.sline = std::min(p.sline, static_cast<int>(starkLines().size()) - 1); return; }
+    else if (key == "sline") { const int n = static_cast<int>(starkLines().size()); p.sline = !std::isfinite(v) || v < 0 ? 0 : std::min(n - 1, static_cast<int>(v)); return; }
     else return;
     v = std::max(lo, std::min(hi, v));
     if (key == "zoom") p.zoom = v;
@@ -157,6 +163,10 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "hj") p.hj = v;
     else if (key == "vdots") { if (validChoice(key, v)) p.vdots = v; else return; }
     else if (key == "sdots") { if (validChoice(key, v)) p.sdots = v; else return; }   // 0.91.0   // 0.54.1
+    else if (key == "pstate") {                                  // 0.93.0: "Off" or "n1 n2 m" (checked against the orbital's n when it is used: starkPar)
+        int a = 0, b = 0, c = 0; char extra = 0;
+        if (v == "Off" || std::sscanf(v.c_str(), "%d %d %d %c", &a, &b, &c, &extra) == 3) p.pstate = v; else return;
+    }
     else if (key == "jfrom") p.jfrom = v;
     else if (key == "jto") p.jto = v;
     else if (key == "phase") p.phase = v;
@@ -188,7 +198,7 @@ void AtomLab::onParam(const std::string& key) {
         if (!(superOn() && overlap_)) return;
     }
     if ((key == "orb2" || key == "pAx2" || key == "dAx2" || key == "fAx2") && p.super != "On") return;    // (nothing shown depends on them while the superposition is off)
-    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens", "super", "orb2", "pAx2", "dAx2", "fAx2", "elec", "show", "rscale", "mrel", "hrel", "hj", "vdots", "sdots"};   // a new density refills the cloud
+    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens", "super", "orb2", "pAx2", "dAx2", "fAx2", "elec", "show", "rscale", "mrel", "hrel", "hj", "vdots", "sdots", "pstate"};   // a new density refills the cloud
     if (key == "mix" || std::find(std::begin(reinit), std::end(reinit), key) != std::end(reinit)) {
         const AtomState keep = s;
         init();
@@ -241,6 +251,26 @@ int AtomLab::stateId() const { const int m = complexM(); return m ? complexState
 bool AtomLab::diracCloudOn() const {                            // 0.49.3
     if (p.elec != "Hydrogen-like" || p.view == "Orbit" || chartOn() || p.super == "On") return false;
     return p.hrel == "Dirac" || (p.hrel == "Auto" && p.Z >= kRelativityZ);
+}
+// ---- 0.93.0: the electric field (atom/stark.h) ----
+bool AtomLab::starkPar(int& n1, int& n2, int& m) const {
+    if (p.pstate == "Off") return false;
+    char extra = 0;
+    if (std::sscanf(p.pstate.c_str(), "%d %d %d %c", &n1, &n2, &m, &extra) != 3) return false;
+    const int fo = fullOrb();
+    if (fo < 0) return false;
+    return stark::valid(stark::Par{orbitals()[std::size_t(fo)].n, n1, n2, m});
+}
+bool AtomLab::starkCloudOn() const {
+    int a = 0, b = 0, c = 0;
+    return starkOk() && (p.view == "Cloud" || p.view == "Cloud 3D") && p.super != "On" && !diracCloudOn() && starkPar(a, b, c);
+}
+double AtomLab::starkFieldAu() const { return p.efield / stark::fieldUnitVm(); }
+double AtomLab::starkTopVm() const { return stark::saddleFieldAu(std::max(2, std::min(5, p.starkN)), stark::reducedMassH()) * stark::fieldUnitVm(); }
+std::vector<std::pair<int, int>> AtomLab::starkLines() const {
+    std::vector<std::pair<int, int>> v;
+    for (int lo = 1; lo < p.starkN; lo++) for (int up = lo + 1; up <= p.starkN; up++) v.push_back({up, lo});
+    return v;
 }
 int AtomLab::diracJ2() const { const int l = orbitals()[std::size_t(fullOrb())].l; return l == 0 ? 1 : p.hj == "l - 1/2" ? 2 * l - 1 : 2 * l + 1; }
 std::string AtomLab::diracText() const { const Orbital& o = orbitals()[std::size_t(fullOrb())]; return diracStateText(o.n, o.l, diracJ2()); }
@@ -818,6 +848,10 @@ void AtomLab::recordDot(double x, double y, double z) {
         double xx = x, yy = y, zz = z;
         manyColour(*manyNow_, manySubNow_, manyShell_, xx, yy, zz, s.sg[i], s.ph[i]);
         x = xx; y = yy; z = zz;
+    } else if (starkNow_) {                                       // 0.93.0: the parabolic state's wave (complex where m is not 0: its phase is m phi)
+        const std::complex<double> v = stark::psiPar(*static_cast<const stark::ParSampler*>(starkNow_), x, y, z);
+        s.sg[i] = v.real() >= 0 ? 1 : -1;
+        s.ph[i] = float(std::arg(v));
     } else if (superOn()) {
         const auto amp = [&](int s_, double nf) { return nf * (isComplexState(s_) ? psiComplex(s_, p.Z, x, y, z) : std::complex<double>(psi(s_, p.Z, x, y, z), 0)); };
         const std::complex<double> A = amp(sup_.idA, nA_), B = amp(sup_.idB, nB_);
@@ -855,6 +889,7 @@ long AtomLab::addDots(long want) {
     capNow_ = std::min<long>(cloudCap(), long(s.sg.size())); unitNow_ = aUnit(); batchNow_ = true;
     diracJ2Now_ = !manyNow_ && !superOn() && diracCloudOn() ? diracJ2() : 0;  // (0.65.0: a Dirac state looked up once per batch, not per attempt)
     if (diracJ2Now_ > 0) { const Orbital& o = orbitals()[std::size_t(stateOrbital(stateId()))]; diracNNow_ = o.n; diracLNow_ = o.l; axisNow_ = sliceAxisNow(); offNow_ = sliceOffNow(); }
+    if (!manyNow_ && starkCloudOn()) return addDotsStark(want);  // 0.93.0: a parabolic state's cloud (every point kept)
     manySubNow_ = manyNow_ ? manySub() : -1;
     valSubNow_ = manyNow_ ? valenceSub(*this, *manyNow_) : -1;   // 0.47 (the outer electron's subshell, for its shape)
     gNow_ = manyNow_ && (valenceOn() || levelOn()) ? graspOfAtom(manyNow_) : nullptr;   // 0.47.2 (the aligned state's shape; 0.47.3: and a level atom's)
@@ -1014,6 +1049,67 @@ long AtomLab::addDotsCardDirac(long want) {
         const render::DiracSliceJob dj = diracJobOf(dc);
         const int job = dj.tries > 0 ? sliceCard->beginDirac(dj) : 0;
         if (job) { sliceJob_ = SliceJob{job, s.crng, dc.tries, need, -1, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch}; sliceJob_.dirac = key; }
+    }
+    return got;
+}
+
+// 0.93.0: a parabolic state's cloud (atom/stark.h samplePar: every point kept, 4 numbers each). The card's batch (render/atom_card_types.h StarkJob,
+// shaders.h kStarkCS) where the Slice's start-up check passed (it checks this program too): point t takes the numbers 4t .. 4t + 3, so a batch's points are
+// the processor's from the same state up to single-precision rounding (atom_card.h compareStark). They arrive one step after they were asked for.
+namespace {
+const stark::ParSampler& starkSampler(int n, int n1, int n2, int m) {
+    static stark::ParSampler ps;
+    static int key = -1;
+    const int k = ((n * 16 + n1) * 16 + n2) * 32 + (m + 16);
+    if (k != key) { ps = stark::parSampler(stark::Par{n, n1, n2, m}); key = k; }
+    return ps;
+}
+}  // namespace
+long AtomLab::addDotsStark(long want) {
+    int n1 = 0, n2 = 0, m = 0;
+    starkPar(n1, n2, m);
+    const int n = orbitals()[std::size_t(fullOrb())].n;
+    const stark::ParSampler& ps = starkSampler(n, n1, n2, m);
+    struct Now { const void*& v; ~Now() { v = nullptr; } } now{starkNow_};
+    starkNow_ = &ps;
+    if (gpuSlice && sliceCard && sliceCard->ready()) return addDotsCardStark(want);
+    if (sliceJob_.job || sliceJob_.job2) cancelSliceJob();
+    orbit::Mulberry32 r(s.crng);
+    long got = 0;
+    for (; got < want; got++) {
+        if ((got & 127) == 127 && pastDeadline()) { cut_ = true; break; }   // (between points: the next call goes on with the same numbers)
+        double x = 0, y = 0, z = 0;
+        stark::samplePar(ps, r, x, y, z);
+        recordDot(x, y, z);
+    }
+    s.crng = r.seed;
+    return got;
+}
+long AtomLab::addDotsCardStark(long want) {
+    static std::vector<float> res;
+    const stark::ParSampler& ps = *static_cast<const stark::ParSampler*>(starkNow_);
+    const int key = -(1 + ((ps.s.n * 16 + ps.s.n1) * 16 + ps.s.n2) * 32 + (ps.s.m + 16));   // (below 0: never a Dirac key, which is above 0)
+    if (sliceJob_.job && sliceJob_.dirac != key) cancelSliceJob();     // (another kind of batch)
+    long got = 0;
+    if (sliceJob_.job) {
+        const render::JobState st = sliceCard->pollSlice(sliceJob_.job, res);
+        if (st == render::JobState::Pending) return 0;
+        const SliceJob j = sliceJob_;
+        sliceJob_ = SliceJob{};
+        if (st == render::JobState::Done && j.dirac == key && j.epoch == s.ptsEpoch && j.seed == s.crng && int(res.size()) >= 4 * j.tries) {
+            const long take = std::min<long>(j.tries, j.want);
+            for (long t = 0; t < take; t++) recordDot(res[std::size_t(4 * t)], res[std::size_t(4 * t + 1)], res[std::size_t(4 * t + 2)]);
+            got = take;
+            s.crng = mulberryAfter(j.seed, 4ull * std::uint64_t(take));
+            sliceCardDots_ += got;
+        }
+    }
+    const long need = want - got;
+    if (need > 0) {
+        StarkCase c{ps.s.n, ps.s.n1, ps.s.n2, ps.s.m, s.crng, static_cast<int>(std::min<long>(need, 262144))};
+        const render::StarkJob sj = starkJobOf(c);
+        const int job = sj.tries > 0 ? sliceCard->beginStark(sj) : 0;
+        if (job) { sliceJob_ = SliceJob{job, s.crng, c.tries, need, -1, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch}; sliceJob_.dirac = key; }
     }
     return got;
 }
@@ -1992,6 +2088,14 @@ std::string AtomLab::info1() {
             const std::string st = diracText() + (j2 == 1 ? std::string(" (round in every m)") : s.round ? std::string(", round (every m)") : ", lined up (m = j)");
             if (sliceDots()) return head + "  ·  " + st + "  ·  " + en + "  ·  avg r: theory " + th + " (a slice's dots are not the whole cloud)";
             return head + "  ·  " + st + "  ·  " + en + "  ·  avg r: sampled " + got + ", theory " + th;
+        }
+        int n1 = 0, n2 = 0, mq = 0;
+        if (starkCloudOn() && starkPar(n1, n2, mq)) {              // 0.93.0: the parabolic state's cloud (stark.h): its name, its level in the field, its exact <r>
+            const stark::Par sp{o.n, n1, n2, mq};
+            const std::string th = fmtLen(stark::meanR(starkSampler(o.n, n1, n2, mq)) * lenScale() * kA0Ang);
+            const double mu = stark::reducedMassH(), Eh = stark::energyAu(sp, starkFieldAu(), mu) * kHartreeEV;
+            const std::string st = "parabolic state " + stark::name(sp) + " of n = " + std::to_string(o.n);
+            return head + "  ·  " + st + "  ·  E −" + fmtEV(-Eh) + " in the field (to second order)  ·  avg r: sampled " + got + ", theory " + th;
         }
         const std::string th = fmtLen(meanRadius(o.n, o.l, p.Z) * lenScale() * kA0Ang);   // exact <r> for hydrogen-like atoms: the same function the radial graph uses
         const double E = levelEV(p.Z, p.N, o.n);   // the same reduced-mass level as the spectrum and Superposition (finding 3 of the 0.10.6 audit)

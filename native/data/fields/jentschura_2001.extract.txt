@@ -1,0 +1,32 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/fields/jentschura_2001_arxiv_physics0010038v3.txt
+# Reference: U. D. Jentschura, arXiv:physics/0010038v3 (2001); the original is the text of the arXiv PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/physics/0010038
+# Date read: 2026-11-27
+# sha256 of the original: 14f11da3071aedf873711e0eacd28ddf6fb77f29724c1a57da1f1a4e7693f13c
+# Place in the original: Eq. (29) and (30): the series of the ground state's and of the (3, 0, 1) state's energy in the field
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: tests/test_stark.inc
+#--- begin Eq. (29) and (30)
+then become ρ-dependent. The free parameter ρ is cho-                               1 9      3 555 4
+sen so that the ρ-dependent coefficient CM (ρ) of order M              E000 (F ) = − − F 2 −      F
+                                                                                    2 4       64
+vanishes. Consequently, the choice of ρ depends on the
+order M of perturbation theory, and in this way the map-                      2 512 779 6 13 012 777 803 8
+ping becomes order-dependent. Certain complications                       −            F −              F + ...            (29)
+                                                                                 512          16 384
+arise because ρ cannot be chosen arbitrarily, but has to
+be selected, roughly speaking, as the first zero of the ρ-         The perturbation series for the state n1 = 3, n2 = 0,
+dependent coefficient CM (ρ) for which the absolute mag-           m = 1 is alternating, but has a subleading nonalternat-
+                           ′
+nitude of the derivative CM  (ρ) is small (this is explained       ing component [see Eq. (2)]. The first perturbative terms
+in [60], p. 886). It is conceivable that with a judicious          read
+
+                                                               6
+                   1    45    31875 2                               F = 2.1393 × 10−4 . Method I leads to the following
+   E301 (F ) = −      +    F−      F
+                   50    2      2                                   results,
+        54 140 625 3 715 751 953 125 4                                 TE67 (F = 2.1393 × 10−4 ) = −0.015 860 468 199 2
+     +             F −                   F + ...      (30)
+#--- end

@@ -190,3 +190,6 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
 - The planning chat reads the processor's code (data, precision, calls) before planning any move to the card, and names in the job the files and lines it read.
 - Superseded. Before any new job, the owner's benchmark of the previous version. Replaced by the benchmark rule of 21 Nov 2026 (Graphics and speed).
 - Who keeps each plan file true: the job that changes a plan's area updates it; the planning chat names the plan files in the job.
+
+## Atoms in fields (owner decision 27 Nov 2026)
+- 0.93.0 ships Part 0, A (Stark) and B (Breit-Rabi). Parts C (broadened spectrum, Boltzmann plot) and D (many-electron Slice sampler on the GPU) are skipped to save usage. They stay on the ROADMAP.

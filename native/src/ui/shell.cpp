@@ -206,6 +206,7 @@ void dataPanel(AppState& app, sh::Panel& p, bool& close) {
     }
 }
 
+namespace { std::string g_atomCardTab; }                         // "" = one of the first three tabs (0.93.0: file scope, so the benchmark can open a card tab)
 // The Atom Lab's data sheet (stage 5f): tabs Values, Decay and Hint, each the strings of the old panel's card / history / hint line, word for word.
 void atomDataPanel(AppState& app, sh::Panel& p, bool& close) {
     const Metrics& m = sh::F().m;
@@ -220,7 +221,7 @@ void atomDataPanel(AppState& app, sh::Panel& p, bool& close) {
     sh::pGap(p, m.s8);
     const std::vector<std::string> labels{"Values", "Decay", "This view"}, names{"data.tab.values", "data.tab.decay", "data.tab.hint"};
     // stage 5h: a second row of tabs for the old panel's last cards (real spectrum, lifetimes, nuclear size, temperature, radial graph), each shown only when the old panel shows it for this subject and view
-    static std::string cardTab;                                   // "" = one of the first three tabs
+    std::string& cardTab = g_atomCardTab;
     const std::vector<AtomSheetCard> cards = atomSheetCards(app);
     int ci = -1;
     for (std::size_t i = 0; i < cards.size(); i++) if (cardTab == cards[i].id) ci = static_cast<int>(i);
@@ -1326,6 +1327,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     for (const Rect& r : stay) if (r.w > 0 && r.h > 0) app.atom.overBoxes.push_back({r.x, r.y, r.w, r.h});   // 0.22 stage 7: the chart's labels keep clear of these too
     for (const Rect& r : occ) { char b[96]; std::snprintf(b, sizeof b, "occ%zu", static_cast<std::size_t>(&r - &occ[0])); auditRect(b, static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h)); }
     auditNote("metrics body=" + std::to_string(m.body) + " caption=" + std::to_string(m.caption) + " title=" + std::to_string(m.title) + " key=" + std::to_string(m.key) + " control=" + std::to_string(m.control) + " topbar=" + std::to_string(m.topBar));
+}
+
+void shellShowAtomSheet(const char* cardTab) {                       // 0.93.0
+    g_atomCardTab = cardTab ? cardTab : "";
+    shellimpl::shellOpenPanel(PanelId::Data);
 }
 
 }  // namespace ui

@@ -20,6 +20,14 @@ def check(ok, what):
 # errors. Then the swapchain made again.
 VK_STEPS = ["instance", "surface", "device", "swapchain", "pipelines", "renderer2d pipelines", "renderer2d textures", "renderer2d check", "first frame"]   # (0.60.0: + renderer2d)
 
+def _guarded_programs():
+    """The program names in vulkanCardGuards() (native/src/app/gpu_guard.cpp), in its order."""
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "app", "gpu_guard.cpp")
+    text = open(src, encoding="utf-8").read()
+    body = text[text.index("vulkanCardGuards() {"):]
+    body = body[:body.index("return v;")]
+    return re.findall(r'\{"(\w+)", &', body)
+
 def _settings_files(home):
     log, cfg = "", ""
     for root, _dirs, files in os.walk(home):
@@ -139,7 +147,10 @@ def part_gpuhelper(binary, work):
     passed = re.findall(r"PLGPUHELPER (\w+) passed", t.out)
     print(f"  died: {died}; passed: {passed}")
     check(os.path.exists(t.bmp) and died == [("lines", "the lines' first small run"), ("surface", "the surface's pipelines")], f"helper: two helpers died, the app ran on to its last frame ({died})")
-    check(len(passed) == 13 and "lines" not in passed and "surface" not in passed, f"helper: the other 13 programs' helpers made their first steps ({len(passed)})")
+    # 0.93.0: the expected programs are read from vulkanCardGuards() (app/gpu_guard.cpp). The fixed count 13 went stale when 0.92.0 added porkchop (14 passed).
+    guarded = _guarded_programs()
+    others = sorted(set(guarded) - {"lines", "surface"})
+    check(sorted(passed) == others, f"helper: the other {len(others)} guarded programs' helpers made their first steps ({len(passed)}: {sorted(set(others) ^ set(passed))} differ)")
     check(_logged(log5, "[vulkan] [lines] ", "the helper died making the lines' first small run") and _logged(log5, "[vulkan] [surface] ", "the helper died making the surface's pipelines"),
           "helper: the log names both programs and their steps")
     offs = sorted(re.findall(r"gpuvk(\w+)=off ", cfg5))

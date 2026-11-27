@@ -1,0 +1,76 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/fields/steck_sodium_d_line_2.3.4.txt
+# Reference: Daniel A. Steck, "Sodium D Line Data", revision 2.3.4 (8 August 2025); the original is the text of the PDF (pdftotext -layout)
+# URL: https://steck.us/alkalidata/sodiumnumbers.pdf
+# Date read: 2026-11-27
+# sha256 of the original: 049a8976f1f0f5847297ddb2ecb3e12320337a687da84d46e333957b44eaa9b8
+# Place in the original: the revision line, Eq. (23) and (25) to (29), Table 6 (g_J, g_I, the clock shift) and the hyperfine table (A of 3S1/2)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/atom/breit_rabi.cpp (groundStates, the formula); tests/test_breit_rabi.inc
+#--- begin the revision
+This is revision 2.3.4, 8 August 2025.
+#--- end
+#--- begin Eq. (23)
+where the hyperfine Landé g-factor is given by
+
+                            F (F + 1) − I(I + 1) + J(J + 1)      F (F + 1) + I(I + 1) − J(J + 1)
+                  gF = gJ                                   + gI
+                                      2F (F + 1)                           2F (F + 1)                          (23)
+#--- end
+#--- begin Eq. (25) to (29)
+the hyperfine energies, so that the hyperfine Hamiltonian perturbs the strong-field eigenstates |J mJ I mI i. The
+energies are then given to lowest order by [1]
+                                             9(mI mJ )2 − 3J(J + 1)mI2 − 3I(I + 1)mJ2 + I(I + 1)J(J + 1)
+          E|J mJ ;I mI i ≈ Ahfs mI mJ + Bhfs
+                                                                 4J(2J − 1)I(2I − 1)                           (25)
+                                   + µB (gJ mJ + gI mI )B.
+
+The energy shift in this regime is called the Paschen-Back effect.
+    For intermediate fields, the energy shift is more difficult to calculate, and in general one must numerically
+diagonalize Hhfs + HB . A notable exception is the Breit-Rabi formula [21, 31, 32], which applies to the ground-
+state manifold of the D transition:
+                                                                                          1/2
+                                           ∆Ehfs                   ∆Ehfs        4mx
+                   E|J=1/2 mJ I mI i = −           + gI µB m B ±           1+         +x 2
+                                                                                                .            (26)
+                                         2(2I + 1)                   2         2I + 1
+8                                                               3.2   Interaction with Static External Fields
+
+
+In this formula, ∆Ehfs = Ahfs (I + 1/2) is the hyperfine splitting, m = mI ± mJ = mI ± 1/2 [where the ± sign is
+taken to be the same as in (26)], and
+                                                    (gJ − gI )µB B
+                                                x=                  .                                      (27)
+                                                        ∆Ehfs
+In order to avoid a sign ambiguity in evaluating (26), the more direct formula
+
+                                                                I   1
+                                 E|J=1/2 mJ I mI i = ∆Ehfs         ± (gJ + 2IgI )µB B                                 (28)
+                                                             2I + 1 2
+can be used for the two states m = ±(I + 1/2). The Breit-Rabi formula is useful in finding the small-field shift of
+the ‘‘clock transition’’ between the mF = 0 sublevels of the two hyperfine ground states, which has no first-order
+Zeeman shift. Using m = mF for small magnetic fields, we obtain
+
+                                                           (gJ − gI )2 µ2B 2
+                                               ∆ωclock =                  B                                           (29)
+                                                             2h̄∆Ehfs
+#--- end
+#--- begin Table 6: g_J of 3S1/2, g_I, the clock shift
+      Electron orbital g-factor                      gL                          0.999 976 13
+                                                 gJ (3 S1/2 )
+                                                      2
+                                                                               2.002 296 00(70)              [24]
+      Fine structure Landé g-factor              gJ (3 P1/2 )
+                                                     2
+                                                                                 0.665 81(12)                [24]
+                                                 gJ (3 P3/2 )
+                                                     2
+                                                                                 1.334 20(20)                [24]
+      Nuclear g-factor                               gI                     −0.000 804 610 80(80)            [24]
+      Clock transition Zeeman shift              ∆ωclock /B   2
+                                                                              2π · 2.2183 kHz/G   2
+#--- end
+#--- begin A of 3S1/2
+            Magnetic Dipole Constant, 32 S1/2             A32 S1/2    h · 885.813 064 40(50) MHz      [24]
+#--- end

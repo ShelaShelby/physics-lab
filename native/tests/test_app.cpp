@@ -1140,22 +1140,24 @@ static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
     // 0.83.0 (on purpose, the owner's rule of 24 Nov 2026): 23 scenes whose 1 % low in his 0.82.0 run was at least 1.5 x 255 Hz moved to All scenes; 9 new hard
     // scenes (atom.bfield_drag dropped: a field change remakes nothing heavy). REPORT 0.83.0.
-    checkTrue("benchmark lists (on purpose, 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 71 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 71 && int(v.size()) == 71);
+    checkTrue("benchmark lists (on purpose, 0.93.0: atom.stark_drag in, blackhole.edge_on to All scenes by the 1.5 x refresh rule, 29 and 72; 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 72 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 72 && int(v.size()) == 72);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[71] = {
+    static const char* const ids[72] = {
         // the Hard list (0.83.0): the 17 kept, in the owner's order, then the new ones a to j of the job (f dropped)
         "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas", "blackhole.circle_spin",
         "atom.nucleus_zoom", "atom.nucleon", "molecule.vib_density", "atom.slice_dirac_drag", "atom.jump_all", "ui.settings_open", "atom.side_all_glow", "orbit.real_fast",
         "orbit.heaviest", "atom.all_enlarged",
-        "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "blackhole.edge_on", "orbit.saturn_real_fast", "atom.emit_all", "atom.slice_dense",   // 0.91.0: atom.slice_dense in molecule.live_hot's place (moved to All scenes by the 1.5 x rule)
+        "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "orbit.saturn_real_fast", "atom.emit_all", "atom.slice_dense",   // 0.91.0: atom.slice_dense in molecule.live_hot's place (moved to All scenes by the 1.5 x rule)
+        "atom.stark_drag",                                                       // 0.93.0 (blackhole.edge_on went to All scenes by the 1.5 x rule)
         "ui.settings_over_blackhole", "ui.resize_blackhole",
         "blackhole.close_spin",                                                  // 0.84.0
         "orbit.true_light",                                                      // 0.85.0 (orbit.sun_edge and orbit.oort_region went to All scenes in 0.92.0)
         "orbit.true_light_stars",                                                // 0.86.0 (in place of blackhole.film_soft, removed with its drawing: R6)
         "orbit.porkchop",                                                        // 0.92.0
+        "blackhole.edge_on",                                                     // 0.93.0: moved to All scenes (1 % low 435.8 fps in bench_0.85.2)
         "orbit.sun_edge", "orbit.oort_region",                                   // 0.92.0: moved to All scenes (1 % low 524.3 and 406.2 fps in bench_0.85.2)
         "molecule.live_hot",                                                     // 0.91.0: moved to All scenes (1 % low 684.4 fps in bench_0.85.2)
         // moved to All scenes in 0.83.0 (their ids and set-ups the same)
@@ -1380,7 +1382,7 @@ static void testBenchGpuChart() {
     // 0.13 stage 4 part B: the GPU chart cache switch and its two twin scenes (which 28, 29 = benchmark scenes 33, 34, after the Orbit Lab twins 31, 32)
     using atom::kBenchChartCpuFirst; using atom::kBenchAtomScenes;
     atom::AtomLab fresh; checkTrue("GPU chart cache: a new lab has the switch On (the default)", fresh.gpuChart);
-    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes; 0.63.0: -> 40 with the superposition's Slice; 0.64.0: -> 46 with the six heavy views; 0.83.0: -> 47 with atom.emit_all; 0.91.0: -> 48 with atom.slice_dense)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 48 && atom::kBenchSceneCount == 28);
+    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes; 0.63.0: -> 40 with the superposition's Slice; 0.64.0: -> 46 with the six heavy views; 0.83.0: -> 47 with atom.emit_all; 0.91.0: -> 48 with atom.slice_dense; 0.93.0: -> 49 with atom.stark_drag)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 49 && atom::kBenchSceneCount == 28);
     {   // 0.16 stage 3: the nucleus at full zoom with the camera turning (the owner's slow case), the last scene of the list
         atom::AtomLab L; L.p.qstyle = "Simple"; L.gpuChart = false;
         atom::benchSetup(L, atom::kBenchFullZoomScene, 1040, 713);
