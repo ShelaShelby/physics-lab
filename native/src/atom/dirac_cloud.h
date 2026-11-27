@@ -45,6 +45,12 @@ bool tryDiracOnPlane(int Z, int n, int l, int j2, bool round, int axis, double o
 long diracPlaneDots(int Z, int n, int l, int j2, bool round, int axis, double off, orbit::Mulberry32& r, long want, long maxTries,
                     const std::function<void(double, double, double)>& record);
 
+// 0.91.0 (the Slice's Dirac sampler on the GPU, atom_card.h diracJobOf): the plane's radius table tryDiracOnPlane inverts, on r = 1e-7 .. 250 (4,001 points):
+// r, its distribution function pc (0 .. 1) and density pd (d pc / dr); and pc at |off|
+struct DiracPlaneTable { const std::vector<double>* r = nullptr; const std::vector<double>* pc = nullptr; const std::vector<double>* pd = nullptr; };
+DiracPlaneTable diracPlaneTable(int Z, int n, int kappa);
+double diracPlaneCdf(int Z, int n, int kappa, double r);          // interpCdf on that table (tryDiracOnPlane's c0 at r = |off|)
+
 // The radial graph's curve for a Dirac state (radial_graph.h's convention: P(r) = the radial probability density, area 1)
 struct DiracGraph { std::vector<double> r, D; double rEnd = 0, peak = 0, mean = 0; std::vector<double> maxima; };
 DiracGraph diracGraph(int Z, int n, int kappa);

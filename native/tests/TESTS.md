@@ -54,7 +54,8 @@ The GPU-vs-CPU parts take about 40 of the suite's 64 core-minutes and the unit t
 | check_blackhole.py:precision | 300 | KEEP | ui_blackhole | GPU vs CPU: the card's light paths and bent sky against the double-precision reference; its sky and card halves are now parts sky and precisioncard; 0.79.0: the disc's surface radius (PLBHGAS0 rbad) and the streaks' factor at spin 0; 0.86.0: PLBHFILM checks the one colour of Film's opaque disc on the table's pass (0.81.0 to 0.85: the see-through disc's laid colour) |
 | check_shell.py:vulkan2d | over 300 | DELETE | - | Vulkan coverage views with validation, 1500-frame runs (2 h once). Its glare check compares the GPU with the GPU, not with the CPU (job rule: delete). The GPU light paths against the CPU stay in check_blackhole precision |
 | check_blackhole.py:smooth | 596 (GitHub) | DELETE | - | frame times and new pictures per frame: smoothness (failed in 0.75.3, job rule: delete) |
-| check_atom_chip.py:card | 319 | KEEP | ui_atom_card | GPU vs CPU: the Slice's dots and the jump's groups against the processor (guard runs trimmed to one step per program) |
+| check_atom_chip.py:card | 319 | KEEP | ui_atom_card | GPU vs CPU: the Slice's dots and the jump's groups against the processor (guard runs trimmed to one step per program); 0.91.0: and the Slice's Dirac program's 6 planes (112 s on the build machine) |
+| check_atom_chip.py:carddirac | 80 | KEEP | ui_atom_card | GPU vs CPU (0.91.0, the job asked for it): the Slice of a Dirac state from the card's Dirac program against the processor's, the still cut's two pictures (1 % over 8 levels) |
 | check_5l.py:toolbar | 295 | DELETE | - | toolbar clicks at sizes and themes: repeats |
 | check_orbit_ui.py:facts_long | 286 | DELETE | - | the longest fact in two lines: layout |
 | check_6c.py:fullzoom | 260 | DELETE | - | draw counts at full zoom: a speed check (the owner's benchmark) |

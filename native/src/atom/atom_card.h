@@ -40,6 +40,14 @@ std::string sliceCompareText(const SliceCompare& c);   // one line for the log a
 struct SliceCheckCase { int Z, id, axis; double off; std::uint32_t seed; int tries; int stride = 3, first = 0; };
 std::vector<SliceCheckCase> sliceCheckCases();
 
+// 0.91.0: the Slice of a Dirac state on the card (render/atom_card_types.h DiracSliceJob, shaders.h kDiracSliceCS), its exact reference tryDiracOnPlane.
+// tries attempts from `seed` (stride 3 with the keep test, else 2). Empty job (tries 0): the plane holds none of it (the processor takes no number then).
+struct DiracCase { int Z = 1, n = 1, l = 0, j2 = 1; bool round = false; int axis = 1; double off = 0; std::uint32_t seed = 0; int tries = 0; };
+render::DiracSliceJob diracJobOf(const DiracCase& c);
+// the card's attempts against tryDiracOnPlane's with the same numbers, each point within its limit (atom_card.cpp, derived step by step as compareSlice's)
+SliceCompare compareDirac(const DiracCase& c, const std::vector<float>& res);
+std::vector<DiracCase> diracCheckCases();   // the start-up check's planes: the benchmark's uranium 4f (j = 7/2 lined up), a far cut of hydrogen 3d5/2, U 1s round
+
 // The jump's check: a pattern of fixed groups (a few not shown) for jn dots and the shares (old, new); the processor's answer is AtomLab::jumpGroups's rule,
 // a dot shown when its fixed random number is below its population's share (atom_sim.cpp jumpUniform), which the card must give exactly
 double jumpUniformOf(int pop, long i);   // atom_sim.cpp: a jump's dot's fixed random number, (z >> 11) / 2^53 of splitmix64(i + (pop << 40))

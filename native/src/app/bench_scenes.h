@@ -43,7 +43,7 @@ struct BenchSceneText {
 };
 
 constexpr int kBenchHardScenes = 30;      // 0.56.1: the default run (0.86.0: 30, orbit.true_light_stars in place of blackhole.film_soft, removed with Film's see-through disc; 0.85.0: 30, orbit.true_light, orbit.sun_edge, orbit.oort_region; 0.84.0: 27, blackhole.close_spin; 0.83.0: 26, the 17 kept and 9 new, 23 moved to All scenes; 0.82.0: 40, blackhole.circle_spin; 0.81.0: 39, blackhole.film_soft; 0.79.0: 38, blackhole.disc_streaks; 0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag; 0.64.0: 32, six heavy views; 0.72.0: 33, blackhole.moving_gas; 0.73.0: 34, orbit.alphacen; 0.75.0: 35, orbit.flyby; 0.77.0: 36, orbit.earth_clouds; 0.78.0: 37, orbit.comet_tails)
-constexpr int kBenchAllScenes = 69;       // ... and with "All scenes"
+constexpr int kBenchAllScenes = 70;       // ... and with "All scenes"
 
 const std::vector<BenchSceneText>& benchSceneTexts();   // the Hard scenes first, in the order they run, then the others of All
 int benchSceneIndex(const std::string& id);             // -1: no such scene

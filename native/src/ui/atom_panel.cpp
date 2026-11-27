@@ -200,6 +200,8 @@ const AtomChoices& atomChoices(const std::string& key) {
                     {"True scale", "True scale · every dot (or ring) at its real distance: almost all electrons are close to the nucleus"}}},
         {"vdots", {{"Easier to see", "Easier to see · the outer electron gets a quarter of the dots more than its true share, so its cloud and its jumps stand out against the core"},   // 0.54.1
                    {"True share", "True share · every electron its own share of the dots: the outer electron is 1 in Z of them (sodium 1 in 11), so its cloud and its jumps are faint"}}},
+        {"sdots", {{"True share", "True share · every electron its own share of the dots, as in the atom: the outer electron is 1 in Z of them (sodium 1 in 11), so its shape is faint"},   // 0.91.0
+                   {"Outer electron alone", "Outer electron alone · only the outer electron's dots, all of them: one electron's cloud alone, not the whole atom (the core is left out)"}}},
         {"show", {{"Whole atom", "Whole atom · every electron; the colours are the shells K, L, M, N ..."},
                   {"One orbital", "One orbital · one of this atom's filled orbitals, with the sign (or phase) of its wave"}}},
         {"cdens", {{"Normal", "Normal · 12,000 dots; with every electron (the whole atom), 12,000 for each electron, at most 60,000. More dots show the same probability more smoothly. They do not change the physics."},

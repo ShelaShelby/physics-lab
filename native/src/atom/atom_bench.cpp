@@ -91,6 +91,7 @@ double benchZoom(int which) {
         case kBenchSliceDirac: return 0.0;
         case kBenchSideAll: case kBenchSideAllClassic: return -0.5;   // (zoomed from there to +0.5 and back while it runs: benchFrame)
         case kBenchSliceGlowUltra: case kBenchSliceClassicUltra: return -0.5;
+        case kBenchSliceDense: return 0.0;         // 0.91.0: zoom 0 only (other zooms not tried)
         case kBenchSliceSuper: return 0.0;         // 0.63.0: tried -0.5, 0, 0.5, 1.0, 1.5 (1 % low 2.70, 2.70, 2.95, 3.35, 2.86 fps here): 0 and -0.5 the slowest
         default: return 0.0;
     }
@@ -153,6 +154,19 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
         L.p.cdens = "Ultra";
         L.p.cstyle = which == kBenchSideAll || which == kBenchSliceGlowUltra ? "Glow" : "Classic";
         L.setParam("view", std::string(which == kBenchSideAll || which == kBenchSideAllClassic ? "Cloud" : "Slice"));
+        L.resetView();
+        L.setParam("zoom", benchZoom(which));
+        fill(L);
+        still(L);
+        return;
+    }
+    if (which == kBenchSliceDense) {                    // 0.91.0: the Slice's "Outer electron alone" (Part B): sodium's outer electron in 3d, every dot its own
+        fresh(L, 11, 12, w, h);
+        L.p.elec = "All"; L.p.mrel = "Relativistic"; L.p.show = "Whole atom"; L.p.rscale = "Shells enlarged";
+        L.p.cdens = "Ultra"; L.p.cstyle = "Glow";
+        L.setParam("view", std::string("Slice"));
+        L.placeValence(3, 2);
+        L.setParam("sdots", std::string("Outer electron alone"));
         L.resetView();
         L.setParam("zoom", benchZoom(which));
         fill(L);
@@ -319,6 +333,7 @@ const BenchInfo& benchSceneInfo(int which) {
         {"The Slice of one state dragged, Glow, Ultra", "0.64.0"},
         {"The Slice of one state dragged, Classic, Ultra", "0.64.0"},
         {"Emit and Absorb in turn with every electron, the heaviest level atom, Ultra", "0.83.0"},
+        {"The Slice's outer electron alone dragged, sodium 3d, Glow, Ultra", "0.91.0"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
@@ -351,7 +366,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
         if (measureFrame < 0) return;
         if (measureFrame == 0) L.setParam("outline", std::string("On"));
         if (measureFrame % 120 == 0) clearOutlineCache();
-    } else if (which == 14 || which == kBenchSliceSuper || which == kBenchSliceAll || which == kBenchSliceDirac || which == kBenchSliceGlowUltra || which == kBenchSliceClassicUltra) {   // (0.63.0: the superposition's Slice dragged the same way)
+    } else if (which == 14 || which == kBenchSliceSuper || which == kBenchSliceAll || which == kBenchSliceDirac || which == kBenchSliceGlowUltra || which == kBenchSliceClassicUltra || which == kBenchSliceDense) {   // (0.63.0: the superposition's Slice dragged the same way)
         const int k = sceneFrame % 360, tri = k <= 180 ? k : 360 - k;                                   // up from -0.90 to +0.90 and back, 0.01 a frame
         L.setParam("cut", std::round((-0.9 + 0.01 * tri) * 100) / 100);
     } else if (which == kBenchSideAll || which == kBenchSideAllClassic) {   // 0.64.0: the side view zoomed in and out as a user's wheel does, -0.5 to +0.5 and back
@@ -369,6 +384,7 @@ std::string benchShortText(const AtomLab& L) {
     t += ", " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots" + (L.p.phase == "Wheel" ? ", phase Wheel" : "") + z;
     if (L.p.outline == "On") t += ", outline On";
     if (L.p.super == "On") t += ", superposition " + L.p.orb + " + " + L.p.orb2;
+    if (L.sliceAlone()) t += ", outer electron alone";   // 0.91.0
     for (const auto& sw : {std::make_pair(L.gpuColours, "GPU colours"), std::make_pair(L.gpuCompute, "GPU superposition"), std::make_pair(L.gpuOutline, "GPU outline"), std::make_pair(L.gpuCloud, "GPU cloud")})
         if (!sw.first) t += std::string(", ") + sw.second + " Off";
     return t;

@@ -11,18 +11,17 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Use standard terms: GPU, CPU, shader, build machine.
 
 ## Atom Lab
-- Slice samplers on the GPU: the Dirac sampler (its radius table in single precision loses 3.5e-5 of the radius at the 99.99 % radius: invert the tail from 1 - u) and the many-electron sampler.
+- Slice samplers on the GPU: the many-electron sampler (hf::samplePlane with the level clouds' aligned shape and the outer electron alone). The Dirac and one-electron samplers are there.
 - atom.nucleon on the GPU: its quark dots use a double-precision sine hash. A GPU version needs an integer hash on both sides (the dots then change).
 - The nucleus views at full zoom fill about 16 pictures of pixels a frame (one glow quad per nucleon). One pass over the picture for all glows would fill one.
 - The Slice of an overlapping superposition on the GPU: a kept point takes one more random number, so attempts have no fixed numbering.
-- **fix**: the Slice keeps the outer electron's true share of dots, so its shape is faint (Na 3d). Add a denser option there.
-- **fix**: levels with no cloud: Ca, Sr, Ba lowest d levels (6-10 % low), Hg 7s 7p 6d, Zn 5s, Cd 6d 7d, Ca 4p² ¹D, Ra 7s8s, 7s9s, 7s5f, 7s8p. Recompute the Ca, Sr, Ba, Hg clouds made before the 0.51.3 orthogonality fix.
+- **fix**: levels with no cloud (0.91.0 tried up to 11 starts per orbital, with damping and highest-J blocks): Ca 3d4s ³D and Ba 6s5d (6-10 % low: core-core correlation is left out), Ca 4p² ¹D (not identified, 0.30 of its weight). ns(n+1)s levels come out 7-42 % high (Hg 6s7s, Ra 7s8s 7s9s, Cd 5s6s, Ba 6s7s): the RCI spreads them over the correlation s orbitals. No Dirac-Fock orbital with the right node count for Hg 7p 6d 8p 5f, Cd 5d 6d 7d, Ra 8p. Ra 7s5f is +7.1 %.
 - **source needed**: charge profiles for He-4, Li, Be, B, N-14 (de Vries 1987). Ra pear shapes (Butler et al. 2020), alpha clusters in Be-8, C-12, O-16, the deuteron's nucleon centres (Forest et al. 1996).
 - **source needed**: measured B(E2) for unstable even-even nuclei (Pritychenko et al. 2016) and measured signs for the 29 nuclei on FRDM's sign and the 16 with none.
 - **source needed**: Ga-73 ground-state spin (IAEA 3/2-, NUBASE2020 1/2-): Cheal et al., PRL 104, 252502 (2010).
 - **source needed**: Geiger and Marsden's "about 1 in 8,000" may be platinum, not gold (Proc. R. Soc. A 82, 495, 1909).
 - **source needed**: measured Landé g for Li, Na, Rb, Cs, Fr, He, Be, Mg, Ca, Sr, Cd, Ra (NIST ASD lists none).
-- One-electron atom: **source needed** the Lamb shift for n >= 3. **fix** the recoil beyond the reduced mass (H 2p gap 0.054 % low). Dirac clouds: 90 % outline, superpositions, m != j. Hyperfine beyond 1s.
+- One-electron atom: **source needed** the Lamb shift for n >= 3. Dirac clouds: 90 % outline, superpositions, m != j. Hyperfine beyond 1s.
 - Ions between neutral and one-electron (tools/dhf). Clouds for the 7s and 7p shells of the heaviest atoms. More than 240,000 dots for heavy atoms.
 - The photon's dipole pattern for the many-electron atoms (the lab does not follow m or M there) and the light's polarisation.
 - Atoms in fields: hydrogen's Stark effect, Breit-Rabi at low fields, a broadened synthetic spectrum, a Boltzmann-plot temperature, the cloud of one M sublevel.

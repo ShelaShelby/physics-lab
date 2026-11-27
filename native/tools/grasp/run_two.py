@@ -73,7 +73,7 @@ def gen(run, closed, refs, act, j2lo, j2hi, nexc):
     return blocks
 
 
-def mcdhf_blocks(run, blocks, vary, spec, cycles, tag, wts=None, damp=None):
+def mcdhf_blocks(run, blocks, vary, spec, cycles, tag, wts=None, damp=None, thresh=None):
     lists = '\n'.join(','.join(str(i + 1) for i in range(b)) for b in blocks)
     # level weights: 1 equal; 9 user (wts, one per level in block order: run_shared.py, 0.47.4)
     wsel = ('9\n' + ' '.join(f'{w:.6f}' for w in wts) + '\n') if wts else '1\n'
@@ -81,8 +81,8 @@ def mcdhf_blocks(run, blocks, vary, spec, cycles, tag, wts=None, damp=None):
     if damp is not None:
         # 0.51.3 (Yb ground, 4f14 6s2: 6s oscillated from every start with GRASP's default damping): non-default run, every subshell held at the constant accelerating
         # parameter |damp| (GRASP: -1 < ODAMP < 0 keeps |ODAMP| constant); the prompt order is getscd.f90's (no debug, no grid or ACCY change, then "Modify other defaults")
-        if sum(blocks) != 1: raise RuntimeError('damp: only a one-level run')
-        inp = f'n\nn\nn\nn\n{lists}\n{vary}\n{spec}\n{cycles}\ny\nn\nn\nn\ny\nn\n{-abs(damp)}\nn\nn\nn\nn\n1\n'
+        # 0.91.0: also a run of several levels (Zn 4s5s, its two levels): the weight answer follows the lists, as in the default run
+        inp = f'n\nn\nn\nn\n{lists}\n' + (wsel if sum(blocks) > 1 else '') + f'{vary}\n{spec}\n{cycles}\ny\n' + (f'y\n{thresh}\n' if thresh else 'n\n') + f'n\nn\ny\nn\n{-abs(damp)}\nn\nn\nn\nn\n1\n'
     out = run('rmcdhf_mem', inp)
     open(os.path.join(run.work, f'rmcdhf{tag}.out'), 'w').write(out)
     if 'onvergence not' in out: raise RuntimeError(f'rmcdhf did not converge ({tag})')
@@ -127,6 +127,19 @@ def merge(work, new_key, first, dry=False):
     if dry: return worst
     gfiles.write_w(os.path.join(work, 'series.w'), old)
     return worst
+
+
+def extra_nodes(work, o):
+    """0.91.0: the new orbital's kappas in rwfn.out whose large component crosses zero more often than n - l - 1 (counted where |P| is above 0.05 of its largest value,
+    GRASP's own node-count threshold): a root of a higher n. Too few crossings are not counted against it (an outer orbital's inner lobes can be below 0.05).
+    Returns [(kappa, counted, wanted)]."""
+    bad = []
+    for n, kap, e, r, P, Q, p0 in gfiles.read_w(os.path.join(work, 'rwfn.out')):
+        if (n, -kap - 1 if kap < 0 else kap) != (o[0], o[1]): continue
+        s = np.sign(P[np.abs(P) > 0.05 * np.abs(P).max()])
+        got, want = int((s[1:] != s[:-1]).sum()), o[0] - o[1] - 1
+        if got > want: bad.append((kap, got, want))
+    return bad
 
 
 def orbitals(X, grasp, work, log):
@@ -209,8 +222,13 @@ def orbitals(X, grasp, work, log):
         ok = None
         # 0.47.4: when the orbital alone does not converge (Ca 4p: GRASP's solver stops in IMPROV from every start), the valence s orbital is varied with it; only the
         # new orbital is kept (the ground's ns stays the one of ns2)
-        for strat, with_s in (('h1', 0), ('tf', 0), ('hydrogenic', 0), ('h1', 1), ('tf', 1)):
+        # 0.91.0: (an s orbital only) its highest J alone, then damped starts, then damped with a higher node-count threshold (Zn 5s, Cd 6d, Hg 7s ... oscillated from every undamped start; the constant accelerating parameter 0.7 converged Yb's ground in 0.51.3)
+        for strat, with_s in (('h1', 0), ('tf', 0), ('hydrogenic', 0), ('h1', 1), ('tf', 1)) + ((('tfJ', 0), ('tfJd', 0)) if o[1] == 0 else ()) + (('tfd', 0), ('hydrogenicd', 0), ('tfdt', 0), ('hydrogenicdt', 0)):
             try:
+                if strat == 'tfJ':
+                    # 0.91.0: the highest J of the configuration alone (Zn 4s5s: 3S1 only; for an s orbital only: a p or d orbital's other kappa would not be in it). Its one CSF does not mix with the ground's ns2 (a 1S0 average pulls 5s towards 4s). The starts after it keep this block.
+                    blocks = [b for b in gen(run, closed, [inactive(pre) + vconf(val, '*')], act(set(val) | known), jhi, jhi, 0) if b]
+                    run('rangular', 'y\n')
                 if strat == 'h1':
                     import numpy as _np
                     r = _np.concatenate([[0.0], _np.exp(_np.linspace(_np.log(1e-6), _np.log(800.0), 5000))])
@@ -220,17 +238,23 @@ def orbitals(X, grasp, work, log):
                     gfiles.write_w(os.path.join(run.work, 'start.w'), orbs)
                     run('rwfnestimate', 'y\n1\nseries.w\n*\n1\nstart.w\n*\nn\n')   # (0.47.4: it then asks "Revise any of these estimates?"; without this answer it crashed and h1 was never tried)
                 else:
-                    run('rwfnestimate', f'y\n1\nseries.w\n*\n{"2" if strat == "tf" else "3"}\n*\nn\n')   # (the "Revise?" answer: Hg, 0.47.4, crashed here)
-                out, e = mcdhf_blocks(run, blocks, (f'{n0}s,' if with_s else '') + vary, '*', 300, f'_{o[0]}{LET[o[1]]}')
+                    run('rwfnestimate', f'y\n1\nseries.w\n*\n{"2" if strat.startswith("tf") else "3"}\n*\nn\n')   # (the "Revise?" answer: Hg, 0.47.4, crashed here)
+                out, e = mcdhf_blocks(run, blocks, (f'{n0}s,' if with_s else '') + vary, '*', 300, f'_{o[0]}{LET[o[1]]}', damp=0.7 if strat in ('tfd', 'hydrogenicd', 'tfdt', 'hydrogenicdt', 'tfJd') else None,
+                                      # 0.91.0 (Hg 6d, 7p: "nodes counted 5, correct 3"): the node-count threshold (GRASP's default 0.05 of the largest amplitude) raised to 0.2
+                                      thresh=0.2 if strat.endswith('dt') else None)
                 step = (min(e[-sum(blocks):]) - eg) * HC
                 # with ns varied too the step is lower (Dirac-Fock underbinds when both orbitals relax: Ca 4s4p 8,900 cm-1 against NIST 15,158); GRASP's solver keeps the
-                # node count, so the wider window still rejects a root of another n
+                # node count, so the wider window still rejects a root of another n (0.91.0: not with the 'dt' threshold; extra_nodes below checks every start)
                 tol = 0.6 if with_s else TOL_DF
                 if not (abs(step - cm) <= tol * cm): raise RuntimeError(f'{o}: DF step {step:.0f} cm-1 against NIST {cm:.0f}: a wrong root')
                 # an orbital that converged onto the shape of a lower one of its kappa (Ca 6p onto 5p, 0.47.4: 11 % left after projection) is a failed start
                 if merge(run.work, o, False, dry=True) < 0.3: raise RuntimeError(f'{o}: collapsed onto a lower orbital ({strat})')
+                # 0.91.0: a converged orbital with too many nodes is a root of a higher n. The energy check above misses it when the other kappa's levels are right
+                # (Cd 5d5/2 with 3 nodes beside a right 5d3/2), and the raised threshold of the 'dt' starts let Hg 7p converge with 8 nodes and Cd 7d with 6.
+                xn = extra_nodes(run.work, o)
+                if xn: raise RuntimeError(f'{o}: a root of a higher n ({strat}): kappa, nodes counted, wanted {xn}')
                 ok = strat + (f' with {n0}s varied' if with_s else ''); break
-            except RuntimeError as x: errs.append(str(x))
+            except RuntimeError as x: errs.append(str(x)); print(X, 'DF try', o, strat, with_s, str(x)[:160].replace('\n', ' '), flush=True)
         if ok is None:
             # keep the hydrogen-like orbital of charge 1 (made orthogonal), flagged
             r = np.concatenate([[0.0], np.exp(np.linspace(np.log(1e-6), np.log(800.0), 5000))])

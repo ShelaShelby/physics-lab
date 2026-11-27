@@ -1,22 +1,25 @@
-# 0.90.0: the rest moved to the GPU (Molecule surface, Glow core pass, exposure grid, Orbit lines, integrator ahead)
+# 0.91.0: Atom Lab. More level clouds, the outer electron alone in the Slice, the Dirac Slice on the GPU, hydrogen's recoil
 
 ## What changed
-- Feasibility (build machine, 4 cores, lavapipe; CPU time a frame): A, the vibrating surface (molecule_view.cpp blendVib + densitySurface) 1.23 ms per phase. B, atom.jump_all's glowDotsNear (cloud_dots.cpp) 1.43 ms. C, the grid wait in the batch's flush (renderer2d_vk.cpp) 8 ms (jump_all) and 36 ms (vib_density). D, LinePen lines 0.52 ms (real_fast) and 0.39-0.45 ms (heaviest), NBodyClock::ensure's wait 26 ms of a 131 ms frame (the largest share). All parts were done. Spin axes and drop lines (0.001 ms) were left on LinePen.
-- Part A: kSurfaceMakeCS makes the vibrating surface on the GPU (blend, edges, prefix sums, the same tetrahedra as densitySurface) and the surface is drawn with indirect counts. Per phase 1.26 -> 0.07 ms. The CPU stays the reference and the fallback (start-up check, PL_NO_SURFACE_MAKE).
-- Part B: kGlowNearCS finds the dots near the cores on the GPU. The CPU then runs the same exact double pass on those dots only, so the indices and the capped exposure are the CPU's. glowDotsNear 1.44 -> 0.0024 ms.
-- Part C: the Glow and Density clouds use the exposure grid of the frame before, so the frame no longer waits for its own grid. What the user sees: the exposure is one frame late (a still view is the same picture). Wait 8.20 -> 0.00 ms (jump_all), 39.72 -> 0.01 (vib_density), 36.61 -> 0.01 (density).
-- Part D: comets' dashed orbits, the Sun's path in Real and the moons' orbits go to the GPU lines (dashes in the shader, the same widths). CPU line time 0.52 -> 0.31 ms (real_fast) and 0.39-0.45 -> 0.29 ms (heaviest). The integrator now makes up to 8 stretches ahead on its worker, chained so positions are bit-exact: ensure wait 26 -> 0.21 ms, real_fast 6.6-7.6 -> 8.8 fps.
+- Part 0: the 0.90.0 runs were checked first: Windows build and full tests green.
+- Part A: Zn, Cd, Hg, Ra, Ca, Sr, Ba were run again (run_shared.py, 4 MPI processes, 4 cores). Times: Zn 1424 s, Cd 1342 s, Hg 3119 s, Ra 1968 s, Ca 3939 s, Sr 3365 s, Ba 3344 s. New Dirac-Fock starts: the highest J alone, damping 0.7, a raised node threshold. A new node check (run_two.extra_nodes) rejects a root with too many nodes. New clouds from the job's list: Zn 4s5s ³S₁ and ¹S₀, Sr 5s4d ³D₁. Others: Zn 4s5d ¹D, Ca 4s6d ³D₃, Sr 4d5p ³P*₁,₂ and 5s6f ¹F*, Hg 6s7d (4 levels). 27 of the 34 listed levels are not made (ROADMAP gives why).
+- How much the recomputed clouds changed (half the integral of |ρ_new − ρ_old|, in electrons): Ca 0.33 (3d² ³P₂), Sr 0.32 (5s4f ¹F*), Hg 0.16 (6s9s ³S₁), Zn 0.12 (4s7s ³S₁), Cd 0.023, Ba 0.012, Ra 6e-9.
+- Doubtful values removed: Cd 5d ³D₁ and ³D₂ had clouds in 0.90.0. The same start ('tf') gives a 5d j=5/2 orbital with 3 nodes (2 wanted), so Cd 5d now has no cloud. The raised threshold first let Hg 7p converge with 8 nodes (5 wanted) and Cd 7d with 6 (4 wanted). The node check rejects both.
+- Part B: the Slice's choice "Outer electron's dots: Outer electron alone", and the Hard scene atom.slice_dense. molecule.live_hot moved to All (1 % low 684.4 fps in bench_0.85.2, above 1.5 × 255 Hz).
+- Part C: the Slice's Dirac sampler runs on the GPU (kDiracSliceCS, the tail table inverted from 1 − u). The CPU is the reference and the fallback, with 6 start-up cases. Part D: hydrogen's recoil beyond the reduced mass, from YS15 Eq. (3).
 
 ## Tests run
-- vk_cards: surface made 12 cases (water, CO2, N2 at 4 phases; largest difference 2.5e-6 Å, within the derived bound), glownear (H, Na, U, Ra jump: the same index sets, exposure within the float bound), lines 21 checks with the dashed paths; all 0 failed. Before Part A, 13 of 33 surface checks failed.
-- nbody_tests 59 checks (ahead = made on the frame, bit for bit), 0 failed.
-- By hand: check_molecule.py cardsurface 9 and gridlate 4 (0 pixels over 8 levels), check_atom_chip.py card 18, check_orbit_ui.py cardlines 8 (at most 0.003 % over); all 0 failed.
-- check.sh job passed (quick 18 of 18, ui_smoke 8.4 s). fps here is bound by lavapipe drawing: vib_density 3.8 -> 3.7, density 3.8 -> 3.9, jump_all 7.8 -> 7.9, heaviest 9.2 -> 8.9.
+- atom_tests 12285 checks, 0 failed. The energy test failed 3 checks with 0.90.0's level list (no cloud for Zn 4s5s ×2, Sr ³D₁). The orthogonality test failed on 0.90.0's Sr. app_tests 202450 checks, 0 failed. vk_compare_tests 742 checks, 0 failed (Dirac: the same dots, KS within 1.63/√N).
+- By hand: check_atom_chip.py card (19 checks) and carddirac (0 of 256,000 pixels over 8 levels), 0 failed.
+- Benchmarks on the build machine (lavapipe): atom.slice_dense 2.24 fps. atom.slice_dirac_drag 10.1 fps (1 % low 6.75) on the CPU, 10.4 fps (7.74) on the GPU. atom.slice_drag was not run before and after: its sampler did not change.
+- check.sh job passed (quick, ui_smoke 8.2 s; 4 min 26 s).
 
 ## Not done
-- All times are from the build machine. This job needs pc_tests.ps1 on the owner's PC (molecule.vib_density, molecule.density, atom.jump_all, orbit.real_fast, orbit.heaviest, validation) on the new release.
-- Spin axes and 3D drop lines stay on LinePen: about 0.006 ms a frame, and they are drawn between the balls (about 20 more draws against the 64-draw limit).
+- The many-electron Slice sampler on the GPU. The job's time went to Part A's GRASP runs (about 5.5 h). It stays on ROADMAP.
+- 27 listed levels have no cloud: Ca and Ba lowest d, Ca 4p² ¹D, Hg 7s 7p 6d, Cd 6d 7d, Ra 7s8s 7s9s 7s5f 7s8p. The reasons are in levels.tsv and ROADMAP.
+- This job needs pc_tests.ps1 on the owner's PC (atom.slice_dense, atom.slice_dirac_drag, validation) on the new release.
 
 ## References changed on purpose
-- check_molecule.py cardsurface: the start-up check prints 2 more PLSURFACECASE lines ("made", water at phases -1 and 0.7). The plain cases are now filtered from them.
-- lines_check: pollCheck returns 8 floats per piece (ends, then drawn length and dash place). New rule after a failure: a 3D segment shown by one side only passes when an end is within 4e-6 of its distance of the near plane (one moon-circle segment 100 m behind it at 13,000 km). It is counted and printed ("on its edge").
+- Level limits: Sr 4.0 → 4.9 % (worst 5s4d ³D₁, −4.85 %, a new cloud). Hg 2.5 → 2.6 % (worst 6s9s ³S₁, +2.56 %).
+- Hydrogen with the recoil: the NIST 2p gap guard 1.789e-3 → 2.341e-3 (measured 0.23176 %). GUARD_LAMB_H 2.476e-9 → 3.614e-11. The 2p splitting checks use (1 − x)·lead.
+- Benchmark list: 70 scenes, kBenchAtomScenes 48.

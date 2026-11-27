@@ -108,7 +108,7 @@ std::string atomSettingsLine(const AppState& app) {
     const auto add = [&t](const char* k, const std::string& v) { t += std::string(k) + "=" + v + "\t"; };
     const auto num = [](double v) { char b[32]; std::snprintf(b, sizeof b, "%.6g", v); return std::string(b); };
     add("view", p.view); add("orb", p.orb); add("pAx", p.pAx); add("dAx", p.dAx); add("fAx", p.fAx); add("n", num(p.n)); add("speed", num(p.speed));
-    add("cstyle", p.cstyle); add("cdens", p.cdens); add("elec", p.elec); add("show", p.show); add("rscale", p.rscale); add("mrel", p.mrel); add("hrel", p.hrel); add("hj", p.hj); add("vdots", p.vdots); add("super", p.super); add("orb2", p.orb2); add("pAx2", p.pAx2); add("dAx2", p.dAx2); add("fAx2", p.fAx2); add("mix", num(p.mix));
+    add("cstyle", p.cstyle); add("cdens", p.cdens); add("elec", p.elec); add("show", p.show); add("rscale", p.rscale); add("mrel", p.mrel); add("hrel", p.hrel); add("hj", p.hj); add("vdots", p.vdots); add("sdots", p.sdots); add("super", p.super); add("orb2", p.orb2); add("pAx2", p.pAx2); add("dAx2", p.dAx2); add("fAx2", p.fAx2); add("mix", num(p.mix));
     add("cutAxis", p.cutAxis); add("cut", num(p.cut)); add("ostyle", p.ostyle); add("scale", p.scale); add("zoom", num(p.zoom)); add("spin", num(L.s.spin));
     add("qstyle", p.qstyle); add("detail", p.detail); add("style", p.style); add("tilt", num(L.s.chartView.tilt)); add("cheight", L.s.chartView.height == atom::ChartHeightMode::Binding ? "Binding energy per nucleon" : "Half-life");
     add("outline", p.outline); add("dirac", p.dirac); add("phase", p.phase); add("chain", num(L.s.showChain)); add("walkAuto", num(L.s.walkAuto)); add("walkSteps", num(static_cast<double>(L.s.walk.steps.size())));

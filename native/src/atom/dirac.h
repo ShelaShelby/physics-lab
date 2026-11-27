@@ -38,10 +38,18 @@ const DiracPrinted* diracPrinted(int Z);
 double diracDelta(int Z, int twoJ);
 // The relativistic correction alone: the Dirac energy minus the non-relativistic one with the SAME constants, -(1/2) m c^2 (Z alpha)^2 / n^2. It is of the order (Z alpha)^2 of the level, negative (the level lies deeper). Worked out directly (see dirac.cpp), NOT as the difference of the two energies, which would lose about 5 digits for hydrogen.
 double diracCorrectionEV(int Z, int n, int twoJ);
-// The level the lab shows with the setting on: the lab's own non-relativistic level, with the nucleus's real mass (levelEV, the reduced-mass Rydberg energy), plus the correction above. In words: the main
-// energy has the reduced mass, as it always had; the relativistic correction is worked out for an infinitely heavy nucleus. Putting the reduced mass into the whole Dirac formula instead would scale the correction
-// by mu / m as well; the two differ by the correction times (1 - mu / m): 9e-9 of the Lyman-alpha energy for hydrogen (measured by the tests). Neither is the full treatment of recoil, which has more terms
-// (that literature was not available here), so the level is not claimed exact at that size (of the order 1e-8 of a hydrogen line), which is far below what the Lamb shift and the rest of QED leave (3.3e-6 of the hydrogen Lyman-alpha line, measured against NIST).
+// 0.91.0: the leading recoil correction E_M of Yerokhin & Shabaev 2015, Eq. (3) (data/lamb/yerokhin_shabaev_2015_recoil.extract.txt), in h c R_inf, for a nucleus of
+// m / M = x: E_M = m c^2 x (Z alpha)^2 / (2 N^2) - m_r c^2 x^2 (Z alpha)^2 / (2 n^2), N = sqrt((n_r + gamma)^2 + (Z alpha)^2). It depends on n and j only.
+// Its first part is the first-order recoil from the Breit equation (Shabaev 1985), the second the reduced mass beyond first order. The tests check it against
+// the table's MASS rows (H, He+).
+double diracMassRy(int Z, int n, int twoJ, double x, double alpha = kAlpha);
+// 0.91.0: what the recoil adds beyond the reduced mass: E_D + E_M - (levelEV + diracCorrectionEV) = m c^2 x (Z alpha)^4 n_r / (n^2 N^2 (|kappa| + gamma)), eV
+// (worked out in dirac.cpp: no difference of near-equal numbers). 0 for n_r = 0 (1s, 2p3/2, 3d5/2 ...); hydrogen 2p1/2: 2.5e-14 eV, 0.054 % of the 2p fine structure.
+double diracRecoilEV(int Z, int N, int n, int twoJ);
+// The level the lab shows with the setting on: the Dirac energy of an infinitely heavy nucleus plus the leading recoil correction E_M above (0.91.0; Yerokhin & Shabaev's
+// E_D + E_M). Worked out as the lab's own non-relativistic level with the nucleus's real mass (levelEV, the reduced-mass Rydberg energy), plus the relativistic correction
+// (diracCorrectionEV), plus diracRecoilEV. Up to 0.90.0 the recoil beyond the reduced mass was left out (hydrogen's 2p fine structure 0.054 % too wide). The recoil terms
+// of higher order in (Z alpha) and m / M are in the Lamb shift below where the source has it (n = 1, 2), and are left out for n >= 3.
 double diracEV(int Z, int N, int n, int twoJ);
 
 // 0.49.3 (outside review): the Lamb shift of the levels 1s, 2s, 2p1/2 and 2p3/2 (QED: the self-energy, vacuum polarisation and the higher-order terms, with the finite nuclear size and its

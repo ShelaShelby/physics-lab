@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # 0.15 stage 5b: the Atom Lab's element chip and its dropdown (New UI On) in the real app.
 #   check_atom_chip.py <PhysicsLab binary> <work folder> [card | classic | classicside | classicsideglow | classicslice | classicsliceglow]   (tests/TESTS.md)
+#   carddirac (0.91.0): the Slice of a Dirac state from the card's Dirac program against the processor: the paths and the two pictures (1 % over 8 levels).
 #   card (0.57.0): the Atom Lab's two card programs (render/atom_card.h) on this PC's renderer (Mesa llvmpipe here, NOT the owner's card): their start-up
 #   checks against the processor at the same seeds within the derived single-precision limits (atom/atom_card.h), the benchmark's paths, and their guards:
 #   the process ended inside the first step (PL_GPU_DIE; 0.76.0: one step, git keeps the run of all five), the next start runs nothing of that program and Settings, Performance names the step; a changed
@@ -93,6 +94,36 @@ def classic_part(binary, work, scene):
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 
+def dirac_part(binary, work):
+    # 0.91.0: the Slice of a Dirac state (the benchmark's atom.slice_dirac_drag set-up: uranium 4f, j = 7/2, dragged, then still from frame 150 so the ring
+    # fills on one plane) from the card's Dirac program against the processor's (the Slice's programs made to fail on purpose, PL_ATOM_CARDFAIL): the card's
+    # check passes with its 6 Dirac planes, and the two pictures differ in at most 1 % of the pixels by more than 8 levels (the CLASSIC rule). (While the cut
+    # moves, the card's dots arrive a frame after the plane moved, as the one-state Slice's do: the picture is taken still.)
+    os.makedirs(work, exist_ok=True)
+    fails = checks = 0
+    def check(ok, what):
+        nonlocal fails, checks
+        checks += 1
+        if not ok:
+            fails += 1
+            print("FAIL", what)
+    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "41", "PL_ATOM_BENCHSTOP": "150"}
+    card = run_app(binary, work, "dirac_card", env, frames=320, size="1280x800")
+    cpu = run_app(binary, work, "dirac_cpu", dict(env, PL_ATOM_CARDFAIL="1"), frames=320, size="1280x800")
+    dr = [ln for ln in card.out.splitlines() if ln.startswith("PLATOMCARDCASE dirac")]
+    check("PLATOMCARD slice state=1" in card.out and len(dr) == 6, f"dirac: the Slice's programs pass their check with the 6 Dirac planes ({dr})")
+    check("PLATOMCARD slice state=1" not in cpu.out, "dirac: the processor's run keeps the processor's dots (its check made to fail)")
+    a, b = Bmp(card.bmp), Bmp(cpu.bmp)
+    n = over = 0
+    for y in range(0, a.h, 2):
+        for x in range(0, a.w, 2):
+            n += 1
+            over += max(abs(p - q) for p, q in zip(a.px(x, y)[:3], b.px(x, y)[:3])) > 8
+    print(f"dirac: the still Slice: {over} of {n} pixels over 8 levels")
+    check((a.w, a.h) == (b.w, b.h) and n > 0 and over <= 0.01 * n, f"dirac: the card's picture and the processor's of the still Slice: {over} of {n} pixels over 8 levels")
+    print(f"{checks} checks, {fails} failed")
+    return 1 if fails else 0
+
 def card_part(binary, work):
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
@@ -132,6 +163,8 @@ def card_part(binary, work):
         m = re.search(r"(\d+) answered differently \((\d+) within the rounding there\); points (\d+) beyond their limit", ln)
         return m and m.group(1) == m.group(2) and m.group(3) == "0"
     check(len(sl) == 7 and sum("(a superposition's state)" in ln for ln in sl) == 2 and all(slice_ok(ln) for ln in sl), f"card: the Slice's dots at 7 planes (0.64.0: two of a superposition's states), the same seeds: every point within its derived limit, every differing answer within the rounding at its margin {sl}")
+    dr = [ln for ln in cases if ln.startswith("PLATOMCARDCASE dirac")]   # 0.91.0: the Slice's Dirac program, in the same check
+    check(len(dr) == 6 and all(slice_ok(ln) for ln in dr), f"card: the Slice's Dirac dots at 6 planes (0.91.0), the same numbers as tryDiracOnPlane: every point within its derived limit, every differing answer within the rounding {dr}")
     check(len(jp) == 3 and all(re.search(r": 0 of \d+ groups differ", ln) for ln in jp), f"card: the jump's groups equal the processor's exactly {jp}")
     # 2. the benchmark says which path ran and why
     rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
@@ -198,6 +231,8 @@ def main():
     binary, work = sys.argv[1], sys.argv[2]
     if len(sys.argv) > 3 and sys.argv[3] == "card":
         return card_part(binary, work)
+    if len(sys.argv) > 3 and sys.argv[3] == "carddirac":
+        return dirac_part(binary, work)
     if len(sys.argv) > 3 and sys.argv[3] in CLASSIC_SCENES:
         return classic_part(binary, work, CLASSIC_SCENES[sys.argv[3]])
     os.makedirs(work, exist_ok=True)

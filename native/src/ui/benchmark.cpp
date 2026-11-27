@@ -1050,8 +1050,10 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             if (t.atomWhich == atom::kBenchSideAll || t.atomWhich == atom::kBenchSideAllClassic) return atom::classicCardPathText(g_vk != nullptr, "the side view's dots");   // 0.65.0
             if (t.atomWhich == atom::kBenchSliceAll)                        // 0.65.0
                 return "the Slice's dots: made by the processor (the many-electron sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
-            if (t.atomWhich == atom::kBenchSliceDirac)
-                return "the Slice's dots: made by the processor (the Dirac state's own sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
+            if (t.atomWhich == atom::kBenchSliceDense)                      // 0.91.0
+                return "the Slice's dots: the outer electron's only, made by the processor (the many-electron sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
+            if (t.atomWhich == atom::kBenchSliceDirac)                      // 0.91.0: the Dirac state's sampler on the card too (the Slice's program)
+                return atom::atomCardPaths().pathText(0, L, app.computeOk) + " (the Dirac state's sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
             if (t.atomWhich == atom::kBenchSliceGlowUltra || t.atomWhich == atom::kBenchSliceClassicUltra)
                 return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; " + atom::classicCardPathText(g_vk != nullptr, "drawn");
             if (L.manyOn() && L.p.cstyle == "Glow") return "the every-electron cloud: " + std::string(L.gpuCloud ? "drawn from a buffer on the graphics card" : "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene)");

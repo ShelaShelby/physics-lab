@@ -28,6 +28,21 @@ struct SliceDotsJob {
     int stride = 3, first = 0;     // 0.64.0: attempt t takes the numbers stride t + first .. + 2 (one state: 3, 0; a superposition's state: 4, 1, after the choice)
 };
 
+// 0.91.0: one batch of a Dirac state's Slice attempts (atom/dirac_cloud.cpp tryDiracOnPlane): attempt t takes the numbers stride t, + 1 (+ 2: the keep test of a
+// lined-up state with L = j - 1/2 > 0; stride 3, else 2). The radius is found from the TAIL of the plane's distribution, 1 - pc, so single precision keeps its
+// relative digits far out (ROADMAP: inverting pc itself lost 3.5e-5 of the radius at the 99.99 % radius). tab: 4 floats a node (r, 1 - pc, -pd, 0), n nodes.
+struct DiracSliceJob {
+    std::uint32_t seed = 0;
+    int tries = 0;
+    int axis = 1;                  // 1: the plane y = off, 2: z = off (Bohr radii)
+    float off = 0, a = 0;          // the plane, and |off|
+    float tail0 = 1;               // 1 - pc(|off|): the plane's tail beyond |off|
+    int L = 0, keep = 0;           // L = j - 1/2; keep: the keep test is made (lined up and L > 0)
+    int stride = 3;
+    int n = 0;                     // nodes of the table
+    std::vector<float> tab;
+};
+
 // What the atom code asks of the card for the Slice (null or !ready(): the processor makes the dots). Never blocks: begin starts a batch and returns its
 // number (0: could not start); poll gives Pending (ask again later), Done (res holds 4 floats per attempt: x, y, z and 1 kept / 0 rejected / -1 the
 // radius came out 0) or Failed.
@@ -36,6 +51,7 @@ public:
     virtual ~ISliceCompute() {}
     virtual bool ready() const = 0;
     virtual int beginSlice(const SliceDotsJob& j) = 0;
+    virtual int beginDirac(const DiracSliceJob&) { return 0; }        // 0.91.0: a Dirac state's batch (0: could not start); polled with pollSlice, the same 4 floats an attempt
     virtual JobState pollSlice(int job, std::vector<float>& res) = 0;
     virtual void cancelSlice(int job) = 0;
 };

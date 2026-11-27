@@ -42,6 +42,8 @@
 #include "orbit/lines_check.h"
 #include "orbit/sky.h"
 #include "orbit/star_light.h"
+#include "atom/atom_card.h"
+#include "atom/dirac_cloud.h"   // 0.91.0
 #include "render/lines_card.h"
 #include "molecule/surface_check.h"
 #include "render/surface_card.h"

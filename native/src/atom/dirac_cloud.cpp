@@ -126,6 +126,8 @@ double diracMeanRadius(int Z, int n, int kappa) { return prep(Z, n, kappa).mean;
 double diracCdf(int Z, int n, int kappa, double r) { const Prep& p = prep(Z, n, kappa); return interpCdf(p.gx, p.gc, p.gd, r); }
 double diracSmallShare(int Z, int n, int kappa) { return prep(Z, n, kappa).small; }
 
+DiracPlaneTable diracPlaneTable(int Z, int n, int kappa) { const Prep& p = prep(Z, n, kappa); return DiracPlaneTable{&p.gx, &p.pc, &p.pd}; }
+double diracPlaneCdf(int Z, int n, int kappa, double r) { const Prep& p = prep(Z, n, kappa); return interpCdf(p.gx, p.pc, p.pd, r); }
 double sampleDiracRadius(int Z, int n, int kappa, orbit::Mulberry32& r) { const Prep& p = prep(Z, n, kappa); return invertTable(p.gx, p.gc, p.gd, r.next()); }
 void sampleDiracDirection(int j2, bool round, orbit::Mulberry32& r, double& ux, double& uy, double& uz) {
     const int L = (j2 - 1) / 2;

@@ -107,6 +107,7 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     if (a.rscale != "True scale") p.atom["rscale"] = a.rscale;
     if (a.hrel != "Auto") p.atom["hrel"] = a.hrel;           // 0.49.3: saved only when not the default
     if (a.hj != "l + 1/2") p.atom["hj"] = a.hj;
+    if (a.sdots != "True share") p.atom["sdots"] = a.sdots;   // 0.91.0: saved only when not the default
     if (a.vdots != "Easier to see") p.atom["vdots"] = a.vdots;   // 0.54.1: saved only when not the default   // 0.49.3: True scale is the default (was Shells enlarged)
     p.atomMore = app.atom.moreStored;
     if (app.visited[molecule::kLabIndex] || !p.molecule.empty()) p.molecule = molecule::saveSettings(app.molecule.set);   // (only once the lab was opened: older settings files stay as they were)
@@ -160,6 +161,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
         f = val;
     }
     for (const char* k : {"hrel", "hj"}) { const auto it = p.atom.find(k); if (it != p.atom.end() && atom::AtomLab::validChoice(k, it->second)) (std::string(k) == "hrel" ? a.hrel : a.hj) = it->second; }   // 0.49.3
+    { const auto it = p.atom.find("sdots"); if (it != p.atom.end() && atom::AtomLab::validChoice("sdots", it->second)) a.sdots = it->second; }   // 0.91.0
     { const auto it = p.atom.find("vdots"); if (it != p.atom.end() && atom::AtomLab::validChoice("vdots", it->second)) a.vdots = it->second; }   // 0.54.1
     for (const char* k : {"elec", "show", "rscale", "mrel"}) {       // 0.39
         const auto it = p.atom.find(k);

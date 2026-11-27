@@ -138,6 +138,47 @@ static void vkSliceJump(render::AtomCard& vk) {
         tries += k.tries;
     }
     check("Vulkan Slice: every case within the start-up check's limits against the processor (atom/atom_card.h compareSlice)", allOk && tries > 0);
+    // 0.91.0: the Slice of a Dirac state (its own program): the same numbers as tryDiracOnPlane, each point within its derived limit (atom_card.h compareDirac)
+    check("Vulkan: the Slice's Dirac program is made", vk.build(render::AtomCard::kDirac, nullptr, why));
+    bool dOk = true;
+    long dTries = 0;
+    for (const atom::DiracCase& k : atom::diracCheckCases()) {
+        std::vector<float> res;
+        const int j = vk.beginDirac(atom::diracJobOf(k));
+        if (!(j > 0 && vkt::poll([&] { return vk.pollSlice(j, res); }) == render::JobState::Done)) { dOk = false; continue; }
+        const atom::SliceCompare c = atom::compareDirac(k, res);
+        std::printf("Vulkan Dirac Slice Z=%d %d%c j2=%d %s axis=%d off=%.4f: %s\n", k.Z, k.n, "spdf"[k.l], k.j2, k.round ? "round" : "lined up", k.axis, k.off, atom::sliceCompareText(c).c_str());
+        dOk = dOk && c.ok();
+        dTries += k.tries;
+    }
+    check("Vulkan Dirac Slice: every case within its limits against tryDiracOnPlane with the same numbers (atom/atom_card.h compareDirac)", dOk && dTries > 0);
+    // the same statistic the processor's radii pass: the card's radii on the plane follow D(r) / r from |off| on (Kolmogorov-Smirnov, 99 %: 1.63 / sqrt N),
+    // F(r) = (pc(r) - pc(|off|)) / (1 - pc(|off|)), for a round state and a j = 1/2 state (no keep test: every attempt is a dot); and every dot on its plane
+    for (const atom::DiracCase base : {atom::diracCheckCases()[4], atom::diracCheckCases()[5]}) {
+        atom::DiracCase k = base; k.tries = 20000; k.seed = 0x2468ACE1u;
+        std::vector<float> res;
+        const int j = vk.beginDirac(atom::diracJobOf(k));
+        if (!(j > 0 && vkt::poll([&] { return vk.pollSlice(j, res); }) == render::JobState::Done)) { check("Vulkan Dirac Slice statistics: the batch ran", false); continue; }
+        const int kappa = atom::diracKappa(k.l, k.j2);
+        const double a = std::fabs(k.off), c0 = atom::diracPlaneCdf(k.Z, k.n, kappa, a);
+        std::vector<double> rad;
+        long onPlane = 0;
+        for (int t = 0; t < k.tries; t++) {
+            const float* g = &res[std::size_t(4 * t)];
+            if (!(g[3] > 0.5f)) continue;
+            rad.push_back(std::sqrt(double(g[0]) * g[0] + double(g[1]) * g[1] + double(g[2]) * g[2]));
+            onPlane += (k.axis == 2 ? g[2] : g[1]) == float(k.off);
+        }
+        std::sort(rad.begin(), rad.end());
+        double d = 0;
+        for (std::size_t i = 0; i < rad.size(); i++) {
+            const double F = (atom::diracPlaneCdf(k.Z, k.n, kappa, rad[i]) - c0) / (1 - c0);
+            d = std::max({d, std::fabs(F - double(i) / double(rad.size())), std::fabs(F - double(i + 1) / double(rad.size()))});
+        }
+        const double lim = 1.63 / std::sqrt(double(std::max<std::size_t>(rad.size(), 1)));
+        std::printf("Vulkan Dirac Slice Z=%d %d%c j2=%d: %zu dots, KS distance %.5f (99 %% bound %.5f), %ld on the plane\n", k.Z, k.n, "spdf"[k.l], k.j2, rad.size(), d, lim, onPlane);
+        check("Vulkan Dirac Slice: the card's radii follow the plane's distribution (Kolmogorov-Smirnov) and every dot lies on its plane", rad.size() == std::size_t(k.tries) && d < lim && onPlane == long(rad.size()));
+    }
     long wrong = 0, dots = 0;
     for (const atom::JumpCheckCase& k : atom::jumpCheckCases()) {
         std::vector<unsigned char> fixedG, want, got;

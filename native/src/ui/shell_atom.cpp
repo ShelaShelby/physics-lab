@@ -547,6 +547,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             if (many) choiceRow(app, p, "show", "Show", ui::atomChoices("show"), P.show);
             if (many && P.show == "Whole atom") choiceRow(app, p, "rscale", "Radius", ui::atomChoices("rscale"), P.rscale);
             if (L.outerDotsChoice()) choiceRow(app, p, "vdots", "Outer electron's dots", ui::atomChoices("vdots"), P.vdots);   // 0.54.1
+            if (L.sliceAloneChoice()) choiceRow(app, p, "sdots", "Outer electron's dots", ui::atomChoices("sdots"), P.sdots);   // 0.91.0: the Slice's own choice (True share is its default)
             if (!many || P.show == "One orbital") {
                 ui::AtomChoices oc = ui::atomChoices("orb");
                 if (L.diracCloudOn()) for (auto& o : oc) o.second = o.first;   // 0.49.3: the shape words (dumbbell ...) are the non-relativistic orbitals'; a Dirac state's shape is set by j and Lined up / Round

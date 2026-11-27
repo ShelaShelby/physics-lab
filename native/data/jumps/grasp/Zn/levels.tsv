@@ -2,21 +2,21 @@
 # computed = excitation energy from the ground level (cm-1; CODATA 2018 hartree); diff_% = (computed - NIST) / NIST; NIST = data/jumps/asd (tools/make_level_data.py).
 # LS_weight = the root's weight in the NIST level's configuration and term (jj2lsj); natural_orbitals, k_max = highest multipole of M_J = J; CSFs, seconds: the block run.
 level	J	NIST_cm	computed_cm	diff_%	LS_weight	natural_orbitals	k_max	CSFs	seconds
-3d10.4s2 1S	0	0.0	0.0		0.937	46	0	5009	30.8
-3d10.4s.4p 3P*	0	32311.3176	31208.4	-3.414	0.963	46	0	7490	38.9
-3d10.4s.4p 3P*	1	32501.399	31424.1	-3.315	0.960	46	2	9244	51.5
-3d10.4s.4p 3P*	2	32890.3267	31826.4	-3.235	0.953	46	4	24414	194.2
-3d10.4s.4p 1P*	1	46745.4032	46100.8	-1.379	0.901	46	2	9244	51.5
-3d10.4s.5p 3P*	0	61247.866	59789.1	-2.382	0.944	46	0	7490	38.9
-3d10.4s.4d 1D	2	62458.5323	61374.9	-1.735	0.783	46	4	29064	265.2
-3d10.4s.4d 3D	1	62768.7462	61639.0	-1.800	0.951	46	2	17622	106.5
-3d10.4s.4d 3D	2	62772.0144	61611.6	-1.849	0.802	46	4	29064	265.2
-3d10.4s.4d 3D	3	62776.9809	61479.7	-2.066	0.951	46	6	19650	149.3
-3d10.4s.6s 3S	1	65432.2887	64200.1	-1.883	0.864	46	2	17622	106.5
-3d10.4s.6p 3P*	0	68070.882	66560.7	-2.219	0.948	46	0	7490	38.9
-3d10.4s.4f 3F*	2	68833.807	67285.9	-2.249	0.952	46	4	24414	194.2
-3d10.4s.7s 3S	1	69745.959	68221.1	-2.186	0.828	46	2	17622	106.5
-# no cloud: 3d10.4s.5s 3S J=1 (53672.2398 cm-1): the Dirac-Fock of its 5s orbital did not converge (no cloud from a stand-in orbital)
-# no cloud: 3d10.4s.5s 1S J=0 (55789.216 cm-1): the Dirac-Fock of its 5s orbital did not converge (no cloud from a stand-in orbital)
-# no cloud: 3d10.4s.5d 1D J=2 (68338.5233 cm-1): the Dirac-Fock of its 5d orbital did not converge (no cloud from a stand-in orbital)
-# stored grid: 300 points, r = 0.0002 .. 400.0 bohr (log); natural orbitals under 0.01 electrons drawn together per l. Interpolation check: norm within 9.1e-05 (worst: 3d10.4s.6p 3P* J=0: 7s j=1/2 occ 0.00215 (lump)), <r> within 3.8e-05 (relative). clouds.bin: 729849 bytes.
+3d10.4s2 1S	0	0.0	0.0		0.937	46	0	5009	44.9
+3d10.4s.4p 3P*	0	32311.3176	31303.5	-3.119	0.963	46	0	7490	56.0
+3d10.4s.4p 3P*	1	32501.399	31524.8	-3.005	0.960	46	2	9244	65.7
+3d10.4s.4p 3P*	2	32890.3267	31938.6	-2.894	0.953	46	4	24414	268.1
+3d10.4s.4p 1P*	1	46745.4032	46283.8	-0.988	0.903	46	2	9244	65.7
+3d10.4s.5s 3S	1	53672.2398	52343.5	-2.476	0.963	46	2	17622	148.3
+3d10.4s.5s 1S	0	55789.216	54618.2	-2.099	0.919	46	0	5009	44.9
+3d10.4s.5p 3P*	0	61247.866	59850.1	-2.282	0.944	46	0	7490	56.0
+3d10.4s.4d 1D	2	62458.5323	61410.1	-1.679	0.912	46	4	29064	328.8
+3d10.4s.4d 3D	1	62768.7462	61651.9	-1.779	0.945	46	2	17622	148.3
+3d10.4s.4d 3D	2	62772.0144	61550.5	-1.946	0.932	46	4	29064	328.8
+3d10.4s.4d 3D	3	62776.9809	61559.9	-1.939	0.951	46	6	19650	581.4
+3d10.4s.6s 3S	1	65432.2887	64052.7	-2.108	0.941	46	2	17622	148.3
+3d10.4s.6p 3P*	0	68070.882	66624.6	-2.125	0.947	46	0	7490	56.0
+3d10.4s.5d 1D	2	68338.5233	67077.4	-1.845	0.917	46	4	29064	328.8
+3d10.4s.4f 3F*	2	68833.807	67365.8	-2.133	0.951	46	4	24414	268.1
+3d10.4s.7s 3S	1	69745.959	68319.0	-2.046	0.942	46	2	17622	148.3
+# stored grid: 300 points, r = 0.0002 .. 400.0 bohr (log); natural orbitals under 0.01 electrons drawn together per l. Interpolation check: norm within 8.1e-05 (worst: 3d10.4s.5s 3S J=1: 6s j=1/2 occ 0.00184 (lump)), <r> within 3.8e-05 (relative). clouds.bin: 891093 bytes.

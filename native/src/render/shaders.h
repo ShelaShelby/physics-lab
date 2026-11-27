@@ -2990,6 +2990,87 @@ void main() {
 }
 )";
 
+// 0.91.0: the Slice of a Dirac state (atom/dirac_cloud.cpp tryDiracOnPlane, the processor's exact reference): attempt t takes the numbers uStride t (+ 1, + 2).
+// The radius r >= |off| has the plane's density D(r) / r: the processor solves pc(r) = c0 + u (1 - c0) on its table (cubic Hermite); here the same equation
+// in the tail, 1 - pc(r) = (1 - c0)(1 - u), on the table's tail (tab: r, 1 - pc, -pd), so single precision keeps the tail's relative digits far out.
+static const char* const kDiracSliceCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) writeonly buffer Out { vec4 res[]; };
+layout(std430, binding = 1) readonly buffer Tab { vec4 tab[]; };
+uniform uint uSeed;
+uniform int uTries;
+uniform int uAxis;
+uniform float uOff;
+uniform float uA;
+uniform float uTail0;
+uniform int uL;
+uniform int uKeep;
+uniform int uStride;
+uniform int uN;
+
+uint mulberry(uint n) {
+    uint s = uSeed + (n + 1u) * 0x6D2B79F5u;
+    uint t = (s ^ (s >> 15u)) * (1u | s);
+    t = (t + ((t ^ (t >> 7u)) * (61u | t))) ^ t;
+    return t ^ (t >> 14u);
+}
+// cos and sin of 2 pi t, t in [0, 1) (as kSliceDotsCS)
+vec2 cosSinTurn(float t) {
+    float q = floor(4.0 * t + 0.5);
+    float a = 6.28318530717958648 * (t - 0.25 * q);
+    float a2 = a * a;
+    float c = 1.0 + a2 * (-0.5 + a2 * (1.0 / 24.0 + a2 * (-1.0 / 720.0 + a2 * (1.0 / 40320.0))));
+    float s = a * (1.0 + a2 * (-1.0 / 6.0 + a2 * (1.0 / 120.0 + a2 * (-1.0 / 5040.0 + a2 * (1.0 / 362880.0)))));
+    int k = int(q) & 3;
+    if (k == 0) return vec2(c, s);
+    if (k == 1) return vec2(-s, c);
+    if (k == 2) return vec2(-c, -s);
+    return vec2(s, -c);
+}
+
+void main() {
+    int t = int(gl_GlobalInvocationID.x);
+    if (t >= uTries) return;
+    uint n0 = uint(uStride) * uint(t);
+    uint k1 = mulberry(n0), k2 = mulberry(n0 + 1u), k3 = mulberry(n0 + 2u);
+    // 1 - u = (2^32 - k1) / 2^32, rounded once (k1 = 0: 1)
+    float om = k1 == 0u ? 1.0 : float(0u - k1) * 2.3283064365386963e-10;
+    float T = uTail0 * om;
+    float r = 0.0;
+    if (T >= tab[0].y) r = tab[0].x;
+    else if (!(T > 0.0)) r = tab[uN - 1].x;
+    else {
+        int lo = 0, hi = uN - 1;                 // the tail falls from 1 (node 0) to 0: hi = the first node whose tail is below T
+        for (int i = 0; i < 16 && hi - lo > 1; i++) {
+            int mid = (lo + hi) / 2;
+            if (tab[mid].y < T) hi = mid; else lo = mid;
+        }
+        vec4 A = tab[lo], B = tab[hi];
+        float a = A.x, b = B.x, h = B.x - A.x;
+        for (int it = 0; it < 40; it++) {
+            float m = 0.5 * (a + b);
+            if (m == a || m == b) break;
+            float s = (m - A.x) / h, s2 = s * s, s3 = s2 * s;
+            float c = (2.0 * s3 - 3.0 * s2 + 1.0) * A.y + (s3 - 2.0 * s2 + s) * A.z * h + (-2.0 * s3 + 3.0 * s2) * B.y + (s3 - s2) * B.z * h;
+            if (c > T) a = m; else b = m;
+        }
+        r = 0.5 * (a + b);
+    }
+    float rk = max(uA, r);
+    float sp = sqrt(max(0.0, rk * rk - uA * uA));
+    vec2 cs = cosSinTurn(float(k2) * 2.3283064365386963e-10);
+    float u = sp * cs.x, v = sp * cs.y;
+    vec3 q = uAxis == 2 ? vec3(u, v, uOff) : vec3(u, uOff, v);
+    if (uKeep == 0) { res[t] = vec4(q, 1.0); return; }
+    if (!(rk > 0.0)) { res[t] = vec4(q, -1.0); return; }
+    float cz = q.z / rk;
+    float w0 = max(0.0, 1.0 - cz * cz), w = 1.0;
+    for (int i = 0; i < 8; i++) if (i < uL) w *= w0;
+    bool kept = float(k3) * 2.3283064365386963e-10 < w;
+    res[t] = vec4(q, kept ? 1.0 : 0.0);
+}
+)";
+
 // 0.64.0: Saturn's rings per pixel on the graphics card (Vulkan), the processor's triangles (orbit/ring_draw.h ringTriangles) as the reference: the same
 // 128 angular steps with straight chords (a pixel's radius is measured along its step's middle direction and divided by cos(half a step), so the chords'
 // edges are the processor's), the same half (the step's middle towards you or away), the same drawn bands (inner and outer edge in planet radii, opacity,

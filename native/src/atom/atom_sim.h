@@ -64,6 +64,7 @@ struct AtomParams {
     std::string rscale = "True scale";   // 0.49.3 (outside review): True scale is the default (was Shells enlarged). 0.39, the whole atom: Shells enlarged (radius drawn as R asinh(r/r0) / asinh(R/r0): the outer edge true, the inner shells spread out) / True scale     // 0.39, with Electrons All: Whole atom (every electron, the shells as colours) / One orbital (the chosen orbital of that atom)
     std::string hrel = "Auto";          // 0.49.3 (outside review): the Hydrogen-like cloud's model: Auto (Dirac from kRelativityZ = 27, where relativity shows; the familiar real orbitals below) / Dirac / Non-relativistic
     std::string hj = "l + 1/2";         // 0.49.3: the Dirac cloud's j: l + 1/2 / l - 1/2 (an s orbital is always j = 1/2)
+    std::string sdots = "True share";      // 0.91.0, the Slice of the whole atom with jumps: True share (every electron its share, the outer electron 1 in Z) / Outer electron alone (only its dots, all of them)
     std::string vdots = "Easier to see";   // 0.54.1, the whole atom with jumps (Cloud, Cloud 3D): the outer electrons' dots Easier to see (kValenceDotShare of the dots more than their share) / True share
     // 0.54.0: the magnetic field (atom/zeeman.h). Not saved: the app always opens with the field off.
     double bfield = 0;                   // T: 0 (off, the default: nothing in the lab changes) to 100
@@ -390,7 +391,7 @@ public:
     // ---- quantum beats ----
     bool overlapPair() const { return superOn() && overlap_; }   // 0.64.0: the superposition's two states overlap (one energy): its Slice stays the processor's
     // 0.65.0: the Slice whose dots the Slice's card program can make (one state, or an orthogonal superposition): not every electron, a Dirac state or an overlapping pair
-    bool sliceCardKind() const { return sliceDots() && !manyOn() && !diracCloudOn() && !overlapPair(); }
+    bool sliceCardKind() const { return sliceDots() && !manyOn() && !overlapPair(); }   // (0.91.0: a Dirac state too)
     bool superOn() const { return p.super == "On" && p.view != "Orbit" && !manyOn(); }
     // ---- 0.49.3 (outside review): the Dirac cloud of the one-electron atom (atom/dirac_cloud.h) ----
     bool diracCloudOn() const;                            // Hydrogen-like, a cloud view (not Orbit or the chart), no superposition, and the model is Dirac (Auto: from kRelativityZ)
@@ -427,7 +428,13 @@ public:
     std::vector<int> targets(int dir) const;              // levels a photon can take the electron to
     static constexpr double kValenceDotShare = 0.25;      // 0.46.1: with valence jumps on, this share of the whole atom's 3D dots is the outer electron's (said in the readout)
     double extraOuterShare() const { return p.vdots == "True share" ? 0.0 : kValenceDotShare; }   // 0.54.1: the extra share actually used (True share: none, every electron its own share)
-    bool outerDotsChoice() const;                         // 0.54.1: the "Outer electron's dots" choice applies: the whole atom with jumps (valence or level atoms) in Cloud or Cloud 3D
+    bool sliceAloneChoice() const;                        // 0.91.0: the Slice's "Outer electron's dots" choice applies: the whole atom with jumps (valence or level atoms) in the Slice
+    bool sliceAlone() const { return sliceAloneChoice() && p.sdots == "Outer electron alone"; }   // 0.91.0: the Slice draws only the outer electron's dots
+    // 0.91.0 (for the tests): n dots on the Slice's plane drawn as the Slice draws them (the plane at the cut, seed); radii: their distances from the nucleus (Bohr radii);
+    // returns how many were NOT the outer electron's (-1: not the whole atom with jumps in the Slice)
+    long sliceOuterSample(int n, unsigned seed, std::vector<double>& radii) const;
+    bool outerDotsChoice() const;
+    std::string sliceShareText(const hf::Atom& a) const; // 0.91.0: the readout's words for the Slice's choice                         // 0.54.1: the "Outer electron's dots" choice applies: the whole atom with jumps (valence or level atoms) in Cloud or Cloud 3D
     double outerDotFraction(int n, unsigned seed) const;  // 0.54.1 (for the tests): of n whole-atom dots drawn as the cloud draws them, the share that are the outer electrons'
     std::string trueShareText(const hf::Atom& a) const;   // 0.54.1: "1 in 11" (an alkali) or "2 in 12" (the outer electrons' occupations against Z)
     static double denserFactor(double nOuter, int electrons);   // 0.52.1: how many times their true share the outer electrons' dots are drawn (the level atoms' main line)
@@ -453,6 +460,9 @@ private:
     bool sliceDots() const { return p.view == "Slice"; }
     void syncSlicePlane();                                // Slice: when the plane moves, new dots are made on the new plane, replacing the oldest (sliceFresh counts them)
     int sliceAxisNow() const { return p.cutAxis == "Horizontal" ? 2 : 1; }
+    public:
+    double sliceOffNowForTests() const { return sliceOffNow(); }   // 0.91.0
+    private:
     double sliceOffNow() const;                           // Bohr radii (cutOffsetM() in metres): Cut position x half the view radius (0.39.1: the many-electron atom's with Electrons All)
     Superposition sup_;                                   // set when the cloud is (re)started and when a share changes
     double nA_ = 1, nB_ = 1;                              // normalisation factors of the two states at the current Z
@@ -461,11 +471,12 @@ private:
     int manySubNow_ = -1;
     int valSubNow_ = -1;                                  // 0.47: the outer electron's subshell in manyNow_ (valence jumps on), else -1
     const GraspLevel* gNow_ = nullptr;                    // 0.47.2: the GRASP level drawn (its aligned-state shape), else nullptr
+    bool aloneNow_ = false;                               // 0.91.0: sliceAlone() for this batch
     std::vector<int> valSetNow_;                          // 0.47.3: a level atom: the subshells of its outer electrons in manyNow_ (drawn denser, as the alkalis' outer electron)
     int idNow_ = -1;                                      // 0.57.0: stateId() for the batch addDots is making (one electron, no superposition, not Dirac), else -1
     // 0.57.0: the card's batch of Slice attempts in flight (at most one): what it was made for, so its dots are taken only for that cloud and state
     struct SliceJob { int job = 0; std::uint32_t seed = 0; int tries = 0; long want = 0; int id = -1, Z = 0, axis = 0; double off = 0; std::uint64_t epoch = 0;
-                      int job2 = 0, idB = -1; double wA = 0; };   // 0.64.0: a superposition's batch: job (state A) and job2 (state B), wA the odds of A
+                      int job2 = 0, idB = -1; double wA = 0; int dirac = 0; };   // 0.91.0: dirac, a Dirac state's batch: 1 + its n, l, j, round (diracKey)   // 0.64.0: a superposition's batch: job (state A) and job2 (state B), wA the odds of A
     void cancelSliceJob();                                // a batch in flight forgotten (both of a superposition's)
     SliceJob sliceJob_;
     double sliceRate_ = 0.1;                              // the share of attempts kept in the last batch (sizes the next one)
@@ -486,6 +497,7 @@ private:
     int diracJ2Now_ = 0, diracNNow_ = 0, diracLNow_ = 0, axisNow_ = 1;   // a Dirac state's cloud (diracJ2Now_ > 0): its n, l, 2j, the cut's axis and offset (the Slice)
     double offNow_ = 0;
     long addDotsCard(const PlaneSampler& ps, long want);   // the Slice's dots from the card (see addDots)
+    long addDotsCardDirac(long want);                     // 0.91.0: a Dirac state's Slice dots from the card (see addDots)
     long addDotsCardSuper(const PlaneSampler& pa, const PlaneSampler& pb, double wA, long want);   // 0.64.0: the same for a superposition (orthogonal pair)
     hf::Plane manyPlane_;                                 // 0.39.1, Slice with many electrons: every subshell's mass on the cut plane, worked out once per batch
     bool overlap_ = false;                                // Superposition: the two states overlap (<A|B> != 0: the same n, l and a non-orthogonal angular part). They then share one energy, the state is static, and the walker samples its renormalised density directly (every dot is shown)

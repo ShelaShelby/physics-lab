@@ -3206,9 +3206,16 @@ static double refSeriesEV(int Z, int n, int twoJ) {                 // the (Z al
     return -(nist::mecEV * x * x / (2.0 * n * n)) * (1 + x * x / (double(n) * n) * (n / jh - 0.75));
 }
 // the lab's hybrid level written again by hand: reduced-mass main term (the lab's nuclear mass, typed again above) + the infinite-mass relativistic correction
+// 0.91.0 (the reference changed on purpose, REPORT 0.91.0): the lab's level is now E_D + E_M (Yerokhin & Shabaev 2015, Eq. (3)); the part of E_M beyond the reduced mass,
+// worked out here from Eq. (3) as written: m c^2 x (Z a)^2 / (2 N^2) - m_r c^2 x^2 (Z a)^2 / (2 n^2) - m_r c^2 x (Z a)^2 / (2 n^2) (the last: what the reduced-mass main term holds)
+static double refRecoilEV(int Z, int N, int n, int twoJ) {
+    const double M = nuclearMassNew(Z, N), x = 1 / M, mr = nist::mecEV / (1 + x), za = Z * nist::alpha, ak = (twoJ + 1) * 0.5;
+    const double gam = std::sqrt(ak * ak - za * za), N2 = (n - ak + gam) * (n - ak + gam) + za * za;
+    return nist::mecEV * x * za * za / (2 * N2) - mr * x * x * za * za / (2.0 * n * n) - mr * x * za * za / (2.0 * n * n);
+}
 static double refHybridEV(int Z, int N, int n, int twoJ) {
     const double M = nuclearMassNew(Z, N), ry = nist::rydEV * M / (M + 1);
-    return -ry * Z * Z / (double(n) * n) + refCorrEV(Z, n, twoJ);
+    return -ry * Z * Z / (double(n) * n) + refCorrEV(Z, n, twoJ) + refRecoilEV(Z, N, n, twoJ);
 }
 // the lines of ASD for ion Z that are electric-dipole (n changes, l changes by 1), as {nLo, nHi, 2jLo, 2jHi} -> Ritz wavelengths
 struct AsdKey { int a, b, c, d; bool operator<(const AsdKey& o) const { return std::array<int, 4>{a, b, c, d} < std::array<int, 4>{o.a, o.b, o.c, o.d}; } };
@@ -3334,15 +3341,19 @@ static void testDirac() {
     {
         const double lead = mc * std::pow(a, 4) / 32, got = diracEV(1, 0, 2, 3) - diracEV(1, 0, 2, 1), gotInf = diracInfiniteEV(1, 2, 3) - diracInfiniteEV(1, 2, 1);
         std::printf("H n = 2 fine structure: Dirac %.9e eV (%.6f GHz), m c^2 alpha^4 / 32 = %.9e eV, ratio - 1 = %.3e (alpha^2 = %.3e)\n", got, got / nist::h * nist::e * 1e-9, lead, got / lead - 1, a * a);
-        checkNum("H 2p3/2 - 2p1/2 Dirac splitting = m c^2 alpha^4 / 32 within alpha^2 (the next order)", got, lead, a * a);
-        checkNum("H 2p3/2 - 2p1/2 splitting: the lab's level (reduced-mass main term) gives the same as the infinite-mass Dirac levels, because only the main term has the reduced mass", got, gotInf, 1e-9);
+        // 0.91.0 (references changed on purpose): the lab's level has the recoil of Eq. (3) (YS15): beyond the reduced mass it lifts 2p1/2 by m c^2 x alpha^4 / (4 N^2 (1 + gamma)),
+        // which is x m c^2 alpha^4 / 32 to the next order in alpha^2 (N^2 -> 4, gamma -> 1): the gap is (1 - x) m c^2 alpha^4 / 32, x = m / M. Until 0.90.0 the gap was the infinite-mass one.
+        const double xH = 1 / nuclearMassNew(1, 0);
+        checkNum("H 2p3/2 - 2p1/2 Dirac splitting = (1 - m/M) m c^2 alpha^4 / 32 within alpha^2 (the next order; 0.91.0: with the recoil of Eq. (3))", got, (1 - xH) * lead, a * a);
+        checkTrue("H 2p3/2 - 2p1/2 splitting (0.91.0): the lab's gap is the infinite-mass Dirac gap less the recoil x m c^2 alpha^4 / 32, within that times 2 alpha^2", std::fabs(got - (gotInf - xH * lead)) <= 2 * a * a * xH * lead);
         checkTrue("H 2p3/2 is less bound than 2p1/2 (the splitting is positive, j = 3/2 above j = 1/2)", got > 0);
         checkNum("Dirac theory: 2s1/2 and 2p1/2 have exactly the same energy (no Lamb shift): the level depends on n and j only", diracEV(1, 0, 2, 1), diracEV(1, 0, 2, 1), 0);
         {   // NIST's own 2p3/2 - 2p1/2 gap for hydrogen, from ASD's two Lyman-alpha Ritz wavelengths (ASD's Ritz wavelengths are made from its measured energy levels): h c (1 / lambda(2p3/2) - 1 / lambda(2p1/2))
             const auto m = asdE1(1); const double l3 = m.at({1, 2, 1, 3}).front(), l1 = m.at({1, 2, 1, 1}).front();
             const double nist2 = nist::hcEVnm * (1 / l3 - 1 / l1), over = nist2 / got - 1;
             std::printf("H n = 2 gap from ASD's Lyman-alpha Ritz wavelengths: %.9e eV (%.6f GHz); Dirac %.9e eV; NIST / Dirac - 1 = %.4e\n", nist2, nist2 / nist::h * nist::e * 1e-9, got, over);
-            checkTrue("H 2p3/2 - 2p1/2: NIST's measured gap is LARGER than the Dirac one, by 0.1772 % (measured; the guard is + 1 % of that): the part of the gap Dirac theory does not have (QED), small and one-sided", over > 0 && over < 1.789e-3);
+            // (0.91.0, changed on purpose: the lab's gap now has the recoil of Eq. (3), 0.054 % narrower: measured 0.23176 %, was 0.1772 %)
+            checkTrue("H 2p3/2 - 2p1/2: NIST's measured gap is LARGER than the Dirac one with its recoil, by 0.2318 % (measured; the guard is + 1 % of that): the part of the gap Dirac theory does not have (QED), small and one-sided", over > 0 && over < 2.341e-3);
         }
         checkNum("The splitting from the expansion to (Z alpha)^4: m c^2 alpha^4 / 32 is the leading difference of the series formula", refSeriesEV(1, 2, 3) - refSeriesEV(1, 2, 1), lead, 1e-9);
     }
@@ -4532,6 +4543,7 @@ static void testManyDots() {
 #include "test_zeeman.inc"    // 0.54.0: atoms in a magnetic field (the Zeeman effect, weak to strong field)
 #include "test_atom078.inc"   // 0.78.0: the photon's dipole pattern
 #include "test_atom0541.inc"  // 0.54.1: the nucleus Density look projected exactly; the outer electron's dots at their true share
+#include "test_atom0910.inc"  // 0.91.0: the Slice's outer electron alone; every level a cloud; the Slice samplers on the GPU; hydrogen's recoil
 
 // 0.48 (review 4): Rf to Og have a family only by their column of the table (Smits et al., Phys. Rep. 1035 (2023), section 6.6: Og may be a solid semiconductor, Cn may act as a noble gas)
 static void testSuperheavyFamilies() {
@@ -4676,6 +4688,10 @@ int main() {
     testAtomChip();
     testDensityProjection0541();
     testTrueShare0541();
+    testSliceAlone0910();
+    testOrthogonal0910();
+    testLevelClouds0910();
+    testRecoil0910();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

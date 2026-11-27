@@ -30,7 +30,7 @@ double refLamQed(int Z, int N, int lo, int lL, int jl, int hi, int lH, int jh) {
 
 // Guards (measured on the first run + 1 %, Linux GCC Release): printed below and in REPORT.md.
 // Lyman-alpha vs ASD, 220 (ion, component) pairs: worst share of Dirac's miss left 1.130910e-03 -> 1.1422e-3; hydrogen worst relative miss 2.451317e-09 -> 2.476e-9.
-constexpr double GUARD_LAMB_LEFT = 1.1422e-3, GUARD_LAMB_H = 2.476e-9;
+constexpr double GUARD_LAMB_LEFT = 1.1422e-3, GUARD_LAMB_H = 3.614e-11;   // (0.91.0: tightened, H measured 3.578091e-11 with the recoil of Eq. (3); was 2.476e-9)
 static void testLamb0493() {
     using namespace lamb0493;
     // ---- the generated table against the typed source rows (the tool's arithmetic and parsing) ----

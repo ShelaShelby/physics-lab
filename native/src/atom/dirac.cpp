@@ -39,7 +39,21 @@ double diracCorrectionEV(int Z, int n, int twoJ) {
     const double sm1 = c.t / (c.s + 1), a = sm1 * sm1 * (c.s + 2) / (2 * c.s), b = 0.5 * c.x2 * c.delta * (2.0 * n - c.delta) / (double(n) * n * c.k * c.k);
     return kMecEV * (a - b);
 }
-double diracEV(int Z, int N, int n, int twoJ) { return levelEV(Z, N, n) + diracCorrectionEV(Z, n, twoJ); }
+double diracMassRy(int Z, int n, int twoJ, double x, double alpha) {
+    // Eq. (3) over h c R_inf = m c^2 alpha^2 / 2: x Z^2 / N^2 - (m_r / m) x^2 Z^2 / n^2, m_r / m = 1 / (1 + x); N^2 = k^2 + (Z alpha)^2 with k = n_r + gamma (Core)
+    const Core c = core(Z, n, twoJ, alpha);
+    const double N2 = c.k * c.k + c.x2;
+    return x * double(Z) * Z / N2 - x * x * double(Z) * Z / ((1 + x) * double(n) * n);
+}
+double diracRecoilEV(int Z, int N, int n, int twoJ) {
+    // E_D + E_M = (E_NR,inf + corr) + m c^2 x (Z a)^2 / (2 N^2) - m_r c^2 x^2 (Z a)^2 / (2 n^2), and levelEV = E_NR,inf + m_r c^2 x (Z a)^2 / (2 n^2) (m - m_r = m_r x).
+    // The rest: (Z a)^2 c^2 x / 2 [m / N^2 - m_r (1 + x) / n^2] = m c^2 x (Z a)^2 / 2 (n^2 - N^2) / (n^2 N^2), and n^2 - N^2 = 2 n_r (Z a)^2 / (|kappa| + gamma)
+    // (from |kappa| - gamma = (Z a)^2 / (|kappa| + gamma)): m c^2 x (Z a)^4 n_r / (n^2 N^2 (|kappa| + gamma)).
+    const Core c = core(Z, n, twoJ);
+    const double ak = (twoJ + 1) * 0.5, nr = n - ak, gam = ak - c.delta, N2 = c.k * c.k + c.x2, x = 1 / nuclearMassMe(Z, N);
+    return kMecEV * x * c.x2 * c.x2 * nr / (double(n) * n * N2 * (ak + gam));
+}
+double diracEV(int Z, int N, int n, int twoJ) { return levelEV(Z, N, n) + diracCorrectionEV(Z, n, twoJ) + diracRecoilEV(Z, N, n, twoJ); }
 
 // ---- 0.49.3: the Lamb shift (see the header) ----
 namespace {
@@ -77,7 +91,7 @@ std::vector<DiracLine> diracLines(int Z, int N) {
     const double R = rydM(Z, N) * Z * Z;                                  // the same number specLines starts from
     double corr[kTop + 1][2 * kTop];                                      // corr[n][j2]: the relativistic correction of level (n, j2 / 2), eV
     for (int n = 1; n <= kTop; n++)
-        for (int j2 = 1; j2 < 2 * n; j2 += 2) corr[n][j2] = diracCorrectionEV(Z, n, j2);
+        for (int j2 = 1; j2 < 2 * n; j2 += 2) corr[n][j2] = diracCorrectionEV(Z, n, j2) + diracRecoilEV(Z, N, n, j2);   // (0.91.0: with the recoil beyond the reduced mass)
     auto shift = [&](int n, int l, int j2) { return corr[n][j2] + lambShiftEV(Z, n, l, j2); };   // the level minus its non-relativistic main term
     auto exists = [](int n, int l, int j2) { return l >= 0 && l < n && j2 >= 1 && (j2 == 2 * l + 1 || j2 == 2 * l - 1); };
     std::vector<DiracLine> out;

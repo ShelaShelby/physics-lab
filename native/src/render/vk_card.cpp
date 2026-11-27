@@ -29,6 +29,7 @@
 #include "r2d_classic_comp.h"
 #include "r2d_nucdens_comp.h"
 #include "r2d_jump_comp.h"
+#include "r2d_dirac_comp.h"
 #include "r2d_moldots_comp.h"
 #include "r2d_cgrid_vert.h"
 #include "r2d_mgrid_vert.h"
@@ -1271,11 +1272,11 @@ public:
     explicit AtomCardVk(VkCards& c) : c_(c) {}
     ~AtomCardVk() override { reset(); }
     bool build(int which, KerrSteps* steps, std::string& why) override {
-        which &= 1;
+        which = which == kDirac ? kDirac : (which & 1);
         if (k_[which].pipe) return true;
         const std::string name = programName(which), cName = "compile " + name, lName = "link " + name;
-        const std::uint32_t* w = which == kSlice ? k_r2d_slice_comp : k_r2d_jump_comp;
-        const std::size_t bytes = which == kSlice ? sizeof k_r2d_slice_comp : sizeof k_r2d_jump_comp;
+        const std::uint32_t* w = which == kSlice ? k_r2d_slice_comp : which == kDirac ? k_r2d_dirac_comp : k_r2d_jump_comp;
+        const std::size_t bytes = which == kSlice ? sizeof k_r2d_slice_comp : which == kDirac ? sizeof k_r2d_dirac_comp : sizeof k_r2d_jump_comp;
         // on Vulkan the text was compiled at build time: "compile" makes the shader module from its SPIR-V, "link" the pipeline
         if (steps) steps->begin(cName);
         double t = nowS();
@@ -1286,13 +1287,13 @@ public:
         if (!good) { why = "the SPIR-V of " + name + " is broken: " + w2; return false; }
         if (steps) steps->begin(lName);
         t = nowS();
-        const bool forced = forcedFail(which == kSlice ? "slice" : "jump");
+        const bool forced = forcedFail(which == kSlice || which == kDirac ? "slice" : "jump");
         const bool made = !forced && c_.makeKernel(w, bytes, k_[which], w2);
         if (steps) steps->end(lName, std::string(made ? "the pipeline made" : "FAILED") + " in " + msText(nowS() - t) + (made ? std::string() : ": " + (forced ? std::string("made to fail on purpose (PL_VK_CARDFAIL)") : w2)));
         if (!made) { why = forced ? std::string("the pipeline of ") + name + " was made to fail on purpose (PL_VK_CARDFAIL)" : "the Vulkan driver did not make the pipeline of " + name; return false; }
         return true;
     }
-    bool built(int which) const override { return k_[which & 1].pipe != VK_NULL_HANDLE; }
+    bool built(int which) const override { return k_[which == kDirac ? kDirac : (which & 1)].pipe != VK_NULL_HANDLE; }
     void reset() override {
         while (!jobs_.empty()) release(jobs_.back().id);
         for (VkCards::Kernel& k : k_) c_.dropKernel(k);
@@ -1300,8 +1301,9 @@ public:
         jumpEpoch_ = 0; jumpN_ = 0; fenceTicket_ = 0;
         sliceReady_ = jumpReady_ = sliceUsed_ = false;
     }
+    // (0.91.0: up to 16 batches at once, was 8: the start-up check runs the Slice's 7 planes and its Dirac program's 6 together)
     int beginSlice(const SliceDotsJob& s) override {
-        if (!built(kSlice) || !c_.ok() || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || s.stride < 3 || s.stride > 4 || s.first < 0 || s.first > s.stride - 3 || jobs_.size() >= 8) return 0;
+        if (!built(kSlice) || !c_.ok() || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || s.stride < 3 || s.stride > 4 || s.first < 0 || s.first > s.stride - 3 || jobs_.size() >= 16) return 0;
         firstBatch();
         Job j;
         j.id = nextId_++;
@@ -1328,6 +1330,28 @@ public:
         return good ? JobState::Done : JobState::Failed;
     }
     void cancelSlice(int job) override { release(job); }
+    // 0.91.0: a Dirac state's Slice attempts (shaders.h kDiracSliceCS): its table in a host-visible buffer of the job, the same 4 floats an attempt as beginSlice
+    int beginDirac(const DiracSliceJob& s) override {
+        if (!built(kDirac) || !c_.ok() || s.tries <= 0 || s.tries > (1 << 20) || s.n < 2 || int(s.tab.size()) != 4 * s.n || s.L < 0 || s.L > 8 ||
+            (s.stride != 2 && s.stride != 3) || (s.keep && s.stride != 3) || jobs_.size() >= 16) return 0;
+        firstBatch();
+        Job j;
+        j.id = nextId_++;
+        j.bytes = static_cast<long>(s.tries) * 16;
+        const std::size_t tb = s.tab.size() * sizeof(float);
+        if (!c_.makeBuffer(VkDeviceSize(j.bytes), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.out, "the Slice's Dirac dots") ||
+            !c_.makeBuffer(VkDeviceSize(tb), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.in, "the Slice's Dirac table")) { c_.dropBuffer(j.out); c_.dropBuffer(j.in); return 0; }
+        std::memcpy(j.in.map, s.tab.data(), tb);               // (host-visible: the processor's writes are seen by the batch submitted after them)
+        VkUniforms& u = k_[kDirac].u;
+        u.u("uSeed", &s.seed, 1); u.i("uTries", &s.tries, 1); u.i("uAxis", &s.axis, 1); u.f("uOff", &s.off, 1); u.f("uA", &s.a, 1); u.f("uTail0", &s.tail0, 1);
+        u.i("uL", &s.L, 1); u.i("uKeep", &s.keep, 1); u.i("uStride", &s.stride, 1); u.i("uN", &s.n, 1);
+        if (!c_.dispatch(k_[kDirac], {&j.out, &j.in}, static_cast<std::uint32_t>((s.tries + 63) / 64))) { c_.dropBuffer(j.out); c_.dropBuffer(j.in); return 0; }
+        c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
+        j.ticket = c_.flush(false);
+        if (!j.ticket) { c_.dropBuffer(j.out); c_.dropBuffer(j.in); return 0; }
+        jobs_.push_back(j);
+        return j.id;
+    }
     bool jumpGroups(const unsigned char* fixedGroups, long jn, std::uint64_t epoch, std::uint64_t t0, std::uint64_t t1) override {
         if (!built(kJump) || !c_.ok() || jn <= 0 || !fixedGroups) return false;
         const long bytes = (2 * jn + 3) / 4 * 4;
@@ -1350,7 +1374,7 @@ public:
     unsigned jumpGroupsBuffer() const override { return out_.b ? 1u : 0u; }
     VkBuffer vkJump() const { return out_.b; }
     int beginJumpRead(const unsigned char* fixedGroups, long jn, std::uint64_t t0, std::uint64_t t1) override {
-        if (!built(kJump) || !c_.ok() || jn <= 0 || !fixedGroups || jobs_.size() >= 8) return 0;
+        if (!built(kJump) || !c_.ok() || jn <= 0 || !fixedGroups || jobs_.size() >= 16) return 0;
         const long bytes = (2 * jn + 3) / 4 * 4;
         std::vector<unsigned char> padded(fixedGroups, fixedGroups + 2 * jn);
         padded.resize(static_cast<std::size_t>(bytes), 255);
@@ -1399,7 +1423,7 @@ private:
         return c_.dispatch(k_[kJump], {&fixedBuf, &outBuf}, static_cast<std::uint32_t>((words + 63) / 64));
     }
     VkCards& c_;
-    VkCards::Kernel k_[2];
+    VkCards::Kernel k_[3];
     std::vector<Job> jobs_;
     int nextId_ = 1;
     VkCards::Buf fixed_, out_;

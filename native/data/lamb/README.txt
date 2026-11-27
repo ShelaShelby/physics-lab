@@ -5,6 +5,9 @@ reference, URL, date read and sha256. Where a test reads one, its extract (<name
 [0.84.1] The Dirac energy that atom/dirac.h uses is printed in the saved Yerokhin & Shabaev source (Hlike8.tex, Equations (2)-(4), and the DIRAC rows of the
 energy table). Extract: yerokhin_shabaev_2015_dirac.extract.txt (native/PLAN_REVIEW.md).
 
+[0.91.0] The recoil correction E_M (Hlike8.tex, Equation (3)) is the nucleus's recoil in every Dirac level (atom/dirac.h diracRecoilEV); its table's MASS and TOTAL
+rows for H and He+ are the tests' references. Extract: yerokhin_shabaev_2015_recoil.extract.txt.
+
 The Lamb shift of the one-electron atoms (0.49.3: the Atom Lab's Dirac levels and lines for n = 1 and 2).
 
 yerokhin_shabaev_1506.01885_source.tar.gz

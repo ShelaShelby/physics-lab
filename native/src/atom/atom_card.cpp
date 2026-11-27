@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include "atom/atom_core.h"
+#include "atom/dirac_cloud.h"
 
 namespace atom {
 
@@ -122,6 +123,96 @@ std::vector<SliceCheckCase> sliceCheckCases() {
             // larger state's: kExt[5] / Z), each state with a superposition's numbering (the number 4t chooses the state, 4t + 1 .. 4t + 3 are the attempt's)
             {101, orbIndex("2p|z"), 1, -0.5 * 0.5 * kExt[5] / 101.0, 0x13579BDFu, 4096, 4, 1},
             {101, orbIndex("5f|z3"), 1, -0.5 * 0.5 * kExt[5] / 101.0, 0x13579BDFu, 4096, 4, 1}};
+}
+
+// ---- 0.91.0: the Slice of a Dirac state on the card ----
+render::DiracSliceJob diracJobOf(const DiracCase& c) {
+    render::DiracSliceJob j;
+    const int kappa = diracKappa(c.l, c.j2);
+    const DiracPlaneTable t = diracPlaneTable(c.Z, c.n, kappa);
+    const double a = std::fabs(c.off), c0 = diracPlaneCdf(c.Z, c.n, kappa, a);
+    if (!(c0 < 1)) return j;                                               // (tries 0: nothing on this plane)
+    j.seed = c.seed; j.tries = c.tries; j.axis = c.axis; j.off = float(c.off); j.a = float(a); j.tail0 = float(1 - c0);
+    j.L = (c.j2 - 1) / 2; j.keep = !(c.round || j.L == 0) ? 1 : 0; j.stride = j.keep ? 3 : 2;
+    j.n = int(t.r->size());
+    j.tab.resize(std::size_t(4 * j.n));
+    for (int i = 0; i < j.n; i++) {
+        const std::size_t k = std::size_t(i);
+        j.tab[4 * k] = float((*t.r)[k]); j.tab[4 * k + 1] = float(1 - (*t.pc)[k]); j.tab[4 * k + 2] = float(-(*t.pd)[k]); j.tab[4 * k + 3] = 0.f;
+    }
+    return j;
+}
+
+// THE LIMITS of a Dirac attempt (written before any card's result was looked at; eps = 2^-24, the processor's own unit 2^-53):
+//  1. the target tail T = (1 - c0)(1 - u): 1 - c0 and 1 - u rounded once each, the product once: 3 eps T. The processor's own U = c0 + u (1 - c0) and its
+//     Hermite values err by about 8 2^-53 (2 + |d0 h| + |d1 h|) in absolute terms (its distribution function is near 1 there): dT = 3 eps T + that.
+//  2. the cubic in the tail at the card: each of the four stored values rounded once (eps), the weights from s = (m - x0) / h (the nodes x0, h rounded:
+//     a shift of the whole cubic by about 4 eps r), about 10 operations: dH = 14 eps S, S = |T0| + |T1| + |D0 h| + |D1 h| of the segment.
+//  3. the root: the cubic falls with slope |H'(r)| (its derivative at the processor's root, from the processor's table): dr = 2 (dT + dH) / |H'| + 6 eps r
+//     + 2^-22 r (the bisection stops within 2 ulp; the factor 2 for the slope's change, as compareSlice's).
+//  4. rho^2 = rk^2 - a^2 (a = |off| rounded once): dD = 2 rk dr + dr^2 + 4 eps (rk^2 + a^2); rho = sqrt: drho = min(sqrt dD, dD / rho) + 10 eps rho.
+//  5. cos and sin of the turn as compareSlice step 5 (dcs); a coordinate rho cos: dq = drho + rho dcs + 2 eps rho; the plane's coordinate: eps |off|.
+//  6. kept or not: the card compares K = k3 2^-32 (rounded once) with w = (1 - cz^2)^L, cz = z / rk: dcz = (dq + |cz| dr) / rk + 3 eps; dw = 2 L |cz| dcz
+//     (1 - cz^2)^(L - 1) + (2 L + 2) eps. A differing answer is explained when |K - w| <= dw + 2 eps.
+SliceCompare compareDirac(const DiracCase& c, const std::vector<float>& res) {
+    constexpr double pi = 3.14159265358979323846;
+    SliceCompare out;
+    const render::DiracSliceJob j = diracJobOf(c);
+    if (j.tries <= 0 || int(res.size()) < 4 * j.tries) return out;
+    const int kappa = diracKappa(c.l, c.j2);
+    const DiracPlaneTable t = diracPlaneTable(c.Z, c.n, kappa);
+    const std::vector<double>& gx = *t.r; const std::vector<double>& gc = *t.pc; const std::vector<double>& gd = *t.pd;
+    const double a = std::fabs(c.off), tail0 = 1 - diracPlaneCdf(c.Z, c.n, kappa, a);
+    const double dcs = 4 * pi * kEps + 2.6e-8 + 6 * kEps, u53 = std::ldexp(1.0, -53);
+    for (int k = 0; k < j.tries; k++) {
+        orbit::Mulberry32 r(mulberryAfter(c.seed, std::uint64_t(j.stride) * std::uint64_t(k)));
+        orbit::Mulberry32 r2 = r;
+        const double u = r2.next(); r2.next(); const double K = j.keep ? r2.next() : 0.0;
+        double x = 0, y = 0, z = 0;
+        const bool kept = tryDiracOnPlane(c.Z, c.n, c.l, c.j2, c.round, c.axis, c.off, r, x, y, z);
+        const double rk = std::sqrt(x * x + y * y + z * z), rho = std::sqrt(std::max(0.0, rk * rk - a * a));
+        const float* g = &res[std::size_t(4 * k)];
+        const int gw = g[3] > 0.5f ? 1 : g[3] < -0.5f ? -1 : 0, cw = kept ? 1 : 0;
+        out.tries++;
+        out.kept += cw;
+        // 1-3: the radius
+        const double T = tail0 * (1 - u);
+        std::size_t hi = std::size_t(std::upper_bound(gc.begin(), gc.end(), 1 - T) - gc.begin());
+        hi = std::max<std::size_t>(1, std::min(hi, gx.size() - 1));
+        const std::size_t lo = hi - 1;
+        const double h = gx[hi] - gx[lo], T0 = 1 - gc[lo], T1 = 1 - gc[hi], D0 = -gd[lo], D1 = -gd[hi], s = std::min(1.0, std::max(0.0, (rk - gx[lo]) / h));
+        const double S = std::fabs(T0) + std::fabs(T1) + std::fabs(D0 * h) + std::fabs(D1 * h);
+        const double slope = std::fabs(((6 * s * s - 6 * s) * T0 + (3 * s * s - 4 * s + 1) * D0 * h + (-6 * s * s + 6 * s) * T1 + (3 * s * s - 2 * s) * D1 * h) / h);
+        const double dT = 3 * kEps * T + 8 * u53 * (2 + std::fabs(D0 * h) + std::fabs(D1 * h)), dH = 14 * kEps * S;
+        const double dr = (slope > 0 ? 2 * (dT + dH) / slope : 1e30) + 6 * kEps * rk + std::ldexp(1.0, -22) * rk;
+        // 4-5: the point
+        const double dD = 2 * rk * dr + dr * dr + 4 * kEps * (rk * rk + a * a);
+        const double drho = std::min(std::sqrt(dD), rho > 0 ? dD / rho : 1e30) + 10 * kEps * rho;
+        const double lim = drho + rho * dcs + 2 * kEps * rho + kEps * a;
+        const double e = std::max({std::fabs(double(g[0]) - x), std::fabs(double(g[1]) - y), std::fabs(double(g[2]) - z)});
+        if (!(e <= lim)) out.pointBad++;
+        out.worstRatio = std::max(out.worstRatio, lim > 0 ? e / lim : (e > 0 ? 1e30 : 0));
+        if (gw == 1 && cw == 1) { out.bothKept++; out.worstAbs = std::max(out.worstAbs, e); }
+        if (gw != cw) {
+            out.flagDiff++;
+            if (gw >= 0 && j.keep && rk > 0) {
+                const double cz = z / rk, w0 = std::max(0.0, 1 - cz * cz), w = std::pow(w0, j.L);
+                const double dcz = (lim + std::fabs(cz) * dr) / rk + 3 * kEps;
+                const double dw = 2 * j.L * std::fabs(cz) * dcz * (j.L > 1 ? std::pow(w0, j.L - 1) : 1.0) + (2 * j.L + 2) * kEps;
+                if (std::fabs(K - w) <= dw + 2 * kEps) out.flagExplained++;
+            }
+        }
+    }
+    return out;
+}
+
+std::vector<DiracCase> diracCheckCases() {
+    // the benchmark's state (atom.slice_dirac_drag: uranium 4f, j = 7/2 lined up) on the cut at -0.9, 0 and +0.4 of the view (off = cut x kExt[4] / 2 / Z, as
+    // sliceCheckCases), hydrogen 3d5/2 on a plane far out (its tail), uranium 1s round near the nucleus, and 2p1/2 (j = 1/2: no keep test)
+    const double half4 = 0.5 * kExt[4] / 92.0;
+    return {{92, 4, 3, 7, false, 1, -0.9 * half4, 0x9E3779B9u, 4096}, {92, 4, 3, 7, false, 1, 0.0, 0x01234567u, 4096},
+            {92, 4, 3, 7, false, 2, 0.4 * half4, 0xDEADBEEFu, 4096}, {1, 3, 2, 5, false, 1, 30.0, 0x00C0FFEEu, 4096},
+            {92, 1, 0, 1, true, 2, 0.004, 0x5A5A5A5Au, 4096}, {79, 2, 1, 1, false, 1, 0.02, 0x13579BDFu, 4096}};
 }
 
 std::vector<JumpCheckCase> jumpCheckCases() { return {{20000, 0.5}, {20000, 0.0137}, {7, 0.9}}; }

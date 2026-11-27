@@ -115,6 +115,8 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
         steps[which].which = which;
         std::string why;
         if (!C.build(which, &steps[which], why)) { G.finished(false, why); off(which, why); return; }
+        // 0.91.0: the Slice's Dirac program with it (the same guard and check)
+        if (which == 0 && !C.build(render::AtomCard::kDirac, &steps[which], why)) { G.finished(false, why); off(which, why); return; }
         P.step = 1;
         return;
     }
@@ -147,6 +149,7 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
         P.nJobs = 0; P.doneJobs = 0; P.allOk = true; P.check.clear(); P.worst.clear();
         if (which == 0) {
             for (const SliceCheckCase& k : sliceCheckCases()) P.jobs[P.nJobs++] = C.beginSlice(sliceJobOf(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, k.tries, k.stride, k.first));
+            for (const DiracCase& k : diracCheckCases()) P.jobs[P.nJobs++] = C.beginDirac(diracJobOf(k));   // 0.91.0
         } else {
             g_jumpFixed.clear();
             for (const JumpCheckCase& k : jumpCheckCases()) {
@@ -162,7 +165,7 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
     if (P.step == 3) {
         long tries = 0, kept = 0, both = 0, diff = 0, expl = 0, bad = 0, dots = 0, wrong = 0;
         double ratio = 0, worstAbs = 0;
-        static SliceCompare acc[8];
+        static SliceCompare acc[16];
         static long jumpWrong[8], jumpDots[8];
         for (int i = 0; i < P.nJobs; i++) {
             if (P.jobs[i] == 0) continue;                                    // (already compared)
@@ -172,7 +175,13 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
             if (st == render::JobState::Pending) continue;
             P.jobs[i] = 0; P.doneJobs++;
             if (st == render::JobState::Failed) { P.allOk = false; P.worst = "a batch failed on the card"; continue; }
-            if (which == 0) {
+            const std::size_t nSlice = sliceCheckCases().size();
+            if (which == 0 && std::size_t(i) >= nSlice) {                  // 0.91.0: a Dirac case
+                const DiracCase k = diracCheckCases()[std::size_t(i) - nSlice];
+                acc[i] = compareDirac(k, res);
+                if (!acc[i].ok()) P.allOk = false;
+                std::printf("PLATOMCARDCASE dirac %d Z=%d %d%c j2=%d %s axis=%d off=%.4f: %s\n", i, k.Z, k.n, "spdf"[k.l], k.j2, k.round ? "round" : "lined up", k.axis, k.off, sliceCompareText(acc[i]).c_str());
+            } else if (which == 0) {
                 const SliceCheckCase k = sliceCheckCases()[std::size_t(i)];
                 acc[i] = compareSlice(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, res, k.tries, k.stride, k.first);
                 if (!acc[i].ok()) P.allOk = false;

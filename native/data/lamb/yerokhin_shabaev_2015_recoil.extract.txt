@@ -1,0 +1,44 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/lamb/yerokhin_shabaev_1506.01885_source.tar.gz
+# Reference: V. A. Yerokhin, V. M. Shabaev, "Lamb shift of n = 1 and n = 2 states of hydrogen-like atoms, 1 <= Z <= 110", J. Phys. Chem. Ref. Data 44, 033103 (2015), arXiv:1506.01885; the original is the paper's LaTeX source (tar.gz), file Hlike8.tex
+# URL: https://arxiv.org/e-print/1506.01885
+# Date read: 2026-11-26
+# sha256 of the original: 2dd448e774a1ac5fd8ea8945fc88c1e71a006845a8710e9fa1a8798e4a95995c
+# Place in the original: Hlike8.tex: Equation (3) (the leading recoil correction E_M) with the words after it; the constant alpha (section Tabulations); the energy table, Z = 1 and 2 (rows DIRAC, MASS, LAMB, TOTAL)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/atom/dirac.h diracRecoilEV (0.91.0: the recoil beyond the reduced mass); tests/test_atom0910.inc testRecoil0910 (the MASS and TOTAL rows of H and He+)
+#--- begin Equation (3)
+The leading recoil correction $E_{\rm M}$ is written as
+\begin{align} \label{eq3}
+E_{\rm M} =&\ \frac{m^2c^4 - \vare_D^2}{2Mc^2} - \left[ m_r - m + \frac{m^2}{M}\right]c^2\,\frac{(\Za)^2}{2n^2}
+ \nonumber \\
+=&\  mc^2\,\frac{m}{M}\frac{(\Za)^2}{2N^2} - m_r c^2 \,\left( \frac{m}{M}\right)^2 \,
+   \frac{(\Za)^2}{2n^2}\,,
+\end{align}
+where $\vare_D = mc^2+ E_D$ and $m_r = mM/(m+M)$ is the reduced mass of the electron. $E_M$
+consists of two parts. The first part is the first-order (in $m/M$) recoil correction as derived
+from the Breit equation \cite{shabaev:85}, whereas the second part is the nonrelativistic
+reduced-mass correction of second and higher orders in $m/M$.
+#--- end
+#--- begin alpha
+\alpha^{-1} &\ = 137.035\,999\,074\,(44)\,,\\
+#--- end
+#--- begin Table, Z = 1
+  $Z = 1,\ \mbox{\rm $^{1}$H },\  R = 0.8775\,(51)\ \mbox{\rm fm},\  M/m = 1836.1526724\,(8)$}
+ \\[2pt]
+%
+DIRAC & -1.000013x3131931 & 0.750009x1528147 & 0x & 0.000003x328320432\,(2) \\
+MASS & 0.000544x3205755\,(2) & -0.000408x2386190\,(2) & 0x & -0.000000x001812648 \\
+LAMB & 0.000002x4842735\,(43) & -0.000002x1666270\,(43) & -0.000000x32154868\,(54) & 0.000000x007707557\,(33) \\
+TOTAL & -0.999466x5083441\,(43) & 0.749598x7475687\,(43) & -0.000000x32154868\,(54) & 0.000003x334215341\,(33) \\
+#--- end
+#--- begin Table, Z = 2
+  $Z = 2,\ \mbox{\rm $^{4}$He},\  R = 1.6755\,(28)\ \mbox{\rm fm},\  M/m = 7294.299529\,(3)$}
+ \\[2pt]
+%
+DIRAC & -4.000213x028107 & 3.000146x456469 & 0x & 0.000053x25844480\,(3) \\
+MASS & 0.000548x298255 & -0.000411x216390 & 0x & -0.000000x00730118 \\
+LAMB & 0.000032x734903\,(77) & -0.000028x528934\,(78) & -0.000004x2681250\,(97) & 0.000000x12330461\,(80) \\
+TOTAL & -3.999631x994949\,(77) & 2.999706x711145\,(78) & -0.000004x2681250\,(97) & 0.000053x37444822\,(80) \\
+#--- end

@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.91.0", "Atom Lab: more level clouds, the outer electron alone in the Slice, the Dirac Slice on the graphics card, hydrogen's recoil",
+     "Level clouds: the calculations of calcium, zinc, strontium, cadmium, barium, mercury and radium were run again with more ways to start an orbital. New clouds: zinc's 4s5s, "
+     "strontium's 5s4d 3D1, 5s6f and 4d5p 3P, calcium's 4s6d 3D3 and mercury's 6s7d. A new check rejects an orbital with too many nodes: cadmium's 5d levels lose the clouds "
+     "they had, because their 5d j = 5/2 orbital had one node too many. The levels that still have no cloud (calcium's and barium's lowest d levels, mercury's 6s7s, 6s7p and "
+     "6s6d, cadmium's 6d and 7d, radium's 7s8s, 7s9s, 7s5f and 7s8p, calcium's 4p2 1D) say why. Slice: a new choice, Outer electron's dots: \"Outer electron alone\", draws only the outer "
+     "electron's dots, so its shape is clear (sodium's 3d). The Slice of a Dirac state is now made on the graphics card, with the same dots as before (the processor stays "
+     "the reference and the fallback). Hydrogen and the one-electron ions: the energy levels now include the recoil of the nucleus beyond the reduced mass (Yerokhin and "
+     "Shabaev 2015): hydrogen's 2s and 2p j = 1/2 levels move up by 2.5e-8 eV, and its 2p fine structure is no longer 0.054 % too wide."},
     {"0.90.0", "More work on the graphics card: the vibrating surface, the Glow's core, the Orbit Lab's dotted orbits",
      "Molecule Lab: the Density surface of a vibrating molecule is now made on the graphics card for each new phase, the same surface as before. Atom Lab: the Glow's pass that "
      "finds the dots near the cores (for the exposure's cap and the jump) now runs on the graphics card; the processor checks only the dots it found, so the result is the same. "

@@ -16,9 +16,9 @@ std::string idOf(const char* prefix, const char* text) {
 }
 }  // namespace
 
-std::string sliceShaderId() { return idOf("slice", kSliceDotsCS); }
+std::string sliceShaderId() { return idOf("slice", (std::string(kSliceDotsCS) + kDiracSliceCS).c_str()); }   // 0.91.0: the Slice's guard covers its Dirac program too
 std::string jumpShaderId() { return idOf("jump", kJumpShowCS); }
 
-const char* AtomCard::programName(int which) { return which == kSlice ? "the Slice's dots shader" : "the jump's groups shader"; }
+const char* AtomCard::programName(int which) { return which == kSlice ? "the Slice's dots shader" : which == kDirac ? "the Slice's Dirac dots shader" : "the jump's groups shader"; }
 
 }  // namespace render

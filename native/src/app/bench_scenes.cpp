@@ -76,9 +76,9 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "atom.emit_all", BenchKind::Atom, atom::kBenchEmitAll, "Atom Lab, Emit and Absorb in turn with every electron",
             "The heaviest atom with level clouds (radium-226), Cloud 3D, every electron, Shells enlarged, Glow, Ultra, zoom 0: Emit and Absorb pressed in turn every "
             "0.5 s; a jump still in flight is ended and an absorbed photon lands at once, so each press starts a jump. The camera turning 0.8 rad a second.");
-        add(true, "molecule.live_hot", BenchKind::MoleculeLiveHot, -1, "Molecule Lab, the largest molecule live at 1,500 K, the camera turning",
-            "benzene (12 atoms, the most of the molecules with vibrations), Live at 1,500 K (every mode at once), Space-filling (Density does not offer Live; "
-            "the heavier of Ball and stick and Space-filling, REPORT 0.83.0), zoom x4, the camera turning 0.8 rad a second.");
+        add(true, "atom.slice_dense", BenchKind::Atom, atom::kBenchSliceDense, "Atom Lab, the Slice's outer electron alone, the cut dragged",
+            "0.91.0: sodium-23, every electron, its outer electron put in 3d, Slice view, Outer electron's dots: Outer electron alone (every dot the outer electron's), Glow, "
+            "Ultra (the most dots), zoom 0: the cut moves 0.01 every frame from -0.90 to +0.90 and back, as atom.slice_drag.");
         add(true, "ui.settings_over_blackhole", BenchKind::UiSettingsOverBlackHole, -1, "Panels, Settings over the Black Hole Lab's moving gas, scrolled",
             "blackhole.moving_gas's view (spin 0.9, the streaks and the clump at the fastest rate, 10 GM/c\xC2\xB2, 60\xC2\xB0, turning) with the Settings page open "
             "over it and scrolled down and up every 2.6 s. The picture keeps drawing behind Settings.");
@@ -104,6 +104,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "Lighting True sunlight, Stars Full, 3D, true scale, Neptune followed from the closest zoom (1.5 of its radii): the exposure set for Neptune shows the "
             "most stars (about 2,900 of the catalogue's; their number does not depend on the zoom), each by its true light. The camera turns 0.5 rad a second as a user drags.");
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
+        // 0.91.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026: 1 % low 684.4 fps in bench_0.85.2, at least 1.5 x 255 Hz) to make room for atom.slice_dense
+        add(false, "molecule.live_hot", BenchKind::MoleculeLiveHot, -1, "Molecule Lab, the largest molecule live at 1,500 K, the camera turning",
+            "benzene (12 atoms, the most of the molecules with vibrations), Live at 1,500 K (every mode at once), Space-filling (Density does not offer Live; "
+            "the heavier of Ball and stick and Space-filling, REPORT 0.83.0), zoom x4, the camera turning 0.8 rad a second.");
         add(false, "orbit.saturn", BenchKind::OrbitSaturn, -1, "Orbit Lab, Saturn close up, the camera turning",
             "Saturn followed, true scale, 3D, zoom 4.1 (log10, the control goes to 5.5; the rings and part of the planet fill the picture), the camera turning 0.5 rad a "
             "second and tilting, time stopped. The rings from Cassini's profile, per pixel on the graphics card (Vulkan) once its check passed; the planet's map and its shadow on the rings.");

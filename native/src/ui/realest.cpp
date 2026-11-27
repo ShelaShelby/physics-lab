@@ -53,6 +53,7 @@ const std::vector<Row>& table() {
         {"atom", {"rscale", atom::realisticValue("rscale"), "every electron at its real distance from the nucleus; Shells enlarged spreads the inner shells out so they can be seen."}},   // 0.46 (review A1): was missing, so Most realistic left the shells enlarged
         {"atom", {"hrel", atom::realisticValue("hrel"), "a real one-electron ion obeys Dirac's equation: its cloud is the Dirac state (n, l, j) at every Z, not the non-relativistic orbital."}},   // 0.49.3
         {"atom", {"vdots", atom::realisticValue("vdots"), "each electron gets its true share of the dots, so the outer electron is 1 in Z of them; Easier to see draws it denser so it and its jumps stand out."}},   // 0.54.1
+        {"atom", {"sdots", atom::realisticValue("sdots"), "the Slice gives each electron its true share of the dots; Outer electron alone shows one electron's cloud without the core."}},   // 0.91.0
         {"atom", {"mrel", atom::realisticValue("mrel"), "real electrons obey Dirac's equation: heavy atoms have smaller s and p shells and larger d and f than the non-relativistic picture."}},   // 0.41
         // ---- Molecule Lab ----
         {"molecule", {"style", "Density", "the electron density calculated from quantum mechanics (B3LYP); Ball-and-stick and Space-filling are models."}},

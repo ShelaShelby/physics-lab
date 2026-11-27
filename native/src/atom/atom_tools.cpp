@@ -87,6 +87,7 @@ const MadeUp kMadeUp[] = {
 const std::pair<const char*, const char*> kRealistic[] = {
     {"picture", "Cloud 3D"}, {"ostyle", "Modern"}, {"scale", "Fixed"}, {"qstyle", "Accurate"}, {"detail", "+ Sea"}, {"style", "Density"}, {"cstyle", "Glow"}, {"cdens", "Ultra"},
     {"phase", "Wheel"}, {"dirac", "On"}, {"elec", "All"}, {"rscale", "True scale"}, {"mrel", "Relativistic"}, {"hrel", "Dirac"}, {"vdots", "True share"},
+    {"sdots", "True share"},   // 0.91.0
 };
 }  // namespace
 bool madeUpChoice(const std::string& key, const std::string& value) {

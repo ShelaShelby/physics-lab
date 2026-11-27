@@ -54,7 +54,7 @@ bool AtomLab::validChoice(const std::string& key, const std::string& v) {
         {"pAx2", {"x", "y", "z", "m+1", "m-1"}}, {"dAx2", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
         {"fAx2", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}},
         {"orb2", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f", "5s", "5p", "5d", "5f", "6s", "6p", "6d", "6f"}}, {"super", {"Off", "On"}}, {"cutAxis", {"Vertical", "Horizontal"}},
-        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"phase", {"Sign", "Wheel"}}, {"cdens", {"Normal", "High", "Ultra"}}, {"dirac", {"Off", "On"}}, {"hrel", {"Auto", "Dirac", "Non-relativistic"}}, {"hj", {"l + 1/2", "l - 1/2"}}, {"elec", {"Hydrogen-like", "All"}}, {"mrel", {"Relativistic", "Non-relativistic"}}, {"show", {"Whole atom", "One orbital"}}, {"rscale", {"Shells enlarged", "True scale"}}, {"vdots", {"Easier to see", "True share"}},
+        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"phase", {"Sign", "Wheel"}}, {"cdens", {"Normal", "High", "Ultra"}}, {"dirac", {"Off", "On"}}, {"hrel", {"Auto", "Dirac", "Non-relativistic"}}, {"hj", {"l + 1/2", "l - 1/2"}}, {"elec", {"Hydrogen-like", "All"}}, {"mrel", {"Relativistic", "Non-relativistic"}}, {"show", {"Whole atom", "One orbital"}}, {"rscale", {"Shells enlarged", "True scale"}}, {"vdots", {"Easier to see", "True share"}}, {"sdots", {"True share", "Outer electron alone"}},
         {"jfrom", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f", "5s", "5p", "5d", "5f", "6s", "6p", "6d", "6f"}}, {"jto", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f", "5s", "5p", "5d", "5f", "6s", "6p", "6d", "6f"}}};
     const auto it = opts.find(key);
     return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
@@ -155,7 +155,8 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "dirac") p.dirac = v;
     else if (key == "hrel") p.hrel = v;     // 0.49.3
     else if (key == "hj") p.hj = v;
-    else if (key == "vdots") { if (validChoice(key, v)) p.vdots = v; else return; }   // 0.54.1
+    else if (key == "vdots") { if (validChoice(key, v)) p.vdots = v; else return; }
+    else if (key == "sdots") { if (validChoice(key, v)) p.sdots = v; else return; }   // 0.91.0   // 0.54.1
     else if (key == "jfrom") p.jfrom = v;
     else if (key == "jto") p.jto = v;
     else if (key == "phase") p.phase = v;
@@ -187,7 +188,7 @@ void AtomLab::onParam(const std::string& key) {
         if (!(superOn() && overlap_)) return;
     }
     if ((key == "orb2" || key == "pAx2" || key == "dAx2" || key == "fAx2") && p.super != "On") return;    // (nothing shown depends on them while the superposition is off)
-    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens", "super", "orb2", "pAx2", "dAx2", "fAx2", "elec", "show", "rscale", "mrel", "hrel", "hj", "vdots"};   // a new density refills the cloud
+    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens", "super", "orb2", "pAx2", "dAx2", "fAx2", "elec", "show", "rscale", "mrel", "hrel", "hj", "vdots", "sdots"};   // a new density refills the cloud
     if (key == "mix" || std::find(std::begin(reinit), std::end(reinit), key) != std::end(reinit)) {
         const AtomState keep = s;
         init();
@@ -305,7 +306,7 @@ int AtomLab::manySubOf(const hf::Atom& a) const {
 
 // ---- 0.46 (B3): the jumps of the one-valence-electron atoms (alkali.h) ----
 static bool manyDot(const AtomLab& L, const hf::Atom& a, int one, int vi, const GraspLevel* gl, const hf::Plane* plane, int axis, orbit::Mulberry32& r, double& x, double& y, double& z, int& shell,
-                    const std::vector<int>* vset = nullptr);
+                    const std::vector<int>* vset = nullptr, bool alone = false);
 static int valenceSub(const AtomLab& L, const hf::Atom& a);
 static std::vector<int> levelValenceSet(const AtomLab& L, const hf::Atom& a);
 bool AtomLab::valenceOn() const {                               // 0.47.2: relativistic: the GRASP clouds (Fr has only these); non-relativistic: the frozen-core orbitals of 0.46
@@ -632,7 +633,34 @@ static void valenceDir(int l, orbit::Mulberry32& r, double& ux, double& uy, doub
     ux = sz * std::cos(ph); uy = sz * std::sin(ph); uz = cz;
 }
 static bool manyDot(const AtomLab& L, const hf::Atom& a, int one, int vi, const GraspLevel* gl, const hf::Plane* plane, int axis, orbit::Mulberry32& r, double& x, double& y, double& z, int& shell,
-                    const std::vector<int>* vset) {
+                    const std::vector<int>* vset, bool alone) {
+    if (plane && alone && one < 0 && (vi >= 0 || (vset && !vset->empty()))) {
+        // 0.91.0, the Slice's "Outer electron alone": every dot is the outer electron's (an alkali's one outer subshell, or a level atom's outer subshells picked by their mass
+        // on the plane, so the kept dots have their summed density there). Its radius on the plane exactly as samplePlane draws it; its shape as the whole-atom Slice keeps it
+        // (the aligned state's w / bound at its radius; an alkali's frozen-core orbital its m = 0 shape P_l^2). The core's dots are left out.
+        int pick = vi;
+        if (pick < 0) {
+            double tot = 0;
+            for (const int i : *vset) tot += plane->mass[std::size_t(i)];
+            if (!(tot > 0)) return false;
+            double u = r.next() * tot;
+            pick = vset->back();
+            for (const int i : *vset) { u -= plane->mass[std::size_t(i)]; if (u < 0) { pick = i; break; } }
+        }
+        double rad = 0;
+        if (!hf::samplePlane(a, *plane, pick, r, rad, shell) || !(rad > 0)) return false;
+        const double off = plane->off, rho = std::sqrt(std::max(0.0, rad * rad - off * off)), ph = 2 * kPi * r.next();
+        const double u = rho * std::cos(ph), v = rho * std::sin(ph);
+        if (axis == 2) { x = u; y = v; z = off; } else { x = u; y = off; z = v; }
+        if (gl) {
+            if (gl->ks.empty() || L.s.round) return true;
+            double bound = 1;
+            const double w = graspShape(*gl, rad, z / rad, bound);
+            return r.next() * bound <= w;
+        }
+        const int l = a.sub[std::size_t(shell)].l;
+        return l == 0 || r.next() < AtomLab::valenceShape(l, z / rad);
+    }
     if (plane) {                                                 // 0.39.1, the Slice view: ON the plane (hf.h, samplePlane: exact for the whole atom; one orbital: its plane envelope, then the angular
         double rad = 0;                                          // part kept with probability |P(u)|^2 / M, as tryStateOnPlane does for one electron)
         if (!hf::samplePlane(a, *plane, one, r, rad, shell) || !(rad > 0)) return false;
@@ -727,7 +755,7 @@ bool AtomLab::tryStatePoint(int id, orbit::Mulberry32& r, double& x, double& y, 
 // |A|^2 + |B|^2 on the plane (a mixture of envelopes, each thinned to its own state). An overlapping pair (one energy, static) is |a A + b B|^2 <= (a^2 + b^2)(|A|^2 + |B|^2) = 2 q
 // (Cauchy-Schwarz): a point of q is kept with probability |a A + b B|^2 / (|A|^2 + |B|^2).
 bool AtomLab::tryDot(orbit::Mulberry32& r, double& x, double& y, double& z) {
-    if (manyNow_) return manyDot(*this, *manyNow_, manySubNow_, valSubNow_, gNow_, sliceDots() ? &manyPlane_ : nullptr, sliceAxisNow(), r, x, y, z, manyShell_, &valSetNow_);
+    if (manyNow_) return manyDot(*this, *manyNow_, manySubNow_, valSubNow_, gNow_, sliceDots() ? &manyPlane_ : nullptr, sliceAxisNow(), r, x, y, z, manyShell_, &valSetNow_, aloneNow_);
     if (batchNow_ && diracJ2Now_ > 0) {                           // 0.65.0: the Dirac state and the cut found once per batch (tryStatePoint's numbers, the same dots)
         if (sliceDots()) return tryDiracOnPlane(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, r, x, y, z);
         sampleDirac(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, r, x, y, z);
@@ -831,6 +859,7 @@ long AtomLab::addDots(long want) {
     valSubNow_ = manyNow_ ? valenceSub(*this, *manyNow_) : -1;   // 0.47 (the outer electron's subshell, for its shape)
     gNow_ = manyNow_ && (valenceOn() || levelOn()) ? graspOfAtom(manyNow_) : nullptr;   // 0.47.2 (the aligned state's shape; 0.47.3: and a level atom's)
     valSetNow_ = manyNow_ ? levelValenceSet(*this, *manyNow_) : std::vector<int>();
+    aloneNow_ = manyNow_ && sliceAlone();
     if (manyNow_ && sliceDots()) manyPlane_ = hf::planeOf(*manyNow_, sliceOffNow());   // (once per batch: about 3,000 exponentials, for the atom and plane of this moment)
     const bool one = !manyNow_ && !superOn() && !diracCloudOn();
     idNow_ = one ? stateId() : -1;                               // 0.57.0: the state looked up once per batch (it searched the orbitals by name for every dot: a third of the Slice's time)
@@ -872,6 +901,11 @@ long AtomLab::addDots(long want) {
             }
         }
     } else {
+    if (diracJ2Now_ > 0 && sliceDots() && gpuSlice && sliceCard && sliceCard->ready()) {   // 0.91.0: on the card (the Slice's Dirac program, its start-up check passed)
+        got = addDotsCardDirac(want);
+        idNow_ = -1;
+        return got;
+    }
     if (sliceJob_.job || sliceJob_.job2) cancelSliceJob();
     if (diracJ2Now_ > 0 && sliceDots()) {                        // 0.65.0: the Slice of a Dirac state: the same attempts and numbers, four radii side by side (dirac_cloud.h)
         const auto rec = [this](double x, double y, double z) { recordDot(x, y, z); };
@@ -934,6 +968,52 @@ long AtomLab::addDotsCard(const PlaneSampler& ps, long want) {
         const int tries = int(std::min(262144.0, std::max(64.0, double(need) / sliceRate_ * 1.3 + 64)));
         const int job = sliceCard->beginSlice(sliceJobOf(ps, s.crng, tries));
         if (job) sliceJob_ = SliceJob{job, s.crng, tries, need, idNow_, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch};
+    }
+    return got;
+}
+
+// 0.91.0: the Slice of a Dirac state made by the card (render/atom_card_types.h DiracSliceJob, shaders.h kDiracSliceCS), as addDotsCard: attempt t takes
+// the numbers stride t .. (stride 3 with the keep test, else 2), so a batch's kept dots, in the order of the attempts, are diracPlaneDots's from the same
+// state up to single-precision rounding (the start-up check and the tests: atom_card.h compareDirac). They arrive one step after the plane moved.
+long AtomLab::addDotsCardDirac(long want) {
+    static std::vector<float> res;
+    long got = 0, need = want;
+    const int key = 1 + ((diracNNow_ * 8 + diracLNow_) * 16 + diracJ2Now_) * 2 + (s.round ? 1 : 0);
+    if (sliceJob_.job && sliceJob_.dirac != key) cancelSliceJob();    // (another kind of batch)
+    DiracCase dc{p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, s.crng, 0};
+    if (sliceJob_.job) {
+        const render::JobState st = sliceCard->pollSlice(sliceJob_.job, res);
+        if (st == render::JobState::Pending) return 0;
+        const SliceJob j = sliceJob_;
+        sliceJob_ = SliceJob{};
+        const std::uint64_t stride = (s.round || (diracJ2Now_ - 1) / 2 == 0) ? 2 : 3;
+        if (st == render::JobState::Done && j.dirac == key && j.Z == p.Z && j.epoch == s.ptsEpoch && j.seed == s.crng && int(res.size()) >= 4 * j.tries) {
+            std::uint64_t numbers = stride * std::uint64_t(j.tries);
+            long kept = 0;
+            for (int t = 0; t < j.tries; t++) {
+                const float w = res[std::size_t(4 * t + 3)];
+                if (w < -0.5f) {                                     // a radius of 0: the processor keeps that dot and takes 2 numbers there; the rest is made again
+                    recordDot(res[std::size_t(4 * t)], res[std::size_t(4 * t + 1)], res[std::size_t(4 * t + 2)]); got++;
+                    numbers = stride * std::uint64_t(t) + 2; break;
+                }
+                if (w > 0.5f) {
+                    kept++;
+                    recordDot(res[std::size_t(4 * t)], res[std::size_t(4 * t + 1)], res[std::size_t(4 * t + 2)]);
+                    if (++got == j.want) { numbers = stride * std::uint64_t(t + 1); break; }
+                }
+            }
+            s.crng = mulberryAfter(j.seed, numbers);
+            sliceRate_ = std::max(0.002, double(std::max<long>(kept, 1)) / double(std::max<std::uint64_t>(1, numbers / stride)));
+            sliceCardDots_ += got;
+            if (j.axis == s.sliceAxis && j.off == s.sliceOff) { s.sliceFresh += got; need = want - got; }   // (dots of an older plane: not the new plane's)
+        }
+    }
+    if (need > 0) {                                                  // the next batch, for the plane of the moment
+        dc.seed = s.crng;
+        dc.tries = int(std::min(262144.0, std::max(64.0, double(need) / sliceRate_ * 1.3 + 64)));
+        const render::DiracSliceJob dj = diracJobOf(dc);
+        const int job = dj.tries > 0 ? sliceCard->beginDirac(dj) : 0;
+        if (job) { sliceJob_ = SliceJob{job, s.crng, dc.tries, need, -1, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch}; sliceJob_.dirac = key; }
     }
     return got;
 }
@@ -2038,7 +2118,7 @@ std::vector<std::string> AtomLab::infoBody() {
             const JLevel& L = jumpLevels(p.Z)[std::size_t(s.lvl)];
             const GraspLevel* gl = levelCloud(p.Z, s.lvl);
             ls.push_back("level: " + levelName(p.Z, s.lvl) + (s.lvl > 0 ? " (excited, " + fmtEV(L.cm * kHcEVnm * 1e-7) + " above the ground level, NIST" + (L.calc ? ": its calculated value" : "") + ")" : " (ground level)") +
-                         (sliceDots() ? std::string() : outerDenserText(a)) + "  ·  every electron from a correlated calculation (GRASP2018)  ·  levels and lines: NIST ASD");
+                         (sliceDots() ? sliceShareText(a) : outerDenserText(a)) + "  ·  every electron from a correlated calculation (GRASP2018)  ·  levels and lines: NIST ASD");
             if (p.view != "Orbit" && manySub() < 0) ls.push_back(levelShapeNote());
             if (gl) {
                 const double q = gl->qualityPercent();
@@ -2058,7 +2138,7 @@ std::vector<std::string> AtomLab::infoBody() {
             const GraspLevel* gl = p.mrel != "Non-relativistic" ? graspOfAtom(&a) : nullptr;   // 0.47.2: the GRASP2018 cloud of this level
             const std::string lvName = gl ? valName(c.n, c.l) + " " + "2" + std::string(1, "SPDF"[c.l]) + std::to_string(gl->j2) + "/2" : valName(c.n, c.l);
             ls.push_back("outer electron: " + lvName + (s.valN > 0 ? " (excited, " + fmtEV((gl ? gl->nistCm : e) * kHcEVnm * 1e-7) + " above the ground level, NIST)" : " (ground level)") +
-                         (sliceDots() ? std::string() : p.vdots == "True share" ? "  ·  its dots at their true share, " + trueShareText(a) + ", so its cloud and its jumps are faint"   // 0.54.1
+                         (sliceDots() ? sliceShareText(a) : p.vdots == "True share" ? "  ·  its dots at their true share, " + trueShareText(a) + ", so its cloud and its jumps are faint"   // 0.54.1
                                                               : "  ·  its dots drawn " + numText(kValenceDotShare * a.electrons() + 1 - kValenceDotShare, 2) + "× denser than its true share") +   // 0.48 (review): the factor, Na 3.5 to Cs 14.5
                          (gl ? std::string("  ·  every electron from a correlated calculation (GRASP2018)") : std::string("  ·  the core kept fixed (a model: frozen-core Dirac-Hartree-Fock)")) +
                          "  ·  place it with \"Put the outer electron in\" (Photons) or let Emit / Absorb make it jump; levels and lines measured (NIST ASD)");
@@ -2189,8 +2269,8 @@ std::vector<std::string> AtomLab::infoBody() {
                            "which for 1s lies " + numText(pct, 2) + " % deeper than the non-relativistic one.");
     }
     if (p.dirac == "On") more.push_back(diracCloudOn()   // 0.49.3: the spectrum's setting and the cloud's model are separate settings
-        ? std::string("relativity setting (spectrum): ON. The spectrum cards show Dirac energies and lines, with the Lamb shift for n = 1 and 2; the cloud, its energy and its photons are Dirac too (Cloud model).")
-        : std::string("relativity setting (spectrum): ON. The spectrum cards show Dirac energies and lines, with the Lamb shift for n = 1 and 2. The cloud and the photons of its jumps are non-relativistic here (Cloud model"
+        ? std::string("relativity setting (spectrum): ON. The spectrum cards show Dirac energies and lines with the nucleus's recoil, and the Lamb shift for n = 1 and 2; the cloud, its energy and its photons are Dirac too (Cloud model).")
+        : std::string("relativity setting (spectrum): ON. The spectrum cards show Dirac energies and lines with the nucleus's recoil, and the Lamb shift for n = 1 and 2. The cloud and the photons of its jumps are non-relativistic here (Cloud model"
                       ": Dirac draws the Dirac cloud)" + std::string(diracHead ? "; the energy over the picture is the Dirac value from cobalt, Z = 27, on." : ".")));
     if (p.Z >= kRelativityZ) {   // relativity: the 1s electron of a heavy nucleus moves at a large fraction of light speed
         const double x = p.Z * kAlpha, model = -levelEV(p.Z, p.N, 1), real = kMecEV * x * x / (1 + std::sqrt(1 - x * x));   // Dirac 1s: mc²(1 − √(1−(Zα)²)) = mc² (Zα)² / (1 + √(1−(Zα)²)), without the subtraction (0.10.8 stage 2)
@@ -2266,6 +2346,26 @@ std::string AtomLab::trueShareText(const hf::Atom& a) const {
     else for (const int i : levelValenceSet(*this, a)) n += a.sub[std::size_t(i)].focc;
     return numText(n, 3) + " in " + std::to_string(a.electrons());
 }
+bool AtomLab::sliceAloneChoice() const { return manyOn() && manySub() < 0 && (valenceOn() || levelOn()) && sliceDots(); }
+long AtomLab::sliceOuterSample(int n, unsigned seed, std::vector<double>& radii) const {
+    radii.clear();
+    const hf::Atom* a = manyOn() ? manyAtom() : nullptr;
+    if (!a || !sliceAloneChoice() || n <= 0) return -1;
+    const int vi = valenceSub(*this, *a);
+    const GraspLevel* gl = graspOfAtom(a);
+    const std::vector<int> vset = levelValenceSet(*this, *a);
+    const hf::Plane pl = hf::planeOf(*a, sliceOffNow());
+    orbit::Mulberry32 r(seed);
+    long notOuter = 0;
+    for (int i = 0; i < n; i++) {
+        double x, y, z; int shell = -1; bool ok = false;
+        for (int k = 0; k < 4096 && !ok; k++) ok = manyDot(*this, *a, -1, vi, gl, &pl, sliceAxisNow(), r, x, y, z, shell, &vset, sliceAlone());
+        if (!ok) continue;
+        radii.push_back(std::sqrt(x * x + y * y + z * z));
+        if (!(shell >= 0 && (shell == vi || std::find(vset.begin(), vset.end(), shell) != vset.end()))) notOuter++;
+    }
+    return notOuter;
+}
 bool AtomLab::outerDotsChoice() const { return manyOn() && manySub() < 0 && (valenceOn() || levelOn()) && (p.view == "Cloud" || p.view == "Cloud 3D"); }
 double AtomLab::outerDotFraction(int n, unsigned seed) const {
     const hf::Atom* a = manyOn() ? manyAtom() : nullptr;        // (as addDots sets up a batch)
@@ -2283,6 +2383,12 @@ double AtomLab::outerDotFraction(int n, unsigned seed) const {
         if (shell >= 0 && (shell == vi || std::find(vset.begin(), vset.end(), shell) != vset.end())) outer++;
     }
     return drawn > 0 ? double(outer) / drawn : NAN;
+}
+// 0.91.0: the Slice's words for its "Outer electron's dots" choice (empty where the choice does not apply)
+std::string AtomLab::sliceShareText(const hf::Atom& a) const {
+    if (!sliceAloneChoice()) return std::string();
+    if (sliceAlone()) return "  ·  Slice: only the outer electron's dots, all of them: its cloud alone, not the atom's (the core's electrons are left out)";
+    return "  ·  Slice: every electron its true share of the dots (the outer electron " + trueShareText(a) + "), so its shape is faint; \"Outer electron alone\" (Controls) shows its cloud alone";
 }
 std::string AtomLab::outerDenserText(const hf::Atom& a) const {
     if (p.vdots == "True share") return "  ·  the outer electrons' dots at their true share, " + trueShareText(a) + ", so their cloud and its jumps are faint against the core";   // 0.54.1

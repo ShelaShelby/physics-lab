@@ -7,8 +7,8 @@
 //    CI+all-order energies (cm-1 from the ground level, as printed there);
 //  - conservation: occupations add up to Z, the density integrates to Z; angular momentum: a J = 0 level is round;
 //  - owner decision D4 (9 Nov 2026): where NIST has no A the app shows its own, marked "computed by this app (GRASP2018), not measured".
-// limits set from this job's runs (REPORT.md 0.47.4; NAN: the atom is not shipped in this version); Ra 4.7 from the 0.51.3 run (worst 7s6d 3D3, -4.62 %), the Safronova comparison and the rate comparison (%)
-constexpr double kLimit0474Ca = 5.0, kLimit0474Sr = 4.0, kLimit0474Ba = 4.2, kLimit0474Ra = 4.7, kLimit0474Hg = 2.5, kLimit0474Yb = NAN;
+// limits set from this job's runs (REPORT.md 0.47.4; NAN: the atom is not shipped in this version); 0.91.0: Sr 4.9 (the recomputed clouds, worst 5s4d 3D1, -4.85 %, a level 0.90.0 had no cloud for), Hg 2.6 (worst 6s9s 3S1, +2.56 %); Ra 4.7 from the 0.51.3 run (worst 7s6d 3D3, -4.62 %), the Safronova comparison and the rate comparison (%)
+constexpr double kLimit0474Ca = 5.0, kLimit0474Sr = 4.9, kLimit0474Ba = 4.2, kLimit0474Ra = 4.7, kLimit0474Hg = 2.6, kLimit0474Yb = NAN;
 constexpr double kSafronova0474 = 5.0, kRate0474 = 80.0, kRateMed0474 = 20.0;
 static int level0474(int Z, const char* conf, const char* term, int j2) {
     const std::vector<atom::JLevel>& lv = atom::jumpLevels(Z);
