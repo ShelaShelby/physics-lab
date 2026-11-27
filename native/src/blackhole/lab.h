@@ -184,8 +184,8 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
 DiscPixel discPixelG(const DiscTable& t, const Settings& s, const DiscGeom& g, const HoleView& v, double X, double Y, bool light = true);
 // 0.79.0: the disc's thickness table (disc.h heightTable) for these settings: where discThickDrawn; null otherwise. Kept for the last 64 discs.
 const HeightTable* discHeight(const Settings& s);
-// 0.86.0: the disc is drawn at its calculated thickness: the Real look at spin 0. The thickness is computed for every spin (disc.h heightOn), but the light
-// paths round a spinning hole find only the plane's crossings (disc.h, SPIN), so there the disc is drawn in its plane. Film: in its plane (J15's thin disc).
+// 0.86.0: the disc is drawn at its calculated thickness: the Real look (0.95.0: at every spin, kerr_closed.h "THE DISC'S SURFACE"; 0.86.0 to 0.94: spin 0
+// only). Film: in its plane (J15's thin disc).
 bool discThickDrawn(const Settings& s);
 // 0.86.0: the words that say which shape the disc is drawn with, so they follow the picture (tests/test_blackhole.cpp testDiscWords):
 //   discShapeWords: the disc's shape in "What is real in this picture" (Real look); discEdgeOnWords: the caption when the camera is exactly in the disc's plane;

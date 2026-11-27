@@ -24,6 +24,11 @@
 #include "r2d_skytiny_frag.h"
 #include "r2d_skymath_frag.h"
 #include "r2d_sky_frag.h"
+#include "r2d_skystop1.h"
+#include "r2d_skystop2.h"
+#include "r2d_skystop3.h"
+#include "r2d_skystop4.h"
+#include "r2d_skystop5.h"
 #include "r2d_maxdown_frag.h"
 #include "r2d_expsum_frag.h"
 #include "r2d_glaredown_frag.h"
@@ -43,7 +48,15 @@ Code codeOf(int p) {
     case VkBlackHole::pKerr: return {k_r2d_kerr_frag, sizeof k_r2d_kerr_frag};
     case VkBlackHole::pSkyTiny: return {k_r2d_skytiny_frag, sizeof k_r2d_skytiny_frag};
     case VkBlackHole::pSkyMath: return {k_r2d_skymath_frag, sizeof k_r2d_skymath_frag};
-    case VkBlackHole::pSky: return {k_r2d_sky_frag, sizeof k_r2d_sky_frag};
+    case VkBlackHole::pSky: {                                          // 0.95.0: PL_BH_SKYSTOP 1..5, the split's cut-down shaders (tests only)
+        static const char* stop = std::getenv("PL_BH_SKYSTOP");
+        const int k = stop ? std::atoi(stop) : 0;
+        if (k == 1) return {k_r2d_skystop1, sizeof k_r2d_skystop1};
+        if (k == 2) return {k_r2d_skystop2, sizeof k_r2d_skystop2};
+        if (k == 3) return {k_r2d_skystop3, sizeof k_r2d_skystop3};
+        if (k == 4) return {k_r2d_skystop4, sizeof k_r2d_skystop4};
+        if (k == 5) return {k_r2d_skystop5, sizeof k_r2d_skystop5};
+        return {k_r2d_sky_frag, sizeof k_r2d_sky_frag}; }
     case VkBlackHole::pMaxDown: return {k_r2d_maxdown_frag, sizeof k_r2d_maxdown_frag};
     case VkBlackHole::pExpSum: return {k_r2d_expsum_frag, sizeof k_r2d_expsum_frag};
     case VkBlackHole::pGlareDown: return {k_r2d_glaredown_frag, sizeof k_r2d_glaredown_frag};
@@ -189,7 +202,7 @@ void VkBlackHole::destroy() {
     vkDeviceWaitIdle(dev_);
     writeCache();
     for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glareSrc_, &glareVeil_, &glareNear_, &glareCorr_, &probe_,
-                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &ret_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
+                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &streak_, &hgt_, &ret_, &kA_, &kB_, &kC_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
     for (GlareLevel& g : gL_) for (Tex* t : {&g.E, &g.D, &g.M1, &g.M2, &g.S}) dropTex(*t);
@@ -792,10 +805,13 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     u.f("uCam", L.skyCam, 4);
     u.f("uMet", L.skyMet, 4);
     i1("uRaw", raw ? 1 : 0);
+    const float hr[4] = {L.hgtR[0], L.hgtR[1], L.hgtR[2], hgt_.img && L.hgt && kC_.img && L.kC ? L.hgtR[3] : 0.0f};   // 0.95.0: the surface (none on the card: the plane)
+    u.f("uHgtR", hr, 4);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
     draw(cb, p, variant, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uKA", kA_.view, nearest_}, {"uKB", kB_.view, nearest_}, {"uKE", kE_.view, nearest_},
-                    {"uKT", kT_.view, nearest_}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_}}, 0, 0, fbW, fbH);
+                    {"uKT", kT_.view, nearest_}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_}, {"uKC", kC_.img ? kC_.view : white_.view, nearest_},
+                    {"uHgt", hgt_.img ? hgt_.view : white_.view, nearest_}}, 0, 0, fbW, fbH);
 }
 
 // 0.56.0's skyPass: one pass of the spinning hole per pixel; (vx, vy, vw, vh): the viewport in the bound targets' pixels
@@ -840,10 +856,13 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     u.f("uSamp", samp, 4);
     i1("uRaw", raw ? 1 : 0);
     gasUniforms(u, L);
+    const float hr[4] = {L.hgtR[0], L.hgtR[1], L.hgtR[2], hgt_.img && L.hgt ? L.hgtR[3] : 0.0f};   // 0.95.0: the surface (none on the card: the plane)
+    u.f("uHgtR", hr, 4);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
     draw(cb, p, variant, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_},
-                          {"uWhite", cardWhite ? sum_.back().view : white_.view, nearest_}, {"uStreak", streak_.img ? streak_.view : white_.view, nearest_}}, vx, vy, vw, vh);
+                          {"uWhite", cardWhite ? sum_.back().view : white_.view, nearest_}, {"uStreak", streak_.img ? streak_.view : white_.view, nearest_},
+                          {"uHgt", hgt_.img ? hgt_.view : white_.view, nearest_}}, vx, vy, vw, vh);
 }
 
 // 0.56.0's skyExposure: the samples into the chain's first level, 4 x 4 blocks to their largest down to one texel, read back without waiting
@@ -1306,6 +1325,7 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
     if (kerr && L.kVersion != kVer_) {
         upload(cb, kA_, L.kS, 2 * L.kChi, kF32, L.kA->data(), 4, "the spin table");
         upload(cb, kB_, L.kS, 2 * L.kChi, kF32, L.kB->data(), 4, "the spin table");
+        if (L.kC && L.kC->size() == L.kB->size()) upload(cb, kC_, L.kS, 2 * L.kChi, kF32, L.kC->data(), 4, "the spin table");   // 0.95.0: the slopes
         upload(cb, kE_, L.kEdgeN, 1, kR32, L.kEdge->data(), 1, "the spin table");
         upload(cb, kT_, L.kEdgeN + 1, 1, kR32, L.kTau->data(), 1, "the spin table");
         kVer_ = L.kVersion;
@@ -1430,6 +1450,32 @@ void VkBlackHole::debugPicture(const LensSky& L, double ptW, double ptH, int sky
     debugBuf_.busy = false;
     const std::size_t nf = static_cast<std::size_t>(fbW) * static_cast<std::size_t>(fbH) * 4;
     if (debugBuf_.b.map && !c_->failed()) { const float* v = static_cast<const float*>(debugBuf_.b.map); out.assign(v, v + nf); }
+}
+
+// 0.95.0: the sky pass alone, timed by GPU timestamps around it (queries 0 and 1; called only from the tests' hook, when no picture is in flight)
+void VkBlackHole::skyTime(const LensSky& L, int fbW, int fbH, int skyTexW, int reps, std::vector<double>& ms) {
+    ms.clear();
+    lens(L, fbW, fbH, skyTexW, fbW, fbH);
+    if (!ok_ || !timestamps_ || !queries_ || !(L.kerrSky && skyReady() && L.bend) || fbW <= 0 || fbH <= 0) return;
+    if (debug_.w != fbW || debug_.h != fbH || !debug_.img) {
+        if (debug_.img) dropTex(debug_);
+        if (!makeTex(debug_, fbW, fbH, kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "the tests' float picture")) return;
+    }
+    for (int k = 0; k < reps; k++) {
+        VkCommandBuffer cb = c_->cmd();
+        if (!cb) return;
+        vkCmdResetQueryPool(cb, queries_, 0, 2);
+        vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, queries_, 0);
+        begin(cb, {&debug_}, 0, 0, fbW, fbH, true);
+        skyPass(cb, L, fbW, fbH, 0, 0, 1, 0, false, 1, 0, 0, fbW, fbH);
+        end(cb);
+        vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, queries_, 1);
+        c_->flush(true);
+        std::uint64_t r[4] = {0, 0, 0, 0};
+        if (vkGetQueryPoolResults(dev_, queries_, 0, 2, sizeof r, r, 2 * sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) != VK_SUCCESS || !r[1] || !r[3]) return;
+        const std::uint64_t a = r[0] & tsMask_, b = r[2] & tsMask_;
+        ms.push_back(b > a ? static_cast<double>(b - a) * tsPeriodNs_ / 1e6 : 0);
+    }
 }
 
 // the elliptic functions alone (the arguments three texels a set in one row, the 8 results in two rows of n texels)
@@ -1567,7 +1613,7 @@ public:
         nChi_ = static_cast<int>(rowChi.size()); nS_ = nS;
         const int n = nodes_ = 2 * nChi_ * nS_;
         put(kPar, par); put(kInB, rowChi);
-        room(kEdgeB, VkDeviceSize(nChi_) * 8, true); room(kOutB, VkDeviceSize(n) * 80, false); room(kHost, VkDeviceSize(n) * 80, true);
+        room(kEdgeB, VkDeviceSize(nChi_) * 8, true); room(kOutB, VkDeviceSize(n) * 104, false); room(kHost, VkDeviceSize(n) * 104, true);   // (0.95.0: 13 numbers a node)
         c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute);
         run(0, nChi_, 0, kPar, kInB, kEdgeB, kOutB);
         return true;
@@ -1685,7 +1731,7 @@ private:
     void copyOut() {
         const VkCommandBuffer cb = c_.cmd();
         if (!cb || !buf_[kOutB].b || !buf_[kHost].b) return;
-        const VkBufferCopy cp{0, 0, VkDeviceSize(nodes_) * 80};
+        const VkBufferCopy cp{0, 0, VkDeviceSize(nodes_) * 104};
         if (nodes_ > 0) vkCmdCopyBuffer(cb, buf_[kOutB].b, buf_[kHost].b, 1, &cp);
         c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToHost);
     }

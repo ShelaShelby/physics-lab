@@ -242,6 +242,15 @@ if ($Parts -contains 'bh') {
     foreach ($x in $rows) {
         $n = [int]$x['pixels']; $sm = [int]$x['smooth']
         Add-Check "3e.edgeon.$($x['dist'])@$($x['pitch'])" ([int]$x['bad'] -le 0.001 * $n -and [int]$x['badorder'] -le 0.001 * $n -and $sm -gt 100000 -and [int]$x['over8'] -le 0.01 * $sm) "the card = the double lookup ($($x['bad']) of $n differ), the near disc smooth ($($x['over8']) of $sm over 8 levels)"
+    }    # 0.95.0: the spinning hole's sky pass alone at the owner's window (GPU timestamps, 9 pictures each), whole and cut after its set-up (1), its radial case
+    # (2), its integrals and crossings (3), its whole ray (4), at once (5): the split of REPORT 0.95.0 on this card (blackhole_view.cpp skyTimeHook)
+    foreach ($k in 0..5) {
+        $e = @{ PL_BH_COMPARE = 'skytime'; PL_BH_SKYTIME = '2560,1369,9' }
+        if ($k -gt 0) { $e['PL_BH_SKYSTOP'] = "$k" }
+        $r = Invoke-App "bh_skytime$k" (Merge $GL $e) 3 840
+        $rows = Get-Rows $r.Out 'PLBHSKYTIME'
+        Add-Check "3c.bh.skytime.$k" ($rows.Count -ge 3) "the sky pass timed, cut at $k ($($rows.Count) views; exit $($r.Code))"
+        foreach ($x in $rows) { Add-Info "3c.bh.skytime.$k.$($x['case'])" "median $($x['median']) ms, fastest $($x['min']) ms ($($x['w']) x $($x['h']), moving gas $($x['gas']))" }
     }
 }
 
@@ -319,7 +328,7 @@ if ($Parts -contains 'bench') {
     Add-Check '3d.bench' ($null -ne $file) "the benchmark ran and saved its result ($(if ($file) { $file.Name } else { 'no file' }); $([math]::Round($r.Seconds)) s)"
     if ($file) {
         Copy-Item $file.FullName (Join-Path $res $file.Name) -Force
-        foreach ($ln in (Get-Content $file.FullName | Where-Object { $_ -match 'Hz|refresh|ui\.resize_blackhole|rest\.orbit|rest\.blackhole_glare|blackhole\.close_spin|orbit\.true_light|orbit\.sun_edge|orbit\.oort_region|orbit\.porkchop|response\.porkchop_grid|orbit\.sun_surface|response\.sun_photo' } | Select-Object -First 40)) { Add-Info '3d.bench' $ln.Trim() }
+        foreach ($ln in (Get-Content $file.FullName | Where-Object { $_ -match 'Hz|refresh|ui\.resize_blackhole|rest\.orbit|rest\.blackhole_glare|blackhole\.close_spin|blackhole\.thick_spin|orbit\.true_light|orbit\.sun_edge|orbit\.oort_region|orbit\.porkchop|response\.porkchop_grid|orbit\.sun_surface|response\.sun_photo' } | Select-Object -First 40)) { Add-Info '3d.bench' $ln.Trim() }
     }
 }
 

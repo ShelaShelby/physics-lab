@@ -73,6 +73,9 @@ public:
     // last read-back, waited for (0: none since the last call)
     void debugPicture(const LensSky& L, double ptW, double ptH, int skyTexW, int fbW, int fbH, std::vector<float>& out);
     void math(const std::vector<float>& in, std::vector<float>& out);
+    // 0.95.0 (PL_BH_SKYTIME, the measurement of Part A): the sky pass alone (skyMode 0, one float target) drawn reps times off screen, each between two GPU
+    // timestamps; the times in ms (empty: no timestamps or no sky)
+    void skyTime(const LensSky& L, int fbW, int fbH, int skyTexW, int reps, std::vector<double>& ms);
     void veilTest(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
                   void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2]));   // 0.85.5: the card's glare veil
     double whiteWait();
@@ -167,7 +170,7 @@ private:
     void gasUniforms(VkUniforms& u, const LensSky& L);    // 0.72.0
     std::vector<Tex> exp_;
     std::vector<Tex> sum_;                 // 0.70.0: the log-average's chain (kExpSumFS); its last texel is the whole exposure
-    Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_, discTt_;
+    Tex table_, discU_, discP_, discC_, kA_, kB_, kC_, kE_, kT_, kF_, discTt_;   // (0.95.0: kC_, the spin table's slopes)
     Tex streak_, hgt_;                                     // 0.79.0: the streaks' field (sent once), the disc's thickness table
     std::uint64_t hgtVer_ = ~std::uint64_t(0);
     Tex ret_;                                              // 0.87.0: spin 0's returning flux (kLensFS uRet)

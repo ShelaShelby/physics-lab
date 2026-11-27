@@ -359,8 +359,9 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         else {
             float t = static_cast<float>(shownSpin);
             if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop))) blackhole::setSpin(s, std::round(t * 100) / 100);
-            // 0.86.0 (PLAN_REVIEW R12, its stop rule): the thickness is calculated at every spin, but drawn only without spin (lab.h discThickDrawn)
-            if (s.disc && shownSpin > 0) pCaption(p, "Round a spinning hole the disc is drawn in its plane, with no thickness: the light paths there find only where they cross the plane. Its calculated thickness is in the Disc section.", false);
+            // 0.95.0: the thickness is drawn at every spin (lab.h discThickDrawn; 0.86.0 to 0.94: at spin 0 only)
+            if (s.disc && shownSpin > 0 && blackhole::discThickDrawn(blackhole::shown(s)))
+                pCaption(p, "Round a spinning hole too the disc is drawn at its calculated thickness, with the spin's own term (the Disc section).", false);
         }
         if (shownSpin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
         if (pButton(p, "blackhole.guide", "What is real in this picture")) { app.bhLearn = 1; app.bhLearnJump = "top"; }

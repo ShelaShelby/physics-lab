@@ -314,27 +314,26 @@ DiscGeom discGeom(const Settings& s) {
     g.height = discHeight(s);
     return g;
 }
-bool discThickDrawn(const Settings& s) { return s.look == Look::Real && s.spin == 0 && heightOn(s.spin); }
+// 0.95.0: every spin (the spinning hole's surface: kerr_closed.h "THE DISC'S SURFACE"; 0.79.0 to 0.94: spin 0 only)
+bool discThickDrawn(const Settings& s) { return s.look == Look::Real && heightOn(s.spin); }
 std::string discShapeWords(const Settings& s) {
     if (discThickDrawn(s)) return "at its calculated thickness (Zhu et al. 2012, App. B), its surface opaque";
-    if (s.look == Look::Real && s.spin != 0) return "drawn flat in its plane, with no thickness (its calculated thickness is given in numbers only), opaque";
     return "flat in its plane, with no thickness, opaque";
 }
 std::string discEdgeOnWords(const Settings& s) {
     if (discThickDrawn(s))
         return "You are exactly in the disc's plane. The disc is drawn at its calculated thickness (Zhu et al. 2012, App. B), so edge on it is a band as high "
                "as the disc is thick, not a line; gravity bends the light of its far side's faces into view above and below the hole.";
-    if (s.look == Look::Real)
-        return "You are exactly in the disc's plane: round a spinning hole the disc is drawn in its plane with no thickness, so seen exactly edge on it is a line.";
     return "You are exactly in the disc's plane: this look's disc has no thickness, so seen exactly edge on it is a line.";
 }
 std::string discThicknessWords(const Settings& s) {
     if (discThickDrawn(s))
         return "The disc is drawn at its calculated thickness: its surface sits at the height h where the pressure of its light and gas holds it up against the hole's pull "
-               "(Zhu et al. 2012, one zone in height). It thins to nothing at the innermost stable orbit, where the gas stops making heat. Limits: one zone in height, "
-               "the surface drawn opaque at h, no darkening towards its edge, no light from inside the innermost orbit.";
-    return "The thickness above is calculated with the spin's own term (Abramowicz and Fragile 2013), but round a spinning hole the picture draws the disc in its "
-           "plane, with no thickness: the lab's light paths there find only where they cross the plane.";
+               "(Zhu et al. 2012, one zone in height; round a spinning hole with the spin's own term, Abramowicz and Fragile 2013). It thins to nothing at the "
+               "innermost stable orbit, where the gas stops making heat. Limits: one zone in height, the surface drawn opaque at h, its light leaving at the angle "
+               "it would leave the flat disc (the surface's tilt is left out), no light from inside the innermost orbit; the faint rings of light that circled "
+               "the hole more than once are drawn where they cross the plane.";
+    return "This look's disc has no thickness: it is drawn flat in its plane.";
 }
 const HeightTable* discHeight(const Settings& s) {
     if (!discThickDrawn(s)) return nullptr;

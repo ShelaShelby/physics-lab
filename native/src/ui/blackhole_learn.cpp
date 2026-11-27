@@ -109,7 +109,7 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "straight on than seen at a grazing angle (Chandrasekhar 1946, Table 2: 1.2628 against 0.4151). Each ray's angle to the disc's face is taken in the "
           "moving gas's own frame. The law is scaled so that each face still sends the thin disc's flux. Limits: grey, pure electron scattering, deep and "
           "plane-parallel; no absorption and not the disc's real layers; the table is the paper's third approximation (it sends 0.991 of the flux, so the lab "
-          "scales it up); between its 11 points a cubic (a choice); the polarisation it gives is not drawn; on the thick disc (no spin) the angle is to the plane, "
+          "scales it up); between its 11 points a cubic (a choice); the polarisation it gives is not drawn; on the thick disc (at every spin) the angle is to the plane, "
           "not to the tilted surface.") +
         p("<b>Light that comes back: returning radiation.</b> Gravity bends some of the disc's light back onto the disc, which takes it in and sends it out "
           "again, so the disc is hotter than its own heat makes it (Cunningham 1976, equations 7a and 8a). The lab follows the light paths from 32 rings, "
@@ -156,15 +156,17 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "(Schnittman et al.). Where each streak is, is drawn at random; their strength is set so that the ring from 6 to 10 GM/c² flickers by the 43.8 % of "
           "Schnittman et al.'s Table 2. In the Film look both are added by the lab: the film's own disc texture is not published and James et al. 2015 does not "
           "say how it moved.") +
-        p("<b>The disc's thickness</b> (Real). Without spin the disc is drawn at its true thickness: its surface sits at the height h where the pressure "
+        p("<b>The disc's thickness</b> (Real). The disc is drawn at its true thickness at every spin: its surface sits at the height h where the pressure "
           "of its own light (near the hole) and of its gas (far out) holds it up against the hole's pull, from the vertical balance of Zhu et al. 2012 (their "
           "appendix B, one zone in height). At a tenth of the Eddington limit it is at most about 1.5 % of its radius thick, near 20 GM/c²: the bright disc of a feeding "
           "hole really is nearly flat, which is why it shows only as a slightly fuller inner rim. It thins to nothing at the innermost stable orbit, where the gas "
           "stops making heat, instead of ending at a sharp line. Limits: one zone in height; the surface drawn opaque at h; the gas at the surface moving as in the "
           "plane; its darkening towards the edge taken against the plane, not the tilted surface; no light from inside the innermost orbit (simulations put about 4 % of the light there). Round a spinning "
-          "hole the thickness is calculated with the spin's own term in the hole's pull (Abramowicz and Fragile 2013, eq. 92, the form that gives their vertical "
-          "frequency, eq. 40) and shown in numbers, but the disc is drawn in its plane: the lab's light paths round a spinning hole find only where they cross "
-          "the plane, not a surface above it.") +
+          "hole the thickness takes the spin's own term in the hole's pull (Abramowicz and Fragile 2013, eq. 92, the form that gives their vertical "
+          "frequency, eq. 40). There each ray's meeting with the surface is found from its exact path in closed form near where it crosses the plane "
+          "(Gralla and Lupsasca 2020); its colour is worked out at the distance from the axis where it meets the surface. The direct image and the one of the "
+          "disc's underside meet the surface; the thin rings of light that circled the hole more than once are drawn where they cross the plane, at every spin. "
+          "A ray that grazes the surface without crossing the plane near it is not drawn on it.") +
         p("<b>Two opacities, each from its own source.</b> The Eddington limit (the feeding rate's yardstick) uses the electron-scattering opacity " +
           fmt::precision(blackhole::kKappaEs * 10, 2) + " cm²/g, the value Yuan and Narayan 2014 give as the usual one: it is that of ionised pure hydrogen, "
           "σ_T / m_p = " + fmt::precision(kappaHydrogen() * 10, 4) + " cm²/g (CODATA 2022), rounded. The thickness uses Zhu et al.'s own " +

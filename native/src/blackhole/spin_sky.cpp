@@ -86,7 +86,11 @@ SpinHit spinRay(double a, const Camera& cam, double psi, double chi, double rtol
     h.sky = e.kind == RayEnd::Sky;
     h.dir = e.dir;
     const int n = static_cast<int>(cr.size() / 5);
-    for (int k = 0; k < kSpinCross && k < n; k++) h.u[k] = 1 / cr[static_cast<std::size_t>(k) * 5];
+    { double s0 = 0; crossingSlope(a, ray.c[0], ray.c[1], 1, 0, s0, h.cn); }   // u+^(1/2) for every ray, as kKerrTableCS stores it (also with no crossing)
+    for (int k = 0; k < kSpinCross && k < n; k++) {
+        h.u[k] = 1 / cr[static_cast<std::size_t>(k) * 5];
+        crossingSlope(a, ray.c[0], ray.c[1], cr[static_cast<std::size_t>(k) * 5], cr[static_cast<std::size_t>(k) * 5 + 3], h.sl[k], h.cn);   // 0.95.0
+    }
     if (n < kSpinCross) {
         // the first crossing it does not make, continued smoothly (spin_sky.h): u is then the same analytic function on both sides of where it appears
         const double re = e.y[0], th = e.y[1];
@@ -151,6 +155,15 @@ SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double 
     return h;
 }
 
+void crossingSlope(double a, double b, double q, double r, double pr, double& sl, double& cn) {
+    sl = 0; cn = 0;
+    const double A = a * a - q - b * b, root = std::sqrt(A * A + 4 * a * a * q);
+    const double ma2 = A < 0 ? (root - A) / 2 : (A + root > 0 ? 2 * a * a * q / (A + root) : 0);   // -u- a^2 (kerr_closed.cpp Polar::init)
+    if (!(q > 0) || !(ma2 > 0)) return;
+    sl = -(r * r - 2 * r + a * a) * pr / std::sqrt(ma2);
+    cn = std::sqrt(q / ma2);
+}
+
 SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol, bool timed) {
     const ClosedEnd e = traceClosed(a, cam, lookAt(psi, chi), kSpinCross, timed);
     if (e.kind == RayEnd::Lost) { SpinHit h = spinRayMino(a, cam, psi, chi, rtol); h.fallback = true; return h; }
@@ -159,7 +172,8 @@ SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, doubl
     h.sky = e.kind == RayEnd::Sky;
     h.dir = e.dir;
     const int n = e.nCross;
-    for (int k = 0; k < n && k < kSpinCross; k++) { h.u[k] = e.u[k]; h.phi[k] = e.phi[k]; h.t[k] = e.t[k]; }
+    for (int k = 0; k < n && k < kSpinCross; k++) { h.u[k] = e.u[k]; h.phi[k] = e.phi[k]; h.t[k] = e.t[k]; h.sl[k] = e.slope[k]; }
+    h.cn = e.cn;
     h.nCross = std::min(n, kSpinCross);
     h.timed = timed;
     if (n < kSpinCross) {   // the first crossing not made, continued as spinRayMino does (spin_sky.h)
@@ -311,11 +325,12 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
     parallelFor(2 * nChi, [&](int row) {                                    // (the rows on all cores)
         const int side = row / nChi;
         for (std::size_t q = static_cast<std::size_t>(row) * nS; q < static_cast<std::size_t>(row + 1) * nS; q++) {
-            const double* n = p.nodes + 10 * q;
+            const double* n = p.nodes + 13 * q;                             // (0.95.0: 13 numbers a node, the slopes and u+^(1/2) at 10..12)
             SpinHit& h = v_[q];
             h.dir = Vec3{n[0], n[1], n[2]};
             h.b = n[3];
             for (int k = 0; k < kSpinCross; k++) h.u[k] = n[4 + k];
+            h.sl[0] = n[10]; h.sl[1] = n[11]; h.cn = n[12];
             h.sky = n[8] == 1;
             if (h.sky != (side == 0)) { mism++; if (length(h.dir) == 0 && !h.sky && side == 0) lost++; }
         }
@@ -326,11 +341,12 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
 void SpinTable::finish(const std::atomic<long>& mism, const std::atomic<long>& lost) {
     mism_ = mism; lost_ = lost;
     rays_ = 2L * nChi_ * nS_;
-    fa_.resize(v_.size() * 4); fb_.resize(v_.size() * 4);
+    fa_.resize(v_.size() * 4); fb_.resize(v_.size() * 4); fc_.resize(v_.size() * 4);
     for (std::size_t q = 0; q < v_.size(); q++) {
         const SpinHit& h = v_[q];
         fa_[4 * q] = static_cast<float>(h.dir.x); fa_[4 * q + 1] = static_cast<float>(h.dir.y); fa_[4 * q + 2] = static_cast<float>(h.dir.z); fa_[4 * q + 3] = static_cast<float>(h.b);
         for (int k = 0; k < 4; k++) fb_[4 * q + k] = static_cast<float>(h.u[k]);
+        fc_[4 * q] = static_cast<float>(h.sl[0]); fc_[4 * q + 1] = static_cast<float>(h.sl[1]); fc_[4 * q + 2] = static_cast<float>(h.cn); fc_[4 * q + 3] = 0;
     }
     fe_.assign(edge_.begin(), edge_.end());
     ft_.assign(tau_.begin(), tau_.end());
@@ -358,7 +374,8 @@ SpinHit SpinTable::lookup(double psi, double chi) const {
             const double w = wr[r] * wc[c];
             d = d + h.dir * w;
             out.b += w * h.b;
-            for (int k = 0; k < kSpinCross; k++) out.u[k] += w * h.u[k];
+            for (int k = 0; k < kSpinCross; k++) { out.u[k] += w * h.u[k]; out.sl[k] += w * h.sl[k]; }
+            out.cn += w * h.cn;
         }
     }
     const double L = length(d);
@@ -366,12 +383,22 @@ SpinHit SpinTable::lookup(double psi, double chi) const {
     return out;
 }
 
-SpinDisc spinDisc(const SpinHit& h, double a, double rIn, double rOut) {
+SpinDisc spinDisc(const SpinHit& h, double a, double rIn, double rOut, const HeightTable* ht) {
     SpinDisc d;
+    DiscGeom gm;
+    gm.rIn = rIn; gm.rOut = rOut; gm.height = ht;
     for (int k = 0; k < kSpinCross; k++) {
         if (!(h.u[k] > 0)) continue;
-        const double r = 1 / h.u[k];
-        if (r >= rIn && r <= rOut) { d.order = k; d.r = r; d.g = discShiftKerr(r, h.b, a); return d; }
+        double r = 1 / h.u[k], z = 0;
+        if (ht && ht->on() && k < kSurfaceOrders && h.cn > 0) {           // 0.95.0: the surface on the line through the crossing (spin_sky.h)
+            const double delta = surfaceStep(r, h.sl[k], h.cn, *ht, gm);
+            if (delta > 0) {
+                const double rl = r - h.sl[k] * delta;
+                z = rl * h.cn * std::sin(delta);
+                r = std::sqrt(std::max(rl * rl - z * z, 0.0));
+            }
+        }
+        if (r >= rIn && r <= rOut) { d.order = k; d.r = r; d.z = z; d.g = discShiftKerr(r, h.b, a); return d; }
     }
     return d;
 }

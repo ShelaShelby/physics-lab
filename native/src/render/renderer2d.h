@@ -335,6 +335,7 @@ public:
         float fido[2] = {1, 0};             // 0.84.0: the held camera's own shift for a ray's b, f = fido[0] - b fido[1] (kKerrFS, kKerrSkyFS uFido; (1, 0): none)
         const std::vector<float>* kA = nullptr;
         const std::vector<float>* kB = nullptr;
+        const std::vector<float>* kC = nullptr;   // 0.95.0: (dr/dPsi of the first two crossings, u+^(1/2), 0), as kB (SpinTable::texC; the disc's surface)
         const std::vector<float>* kEdge = nullptr;
         const std::vector<float>* kTau = nullptr;
         int kChi = 0, kS = 0, kEdgeN = 0;
@@ -409,6 +410,7 @@ public:
     // of 12 floats in, 8 out, waited for); the exposure's read-back of the last picture, waited for (0: none). render/vk_blackhole.h has them.
     void lensFloat(const LensSky& L, int w, int h, std::vector<float>& out);
     void skyMath(const std::vector<float>& in, std::vector<float>& out);
+    void skyTime(const LensSky& L, int w, int h, int reps, std::vector<double>& ms);   // 0.95.0: the sky pass alone, GPU timestamps (VkBlackHole::skyTime)
     // 0.85.5: the eye's glare veil made on the card from the blocks src (VkBlackHole::veilTest), waited for; empty: not made (no Vulkan, or its programs failed)
     void glareVeilCard(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
                        void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2]));

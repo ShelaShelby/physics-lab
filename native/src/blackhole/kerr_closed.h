@@ -50,15 +50,35 @@
 //   with S2 (B94)), I+- of case (1) ((B19), (B23)), G_t of type A ((31), (48)) and B ((58), (68)), written per amplitude of the substitution so that turning
 //   points need no case of their own (kerr_closed.cpp Radial::timeInts, Polar::Gt). E(phi | m) by Carlson's R_D. Only differences between the camera and the
 //   crossing (the camera is at a finite radius; I2 grows without bound at infinity). Tested against the integrator with t added (gas.h KerrBLt).
+// THE DISC'S SURFACE (0.95.0; the spin-0 rule of disc.h surfaceStep, in Mino time). The disc's surface is |z| = h(R) with z = r cos theta and
+//   R = r sin theta (Boyer-Lindquist r, theta: the height above the equator and the distance from the spin axis; lab.h keepOutsideDisc and the spin-0 lens
+//   code use the same z and R). Near a crossing at Mino time tau_k the ray is followed back towards the camera: tau = tau_k - dtau. The polar motion of type A
+//   has Psi = j pi at the crossing (cos theta = -nu u+^(1/2) sin Psi, (49)), so am(X - sq dtau) = j pi - am(sq dtau) and |cos theta| = u+^(1/2) sin(phi) with
+//   phi = am(sq dtau | u+/u-) exactly, sq = (-u- a^2)^(1/2): phi plays the swept angle's part of spin 0 (at a = 0 it is the swept angle) and C = u+^(1/2)
+//   the part of (A^2 + B^2)^(1/2). The radius on the line through the crossing: r = r_k - (dr/dPsi) phi, dr/dPsi = (dr/dtau) / sq, (dr/dtau)^2 = R(r_k) (7)
+//   with the ray's own sign there (nu_r, turned at r4 in case (2) and at r3 in case (1)). surfaceStep's kSurfaceSteps fixed-point steps on that line, then
+//   kSurfaceExactSpin steps on the closed forms: dtau = F(phi | u+/u-) / sq (F inverts am), r = r(tau_k - dtau) ((B27), (B46), (B75), (B109)), |z| = r u+^(1/2)
+//   sin phi, phi = asin(h(R) / (r u+^(1/2))) (kept below kSurfaceMaxSpin); the hit at the last phi. Only the first kSurfaceOrders crossings (the direct and the
+//   underside's images; the thin rings beyond stay at the plane). A hit before the camera (dtau >= tau_k; the camera rule keeps it outside the slab) keeps
+//   the crossing. The moving gas's phi and t stay those of the crossing (the slab's height, a few GM/c^2 of travel, is left out of them).
+//   Tested against the integrator followed until |z| = h(R) (tests/test_blackhole.cpp testSpinSurface095).
 // FOR A SHADER LATER: no recursion; every loop has a fixed bound (Carlson's R_F, R_J, R_C: 60 at most; the AGM: 15). Elementary functions used: sqrt, sin, cos,
 // asin, acos, atan, log, cbrt, fabs, floor, ldexp (a power of two).
 #pragma once
 
+#include "blackhole/disc.h"
 #include "blackhole/geodesic.h"
 
 namespace blackhole {
 
 constexpr int kClosedCross = 8;
+// 0.95.0: the largest phi of the surface's exact steps. It stays below pi/2, where the ray turns in theta (|cos theta| at most u+^(1/2)). Spin 0's 0.5 rad
+// (disc.h kSurfaceMax) failed testSpinSurface095's grazing view (spin 0.99, the camera at the camera rule's limit 20 GM/c^2 out: the rays level with the
+// camera skim the slab and meet it far from their crossing; 98.6 % of the pixels within 0.5 px); 1.2 passes.
+constexpr double kSurfaceMaxSpin = 1.2;
+// 0.95.0: one exact step at spin, then the hit (spin 0's kSurfaceExact is 2). Each step costs the sky shader an F and a Jacobi amplitude per crossing; with
+// two the sky pass took 588 ms instead of 168 on the build machine (REPORT 0.95.0). testSpinSurface095 passes with one (and with two).
+constexpr int kSurfaceExactSpin = 1;
 struct ClosedEnd {
     RayEnd::Kind kind = RayEnd::Lost;   // Lost: no case applies (counted by the callers; spin_sky falls back to mino.h for it)
     Vec3 dir;                    // Sky: the direction at infinity (chart axes)
@@ -72,11 +92,22 @@ struct ClosedEnd {
     double rEnd = 0, thEnd = 0, dthdr = 0;   // Horizon: where the ray is ended (r+ + 1e-3), its theta and dtheta/dr there
     int radial = 0;              // the substitution used: 1..4 (GLa App. B); 5: case II (substitution (2), all roots inside the horizon)
     bool vortical = false;       // polar type B
+    // 0.95.0 (THE DISC'S SURFACE above): cn = u+^(1/2) (type A; 0 otherwise); per crossing dr/dPsi there (the spin table's slope); with a surface asked for,
+    // per crossing k < kSurfaceOrders the hit: 1 / R there (0: no surface hit, the crossing stands), its |z| and its Mino time from the camera (tauS: every
+    // crossing's own Mino time where it has no surface hit)
+    double cn = 0;
+    double slope[kClosedCross] = {};
+    double uS[kClosedCross] = {}, zS[kClosedCross] = {}, tauS[kClosedCross] = {};
 };
 
 // the ray the camera sees in direction look (KerrBL's launch), into its past; at most maxCross crossings (<= kClosedCross). timed (0.57.2): also phi and t at
 // the crossings (the moving gas; about five times the cost of the rest, so only where asked)
-ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross, bool timed = false);
+// 0.95.0: surf (may be null, or without a height table): the disc's surface hits (cn, slope are always given)
+ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross, bool timed = false, const DiscGeom* surf = nullptr);
+// 0.95.0: the surface hit of a crossing at radius rk, Mino time tauK, slope dr/dPsi (drk), C = u+^(1/2), sq, the polar kc2 = 1 - u+/u-; r(tau) given (the
+// closed forms' rOf, or anything for the tests); returns dtau (0: none) and the hit's r and |z|
+double surfaceHitMino(double rk, double tauK, double drk, double C, double sq, double kc2, const HeightTable& h, const DiscGeom& d,
+                      double (*rOf)(double tau, const void* ctx), const void* ctx, double& r, double& z);
 
 // for the tests: the roots (95) and the case, and the path integrals of App. B evaluated from the camera's radius rs to r (no turning point between; r may be
 // infinite): I0 = Int dr / sqrt R, Ip and Im = Int dr / ((r - r+-) sqrt R)

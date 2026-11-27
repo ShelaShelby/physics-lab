@@ -214,6 +214,8 @@ def precision_card(binary, work):
         check(float(x["dirmid"]) < 1e-8 and float(x["dirfar"]) < 1e-8 and float(x["dirnear"]) < 1e-4,
               f"{w}: far directions ({x['nmid']} + {x['nfar']} nodes: {x['dirmid']}, {x['dirfar']} rad; {x['nnear']} nearer the edge: {x['dirnear']} rad)")
         check(float(x["b"]) < 1e-7 and float(x["u"]) < 1e-3 and float(x["unear"]) < 1e-4, f"{w}: b {x['b']}, u {x['u']} (near the edge {x['unear']})")
+        # 0.95.0: the disc's surface: the slopes dr/dPsi of the first two crossings and u+^(1/2) (kKerrTableCS against spin_sky.cpp), within u's limit
+        check(float(x["sl"]) < 1e-3 and int(x["slone"]) <= int(x["fallbacks"]), f"{w}: the crossings' slopes and u+^(1/2) {x['sl']} ({x['slone']} nodes with them on one side only; the processor's fallback rays {x['fallbacks']})")
         check(float(x["edge"]) < 1e-12 and float(x["rowchi"]) < 1e-8 and float(x["rowedge"]) < 1e-8, f"{w}: the edge {x['edge']}, the rows {x['rowchi']}, their edges {x['rowedge']}")
         check(int(x["ended"]) == 300 and float(x["null"]) < 1e-8 and float(x["qdrift"]) < 1e-8 and float(x["null"]) <= 10 * float(x["cpunull"]) + 1e-15
               and float(x["qdrift"]) <= 10 * float(x["cpuqdrift"]) + 1e-15,
@@ -298,7 +300,9 @@ def precision_sky(binary, work):
     # 2.2), "pole" (0.99, 2.2, 8 degrees from the axis) and "closetable" (as closespin on the table's pass kKerrFS, the processor's exposure): the same limit
     # 0.87.0 (the disc's real light, PLAN_REVIEW R9, R10): "hot" (10 solar masses: the colour correction well above 1), "edgesky" and "edgetable" (spin 0.99,
     # 85 degrees from the pole: the limb darkening's grazing rays, on the sky pass and the table pass): the same limit. Every case draws the real light.
-    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks", "close", "closespin", "pole", "closetable", "hot", "edgesky", "edgetable"}, f"the curve's picture compared at spin 0 near and far, at 0.9, with the streaks, at the closest distance with no spin, the top spin, over the pole, on the table's pass, a hot disc and nearly edge on ({len(tc)})")
+    # 0.95.0: "thick05", "thick99" (the sky pass) and "thick99table" (the table pass): the disc at its thickness round a spinning hole, 5 degrees above the
+    # plane at 20 GM/c^2, the card against the processor (the 0.86.0 Not done item): the same limit
+    check({x["case"] for x in tc} == {"near", "far", "spin", "streaks", "close", "closespin", "pole", "closetable", "hot", "edgesky", "edgetable", "thick05", "thick99", "thick99table"}, f"the curve's picture compared at spin 0 near and far, at 0.9, with the streaks, at the closest distance with no spin, the top spin, over the pole, on the table's pass, a hot disc, nearly edge on and thick at spins 0.5 and 0.99 ({len(tc)})")
     for x in tc:
         floor = 2000 if x["case"] == "close" else 50000                   # (0.84.0: from 2.2 GM/c^2 with no spin the disc covers about 5,100 inner pixels of the whole sky round)
         check(x["ok"] == "1" and int(x["pixels"]) > floor and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")

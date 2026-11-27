@@ -950,6 +950,9 @@ in vec2 vUV;
 uniform sampler2D uTex;
 uniform sampler2D uKA;
 uniform sampler2D uKB;
+uniform sampler2D uKC;                                // 0.95.0: the slopes dr/dPsi of the first two crossings and u+^(1/2) (blackhole/spin_sky.h texC)
+uniform sampler2D uHgt;                               // 0.95.0: the disc's thickness (disc.h HeightTable), uHgtR as kLensFS's
+uniform vec4 uHgtR;
 uniform sampler2D uKE;
 uniform sampler2D uKT;
 uniform sampler2D uDC;
@@ -997,7 +1000,7 @@ float tauAt(float chi) {
 }
 float sOf(float ax) { return log(ax) + ax / uKS.y; }
 // the table's 4 x 4 cubic on one side at (|x|, chi): A (dir, b) and B (u0..u3)
-void tableAt(int side, float ax, float pe, float chi, out vec4 A, out vec4 B) {
+void tableAt(int side, float ax, float pe, float chi, out vec4 A, out vec4 B, out vec4 Cs) {
     float sHi = sOf(side == 0 ? PI - pe : pe);
     float t = (sOf(max(ax, uKS.z)) - uKS.x) / (sHi - uKS.x) * float(uKN.y - 1);
     vec4 wc;
@@ -1006,15 +1009,26 @@ void tableAt(int side, float ax, float pe, float chi, out vec4 A, out vec4 B) {
     q -= floor(q / float(uKN.x)) * float(uKN.x);
     int i = min(int(q), uKN.x - 1);
     vec4 wr = cubicW(q - float(i));
-    A = vec4(0.0); B = vec4(0.0);
+    A = vec4(0.0); B = vec4(0.0); Cs = vec4(0.0);
     for (int r = 0; r < 4; r++) {
         int row = side * uKN.x + (i - 1 + r + uKN.x) % uKN.x;
         for (int c = 0; c < 4; c++) {
             float w = wr[r] * wc[c];
             A += w * texelFetch(uKA, ivec2(j0 + c, row), 0);
             B += w * texelFetch(uKB, ivec2(j0 + c, row), 0);
+            Cs += w * texelFetch(uKC, ivec2(j0 + c, row), 0);
         }
     }
+}
+float hgtAt(float r) {                                // disc.h HeightTable::at
+    if (!(r > 0.0)) return 0.0;
+    float q = (log(r) - uHgtR.x) / uHgtR.y;
+    if (q <= 0.0) return 0.0;
+    int n = int(uHgtR.z);
+    if (q >= float(n - 1)) return texelFetch(uHgt, ivec2(n - 1, 0), 0).r;
+    int i = int(q);
+    float a = texelFetch(uHgt, ivec2(i, 0), 0).r, b = texelFetch(uHgt, ivec2(i + 1, 0), 0).r;
+    return a + (q - float(i)) * (b - a);
 }
 vec2 mapUV(vec3 v) {
     vec3 g = uKs * v;
@@ -1096,8 +1110,8 @@ void main() {
     if (chi < 0.0) chi += 2.0 * PI;
     float pe = edgeAt(chi);
     float xpx = r - pe * uKpx, x = th - pe;
-    vec4 A0, B0;
-    tableAt(0, max(x, 0.0), pe, chi, A0, B0);             // the sky (outside; a pixel just inside takes the edge's ray for its covered part)
+    vec4 A0, B0, C0;
+    tableAt(0, max(x, 0.0), pe, chi, A0, B0, C0);             // the sky (outside; a pixel just inside takes the edge's ray for its covered part)
     vec3 v = A0.xyz / max(length(A0.xyz), 1e-30);
     if (uDebug == 1) { fragColor = x > 0.0 ? vec4(v, xpx) : vec4(0.0, 0.0, 0.0, xpx); return; }
     vec2 uv = mapUV(v);
@@ -1108,10 +1122,21 @@ void main() {
     float cover = clamp(xpx + 0.5, 0.0, 1.0);
     vec3 back = (th > PI || uSky == 0) ? vec3(0.0) : c * uBright * cover;
     if (uDisc == 0 && uDebug != 2) { fragColor = vec4(back, 1.0); skyOut = vec4(decS(back), 1.0); return; }
-    vec4 A = A0, B = B0;
-    if (x <= 0.0) tableAt(1, -x, pe, chi, A, B);
+    vec4 A = A0, B = B0, Cs = C0;
+    if (x <= 0.0) tableAt(1, -x, pe, chi, A, B, Cs);
     float rk[4];
     for (int k = 0; k < 4; k++) rk[k] = (B[k] > 0.0 && th <= PI) ? 1.0 / B[k] : 1e9;
+    // 0.95.0: the disc's surface on the line through each of the first two crossings (blackhole/spin_sky.cpp spinDisc, disc.h surfaceStep): R at |z| = h(R)
+    for (int k = 0; k < 2; k++) {
+        if (!(uHgtR.w > 0.5 && Cs.z > 0.0 && rk[k] < 1e8)) continue;
+        float rk0 = rk[k], drk = Cs[k], sM = sin(0.5);
+        float d = asin(min(hgtAt(clamp(rk0, uDR.x, uDR.y)) / (rk0 * Cs.z), sM));
+        for (int it = 0; it < 4; it++) {
+            float rl = rk0 - drk * d, zl = rl * Cs.z * sin(d), Rl = sqrt(max(rl * rl - zl * zl, 0.0));
+            d = asin(min(hgtAt(Rl) / (max(rl, 1e-9) * Cs.z), sM));
+        }
+        if (d > 0.0) { float rl = rk0 - drk * d, zl = rl * Cs.z * sin(d); rk[k] = sqrt(max(rl * rl - zl * zl, 0.0)); }
+    }
     float fw[4] = float[4](fwidth(rk[0]), fwidth(rk[1]), fwidth(rk[2]), fwidth(rk[3]));
     float b = A.w;
     if (uDebug == 2) {
@@ -1950,9 +1975,10 @@ double dpStep(double b, double q, double y[5], double k1[5], double h, out doubl
 }
 double planeOf(double th) { double s = 0.0LF, c = 0.0LF; dsincos(th, s, c); return c; }
 // the ray at (psi, chi) followed into its past (geodesic.cpp trace with the equator's crossings) and stored as spinRay stores it: Ou[o] = dir (3), b,
-// u (4), the end (1 sky, 2 horizon, 0 lost), steps; with ext the end state y (5) and q follow
-void ray(double psi, double chi, int o, bool ext) {
-    double y[5] = Z5, k1[5] = Z5, yn[5] = Z5, k7[5] = Z5, b = 0.0LF, q = 0.0LF, u[4] = double[4](0.0LF, 0.0LF, 0.0LF, 0.0LF);
+// u (4), the end (1 sky, 2 horizon, 0 lost), steps; with ext the end state y (5) and q follow; 0.95.0, with sl (the table's nodes): the slopes dr/dPsi of
+// the first two crossings and u+^(1/2) (spin_sky.cpp crossingSlope: -Delta p_r / (-u- a^2)^(1/2) at the crossing)
+void ray(double psi, double chi, int o, bool ext, bool sl) {
+    double y[5] = Z5, k1[5] = Z5, yn[5] = Z5, k7[5] = Z5, b = 0.0LF, q = 0.0LF, u[4] = double[4](0.0LF, 0.0LF, 0.0LF, 0.0LF), prc[2] = double[2](0.0LF, 0.0LF);
     launch(psi, chi, y, b, q);
     rhs(b, q, y, k1);
     double h = -0.01LF * RC, dir[3] = double[3](0.0LF, 0.0LF, 0.0LF);
@@ -1978,6 +2004,7 @@ void ray(double psi, double chi, int o, bool ext) {
                 if (abs(dh) <= 1e-14LF * abs(h)) last = true;
             }
             u[found] = 1.0LF / yc[0];
+            if (found < 2) prc[found] = yc[3];
             found++;
         }
         for (int i = 0; i < 5; i++) { y[i] = yn[i]; k1[i] = k7[i]; }
@@ -2020,6 +2047,17 @@ void ray(double psi, double chi, int o, bool ext) {
     for (int k = 0; k < 4; k++) Ou[o + 4 + k] = u[k];
     Ou[o + 8] = double(kind); Ou[o + 9] = double(steps);
     if (ext) { for (int i = 0; i < 5; i++) Ou[o + 10 + i] = y[i]; Ou[o + 15] = q; }
+    if (sl) {
+        double a = SPA, A = a * a - q - b * b, root = sqrt(A * A + 4.0LF * a * a * q);
+        double ma2 = A < 0.0LF ? (root - A) * 0.5LF : (A + root > 0.0LF ? 2.0LF * a * a * q / (A + root) : 0.0LF);
+        bool typeA = q > 0.0LF && ma2 > 0.0LF;
+        double sq = typeA ? sqrt(ma2) : 1.0LF;
+        for (int k = 0; k < 2; k++) {
+            double r = k < found ? 1.0LF / u[k] : 0.0LF, D = r * r - 2.0LF * r + a * a;
+            Ou[o + 10 + k] = typeA && k < found ? -D * prc[k] / sq : 0.0LF;
+        }
+        Ou[o + 12] = typeA ? sqrt(q / ma2) : 0.0LF;
+    }
 }
 // the closed shadow test (spin.cpp fromHorizonPos, J15 (v)) and the edge by bisection (shadowEdge)
 double radialR(double b, double q, double r) { double a = SPA, D = r * r - 2.0LF * r + a * a, P = r * r + a * a - a * b; return P * P - D * ((b - a) * (b - a) + q); }
@@ -2071,13 +2109,13 @@ void main() {
         if (k >= uN) return;
         int side = q / (uNChi * uNS), i = (q / uNS) % uNChi, j = q % uNS;
         double pe = Ed[i], s = SLO + (sOf(side == 0 ? PI - pe : pe) - SLO) * double(j) / double(uNS - 1), ax = absXOf(s);
-        ray(side == 0 ? pe + ax : pe - ax, In[i], 10 * q, false);
+        ray(side == 0 ? pe + ax : pe - ax, In[i], 13 * q, false, true);
         return;
     }
     if (k >= uN) return;
     if (uMode == 0) Ed[k] = shadowEdge(In[k]);
-    else if (uMode == 1) ray(In[2 * k], In[2 * k + 1], 16 * k, true);
-    else if (uMode == 2) { double pe = Ed[k]; ray(pe + 1e-4LF * pe, In[k], 10 * k, false); }
+    else if (uMode == 1) ray(In[2 * k], In[2 * k + 1], 16 * k, true, false);
+    else if (uMode == 2) { double pe = Ed[k]; ray(pe + 1e-4LF * pe, In[k], 10 * k, false, false); }
     else {   // 4: the functions above at x (tests)
         double x = In[k], s = 0.0LF, c = 0.0LF, ax = abs(x) + 1e-300LF;
         dsincos(x, s, c);
@@ -2096,8 +2134,9 @@ void main() {
 //   head + kEllipticPart + kKerrSkyTracePart + kKerrSkyMainPart (the whole).
 // SIZE (decision of 0.56.0: the 0.55.6 compute shader was hundreds of kilobytes once a driver had inlined it): every function is called from ONE place, so
 // that a driver that inlines everything still holds one copy of each: carlsonRCf in carlsonFJ (R_F and R_J by one duplication: their x, y, z steps are the
-// same), carlsonFJ in a loop of two in ellFP (the amplitude, and the complete integral for a reflection), ellFP in the ray's one loop over its eight
-// elliptic integrals (kKerrSkyTracePart: the jobs), amAGM in that loop's one stage of five amplitudes. Every loop has a constant bound; no double.
+// same), carlsonFJ in a loop of two in ellFP (the amplitude, and the complete integral for a reflection), ellFP in the ray's one loop over its sets of
+// integrals (kKerrSkyTracePart; 0.95.0: one set per amplitude, up to four R_J in one duplication), amAGM once in each of that loop's iterations (the end's
+// and the crossings' amplitudes; 0.95.0: the disc surface's radii). Every loop has a constant bound; no double.
 static const char* const kKerrSkyTinyFS = R"(#version 330 core
 out vec4 fragColor;
 uniform vec4 uValue;
@@ -2116,6 +2155,14 @@ static const char* const kKerrSkyHeadPart = R"(#version 330 core
 // (am(K(mu) - u sqrt(kc2) | mu), K(mu) from the same AGM).
 static const char* const kEllipticPart = R"(
 const float PI = 3.14159265358979;
+// 0.95.0: Carlson's stop (was 4e-3). The series ends at degree 5 (R_F: 1 - E2/10 + E3/14 + E2^2/24 - 3 E2 E3/44; R_J: Carlson's C1..C8 form). Its next
+// term, of degree 6, is the error to leading order: R_F -5 E2^3/208 + 3 E3^2/104, R_J -E2^3/16 + 3 E3^2/40 + 3 E2 E4/20 (E_k: the elementary symmetric
+// functions of the deviations (A - x_i) / A, p counted twice for R_J). With every deviation within eps and their sum 0 (Newton's identities): |E2| <= n eps^2 / 2,
+// |E3| <= n eps^3 / 3, |E4| <= (2 E2^2 + n eps^4) / 4 (n = 3 for R_F, 5 for R_J), so |error| <= 0.11 eps^6 (R_F) and 2.8 eps^6 (R_J) of the series' value,
+// and the degree-7 rest is a further factor of order eps (measured against mpmath at 50 digits: the error over the degree-6 term 0.98 to 1.02 at eps =
+// 0.03). At eps = 0.03: 8e-11 and 2.1e-9, below single precision's rounding (6e-8). Tested: tests/test_blackhole.cpp testCarlsonStop095 (the same steps in
+// double against elliptic.cpp) and check_blackhole.py sky (PLBHSKYMATH, this shader within 1e-5).
+const float kCarlsonStop = 0.03;
 // atan, asin and acos to single precision (the built-in ones have no precision the GLSL specification promises; Mesa's asin is off by 1e-4): atan by
 // atan(z) = pi/6 + atan((z sqrt3 - 1) / (z + sqrt3)) down to |z| <= tan(pi/12) and its series to z^11 (the next term below 3e-9); asin from it
 float atan1(float t) {
@@ -2129,9 +2176,10 @@ float atan1(float t) {
     if (inv) r = 1.5707963 - r;
     return t < 0.0 ? -r : r;
 }
-float atanS(float y, float x) {
-    if (x > 0.0) return atan1(y / x);
-    if (x < 0.0) return y >= 0.0 ? atan1(y / x) + PI : atan1(y / x) - PI;
+float atanS(float y, float x) {                       // (0.95.0: atan1 once, the same values: the size limit, tests/check_shaders.py)
+    float t = x != 0.0 ? atan1(y / x) : 0.0;
+    if (x > 0.0) return t;
+    if (x < 0.0) return y >= 0.0 ? t + PI : t - PI;
     return y > 0.0 ? 0.5 * PI : (y < 0.0 ? -0.5 * PI : 0.0);
 }
 float atanS(float t) { return atan1(t); }
@@ -2144,61 +2192,79 @@ float carlsonRCf(float x, float y) {
     float z = sqrt((x - y) / x);
     return 0.5 * log((1.0 + z) * (1.0 + z) * x / y) / sqrt(x - y);
 }
-vec2 carlsonFJ(float x0, float y0, float z0, float p0, bool noJ) {
-    float x = x0, y = y0, z = z0, p = p0, sum = 0.0, fac = 1.0, rf = 0.0, rj = 0.0;
-    bool hasF = false, hasJ = noJ;
+// 0.95.0: R_F(x, y, z) and R_J(x, y, z, p_i) for the nJ values p_i (up to four) by ONE duplication: x, y, z take the same steps for every R_J of the same
+// amplitude (Carlson 1995, the algorithms of R_F and R_J; the steps of each p_i and its sum of R_C as before). Each stops on its own at kCarlsonStop
+// (kEllipticPart's comment above: the bound).
+float carlsonFJ(float x0, float y0, float z0, vec4 p0, int nJ, out vec4 rj) {
+    float x = x0, y = y0, z = z0, fac = 1.0, rf = 0.0;
+    vec4 p = p0, sum = vec4(0.0);
+    rj = vec4(0.0);
+    bool hasF = false;
+    bvec4 has = bvec4(nJ <= 0, nJ <= 1, nJ <= 2, nJ <= 3);
     for (int it = 0; it < 32; it++) {
         if (!hasF) {
             float A = (x + y + z) / 3.0, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A;
-            if (max(abs(dx), max(abs(dy), abs(dz))) < 4e-3) {
+            if (max(abs(dx), max(abs(dy), abs(dz))) < kCarlsonStop) {
                 float e2 = dx * dy - dz * dz, e3 = dx * dy * dz;
                 rf = (1.0 + (e2 / 24.0 - 0.1 - 3.0 / 44.0 * e3) * e2 + e3 / 14.0) / sqrt(A);
                 hasF = true;
             }
         }
-        if (!hasJ) {
-            float A = (x + y + z + p + p) / 5.0, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A, dp = (A - p) / A;
-            if (max(max(abs(dx), abs(dy)), max(abs(dz), abs(dp))) < 4e-3) {
+        for (int i = 0; i < 4; i++) {
+            if (has[i]) continue;
+            float A = (x + y + z + p[i] + p[i]) / 5.0, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A, dp = (A - p[i]) / A;
+            if (max(max(abs(dx), abs(dy)), max(abs(dz), abs(dp))) < kCarlsonStop) {
                 float C1 = 3.0 / 14.0, C2 = 1.0 / 3.0, C3 = 3.0 / 22.0, C4 = 3.0 / 26.0, C5 = 0.75 * C3, C6 = 1.5 * C4, C7 = 0.5 * C2, C8 = C3 + C3;
                 float ea = dx * (dy + dz) + dy * dz, eb = dx * dy * dz, ec = dp * dp, ed = ea - 3.0 * ec, ee = eb + 2.0 * dp * (ea - ec);
-                rj = 3.0 * sum + fac * (1.0 + ed * (-C1 + C5 * ed - C6 * ee) + eb * (C7 + dp * (-C8 + dp * C4)) + dp * ea * (C2 - dp * C3) - C2 * dp * ec) / (A * sqrt(A));
-                hasJ = true;
+                rj[i] = 3.0 * sum[i] + fac * (1.0 + ed * (-C1 + C5 * ed - C6 * ee) + eb * (C7 + dp * (-C8 + dp * C4)) + dp * ea * (C2 - dp * C3) - C2 * dp * ec) / (A * sqrt(A));
+                has[i] = true;
             }
         }
-        if (hasF && hasJ) break;
+        if (hasF && all(has)) break;
         float sx = sqrt(x), sy = sqrt(y), sz = sqrt(z), l = sx * sy + sy * sz + sz * sx;
-        if (!hasJ) {
-            float al = p * (sx + sy + sz) + sx * sy * sz, be = p * (p + l) * (p + l);
-            sum += fac * carlsonRCf(al * al, be);
-            fac *= 0.25;
-            p = (p + l) * 0.25;
+        for (int i = 0; i < 4; i++) {
+            if (has[i]) continue;
+            float al = p[i] * (sx + sy + sz) + sx * sy * sz, be = p[i] * (p[i] + l) * (p[i] + l);
+            sum[i] += fac * carlsonRCf(al * al, be);
+            p[i] = (p[i] + l) * 0.25;
         }
+        fac *= 0.25;
         x = (x + l) * 0.25; y = (y + l) * 0.25; z = (z + l) * 0.25;
     }
-    return vec2(rf, rj);
+    return rf;
 }
-vec2 ellFP(float n, float nc, float s, float c, float kc2, bool eMode, bool dv, bool noJ) {
-    float as = abs(s), ac = abs(c), m = 1.0 - kc2;
-    bool beyond = !eMode && n > 1.0 && (c < 0.0 || nc + n * ac * ac <= 0.0);
-    float nn = beyond ? m / n : n, nnc = beyond ? (n - m) / n : nc;
-    bool dn = !eMode && dv && n < 1.0;
-    float cj = eMode ? -m / 3.0 : (dn ? 1.0 / 3.0 : nn / 3.0);
-    vec2 v = vec2(0.0);
+// 0.95.0: F and the nJ integrals of slots i of ONE amplitude given by its sine and cosine (one duplication for all, carlsonFJ): slot i Pi(n_i; phi | m)
+// (nc_i = 1 - n_i), E(phi | m) where eM_i, (Pi - F) / n where dv_i (as 0.56.2's ellFP slot by slot). Returns F; P the slots.
+float ellFP(vec4 n, vec4 nc, float s, float c, float kc2, bvec4 eM, bvec4 dv, int nJ, out vec4 P) {
+    float as = abs(s), ac = abs(c), m = 1.0 - kc2, F = 0.0;
+    vec4 nE = vec4(not(eM));                          // (0.95.0: the slots as vectors, selects in place of a loop: the size limit, tests/check_shaders.py)
+    bvec4 beyond = bvec4(nE * vec4(greaterThan(n, vec4(1.0))) * (c < 0.0 ? vec4(1.0) : vec4(lessThanEqual(nc + n * ac * ac, vec4(0.0)))));
+    vec4 nn = mix(n, m / n, beyond), nnc = mix(nc, (n - m) / n, beyond);
+    bvec4 dn = bvec4(nE * vec4(dv) * vec4(lessThan(n, vec4(1.0))));
+    vec4 cj = mix(mix(nn / 3.0, vec4(1.0 / 3.0), dn), vec4(-m / 3.0), eM);
+    P = vec4(0.0);
     for (int k = 0; k < 2; k++) {
         if (k == 1 && c >= 0.0) break;
-        float ss = k == 0 ? as : 1.0, cc = k == 0 ? ac : 0.0;
-        vec2 r = carlsonFJ(cc * cc, cc * cc + kc2 * ss * ss, 1.0, eMode ? 1.0 : nnc + nn * cc * cc, noJ);
-        v += (k == 1 ? 2.0 : (c >= 0.0 ? 1.0 : -1.0)) * vec2(ss * r.x, (dn ? 0.0 : ss * r.x) + cj * ss * ss * ss * r.y);   // (past pi/2: 2 K - F(pi - phi))
+        float ss = k == 0 ? as : 1.0, cc = k == 0 ? ac : 0.0, w = k == 1 ? 2.0 : (c >= 0.0 ? 1.0 : -1.0);   // (past pi/2: 2 K - F(pi - phi))
+        vec4 rj = vec4(0.0), p = mix(nnc + nn * cc * cc, vec4(1.0), eM);
+        float rf = carlsonFJ(cc * cc, cc * cc + kc2 * ss * ss, 1.0, p, nJ, rj);
+        F += w * ss * rf;
+        P += w * (mix(vec4(ss * rf), vec4(0.0), dn) + cj * ss * ss * ss * rj);
     }
-    if (beyond) {
-        float P = sqrt((n - 1.0) * nnc), d = sqrt(c * c + kc2 * s * s);
-        float pole = (nc + n * ac * ac) * (nnc + nn * ac * ac);
-        float plus = d * c + P * as, minus = d * c - P * as;
-        float L = abs(plus) >= abs(minus) ? log(abs(plus * plus / pole)) : log(abs(pole / (minus * minus)));
-        v.y = v.x - v.y + L / (2.0 * P);
+    for (int i = 0; i < 4; i++) {
+        if (i >= nJ) break;
+        if (beyond[i]) {
+            float Pp = sqrt((n[i] - 1.0) * nnc[i]), d = sqrt(c * c + kc2 * s * s);
+            float pole = (nc[i] + n[i] * ac * ac) * (nnc[i] + nn[i] * ac * ac);
+            float plus = d * c + Pp * as, minus = d * c - Pp * as;
+            float L = log(abs(plus) >= abs(minus) ? abs(plus * plus / pole) : abs(pole / (minus * minus)));
+            P[i] = F - P[i] + L / (2.0 * Pp);
+        }
     }
-    if (dv && !dn) v.y = (v.y - v.x) / n;
-    return s < 0.0 ? -v : v;
+    bvec4 dq = bvec4(vec4(lessThan(vec4(0.0, 1.0, 2.0, 3.0), vec4(float(nJ)))) * vec4(dv) * (1.0 - vec4(dn)));   // (the slots i < nJ)
+    P = mix(P, (P - F) / n, dq);
+    if (s < 0.0) { F = -F; P = -P; }
+    return F;
 }
 float amAGM(float u, float kc2, float kf) {
     if (kc2 >= 1.0) return u + kf * 0.5 * PI;
@@ -2232,12 +2298,13 @@ void main() {
     vec4 A = texelFetch(uArgs, ivec2(3 * i, 0), 0), B = texelFetch(uArgs, ivec2(3 * i + 1, 0), 0), C = texelFetch(uArgs, ivec2(3 * i + 2, 0), 0);
     float kc2 = C.x, u = C.y;
     if (int(gl_FragCoord.y) == 0) {
-        vec2 fj = carlsonFJ(A.x, A.y, A.z, A.w, false);
-        fragColor = vec4(fj, carlsonRCf(A.x, A.y), amAny(u, kc2));
+        vec4 rj;
+        float rf = carlsonFJ(A.x, A.y, A.z, vec4(A.w), 1, rj);
+        fragColor = vec4(rf, rj.x, carlsonRCf(A.x, A.y), amAny(u, kc2));
     } else {
-        vec2 fp = ellFP(B.x, B.y, B.z, B.w, kc2, false, false, false);
-        vec2 fe = ellFP(0.0, 1.0, B.z, B.w, kc2, true, false, false);
-        fragColor = vec4(fp, fe.y, ellFP(0.0, 1.0, 1.0, 0.0, kc2, false, false, false).x);
+        vec4 P, Pk;                                       // (0.95.0: Pi and E of the same amplitude in one call, as the sky shader takes them)
+        float F = ellFP(vec4(B.x, 0.0, 0.0, 0.0), vec4(B.y, 1.0, 1.0, 1.0), B.z, B.w, kc2, bvec4(false, true, false, false), bvec4(false), 2, P);
+        fragColor = vec4(F, P.x, P.y, ellFP(vec4(0.0), vec4(1.0), 1.0, 0.0, kc2, bvec4(false), bvec4(false), 0, Pk));
     }
 }
 )";
@@ -2256,6 +2323,19 @@ uniform vec4 uCam;
 uniform vec4 uMet;
 uniform vec4 uMet2;
 uniform vec2 uTimeR;                                  // 0.72.0: the crossings at radii in [uTimeR.x, uTimeR.y] get their phi and t (the moving gas); (0, 0): none
+uniform vec4 uDR;                                     // (the disc's rIn, rOut, ln r of its flux table's first value and step; 0.95.0: declared here, the surface uses them)
+uniform sampler2D uHgt;                               // 0.95.0: the disc's thickness (blackhole/disc.h HeightTable, as kLensFS): h (M) at ln r = uHgtR.x + i uHgtR.y,
+uniform vec4 uHgtR;                                   // uHgtR.z values; uHgtR.w 1: the surface at |z| = h drawn (kerr_closed.h "THE DISC'S SURFACE"), 0: the plane
+float hgtAt(float r) {                                // disc.h HeightTable::at
+    if (!(r > 0.0)) return 0.0;
+    float q = (log(r) - uHgtR.x) / uHgtR.y;
+    if (q <= 0.0) return 0.0;
+    int n = int(uHgtR.z);
+    if (q >= float(n - 1)) return texelFetch(uHgt, ivec2(n - 1, 0), 0).r;
+    int i = int(q);
+    float a = texelFetch(uHgt, ivec2(i, 0), 0).r, b = texelFetch(uHgt, ivec2(i + 1, 0), 0).r;
+    return a + (q - float(i)) * (b - a);
+}
 SkyRay traceRay(vec3 look) {
     SkyRay o;
     o.kind = 0; o.dir = vec3(0.0); o.b = 0.0; o.q = 0.0; o.u = vec4(0.0); o.f = 1e30; o.sub = 0; o.ph = vec4(0.0); o.tt = vec4(-1.0);
@@ -2375,51 +2455,138 @@ SkyRay traceRay(vec3 look) {
         }
         as_[k] = s; ac_[k] = c;
     }
-    // the jobs (see above): n, 1 - n, sin, cos, kc2, E instead of Pi
-    float jn[8]; float jnc[8]; float js[8]; float jc[8]; float jk[8]; bool je[8]; vec2 jr[8];
-    for (int k = 0; k < 8; k++) { jn[k] = 0.0; jnc[k] = 1.0; js[k] = 1.0; jc[k] = 0.0; jk[k] = 1.0; je[k] = false; jr[k] = vec2(0.0); }
-    jn[0] = pn; jnc[0] = pnc; js[0] = ps0; jc[0] = pc0; jk[0] = pk;
-    jn[1] = pn; jnc[1] = pnc; jk[1] = pk;
-    jk[2] = rk;
-    float al[4];
-    for (int k = 0; k < 4; k++) {
-        int pt = k / 2;
-        float rr = (k % 2) == 0 ? rp : rm, n = 0.0, nc = 1.0;
+    // the third kind's n of r+ and r- (u = 0, 1; their alpha in case (3), (4); case (3) near r2: E in place of Pi; case (1): the time integrals' (B19))
+    float rN[2]; float rNc[2]; bool rE[2]; float al[2];
+    for (int u = 0; u < 2; u++) {
+        float rr = u == 0 ? rp : rm, n = 0.0, nc = 1.0;
         bool e = false;
-        al[k] = 0.0;
+        al[u] = 0.0;
         if (two) {
             float r3_ = rr - r3, r4_ = rr - r4;
             n = r3_ * r41 / (r4_ * r31); nc = -(rr - r1) * r43 / (r4_ * r31);
         } else if (sub == 3) {
             float q1 = rr - r1, q2 = rr - r2;
-            al[k] = (BB * q2 + AA * q1) / (BB * q2 - AA * q1);
-            e = abs(al[k] * al[k] - 1.0) < 1e-3;
-            n = al[k] * al[k] / (al[k] * al[k] - 1.0); nc = -1.0 / (al[k] * al[k] - 1.0);
+            al[u] = (BB * q2 + AA * q1) / (BB * q2 - AA * q1);
+            e = abs(al[u] * al[u] - 1.0) < 1e-3;
+            n = al[u] * al[u] / (al[u] * al[u] - 1.0); nc = -1.0 / (al[u] * al[u] - 1.0);
         } else if (sub == 4) {
             float x = (rr + b1) / a2;
-            al[k] = (g0 * x - 1.0) / (g0 + x);
-            n = 1.0 + al[k] * al[k]; nc = -al[k] * al[k];
+            al[u] = (g0 * x - 1.0) / (g0 + x);
+            n = 1.0 + al[u] * al[u]; nc = -al[u] * al[u];
+        } else if (sub == 1) {
+            float q1 = rr - r1, q2 = rr - r2;
+            n = q1 * r32 / (q2 * r31); nc = (rr - r3) * r21 / (q2 * r31);
         }
-        jn[3 + k] = n; jnc[3 + k] = nc; js[3 + k] = as_[pt]; jc[3 + k] = ac_[pt]; jk[3 + k] = rk; je[3 + k] = e;
+        rN[u] = n; rNc[u] = nc; rE[u] = e;
     }
-    float tau = 0.0, Kp = 1.0, PiFull = 0.0, F0 = 0.0, G0 = 0.0, Kr = 1.0, ps = 0.0;
+    // the substitution's own n (the time integrals' I1: (B17), (B37), (B68) with R1 of alpha0, (B98) with S1 of g0)
+    float oN = 0.0, oNc = 1.0;
+    if (sub == 1) { oN = r32 / r31; oNc = r21 / r31; }
+    else if (two) { oN = r41 / r31; oNc = -r43 / r31; }
+    else if (sub == 3) { float l = (BB + AA) / (BB - AA), l2 = l * l; oN = l2 / (l2 - 1.0); oNc = -1.0 / (l2 - 1.0); }
+    else { oN = 1.0 + g0 * g0; oNc = -g0 * g0; }
+    float tau = 0.0, Kp = 1.0, PiFull = 0.0, F0 = 0.0, G0 = 0.0, Kr = 1.0, ps = 0.0, Fc = 0.0, Fe = 0.0, Gend = 0.0;
+    vec2 Pc = vec2(0.0), Pe = vec2(0.0);              // the third kind of r+ and r- at the camera's and at the end's radial amplitude
+    vec2 ipC = vec2(0.0), imC = vec2(0.0);            // 0.95.0: I+ and I- there (Radial's Ipm, sets 3 and 4; GLa (B2), (B3))
     float taus[4];
     float rx[4];
     float amc[4];                                     // 0.72.0: the radial amplitudes at the crossings, the polar half turns there, which get phi and t
     int jh[4];
     bool tOn[4];
     for (int k = 0; k < 4; k++) { taus[k] = 0.0; rx[k] = 0.0; amc[k] = 0.0; jh[k] = 0; tOn[k] = false; }
-    bool tUse = false, skip7 = false;
+    bool tUse = false;
     float Dh = 0.0, D0 = 0.0, ca1 = 0.0, ca2 = 0.0, cap = 0.0, cam = 0.0;
-    vec2 jv[4];
-    for (int k = 0; k < 4; k++) jv[k] = vec2(0.0);
     int nx = 0;
     bool bad = false;
-    for (int k = 0; k < 32; k++) {
-        if (k == 7) {
-            // the set-up's results; the Mino time to the end (traceClosed) and the amplitudes at it
-            F0 = jr[0].x; G0 = noG ? 0.0 : jr[0].y; Kp = jr[1].x; PiFull = jr[1].y; Kr = jr[2].x;
-            float Ic = pref * jr[3].x, Ie = pref * jr[5].x;
+    // 0.95.0, the disc's surface (kerr_closed.cpp surfaceHitMino): per crossing c < 2 its phi, whether it is still followed, its Mino time back (dtS) and R
+    float phiS[2]; bool sOn[2]; float rS[2]; float dtS = 0.0, rqS = 1.0, RqS = 1.0;
+    for (int c = 0; c < 2; c++) { phiS[c] = 0.0; sOn[c] = false; rS[c] = -1.0; }
+    bool surfOn = uHgtR.w > 0.5 && !eq0 && !vort && up > 0.0;
+    float Cs = sqrt(max(up, 0.0)), sMaxS = sin(1.2);   // (u+^(1/2); kerr_closed.h kSurfaceMaxSpin)
+    // 0.95.0, THE INTEGRALS BY AMPLITUDE (Part A of 0.95.0): each iteration takes one SET, the integrals of one amplitude, by ONE call of ellFP (one Carlson
+    // duplication for its F and up to four R_J: 0.94's one job per integral repeated x, y, z's steps for each), then at most one Jacobi amplitude (amAny).
+    //   it 0: the polar start Psi_0 (F, and for a ray to the sky Pi(u+)); 1: the polar complete integrals (K, Pi); 2: the radial K (case (1) only); 3, 4: the
+    //   radial amplitude at the camera and at the end (F, and for a ray to the sky Pi of r+ and r-); after 4: the Mino time to the end and the crossings'
+    //   times, then the polar end's amplitude; 5: the polar end (Pi, a ray to the sky) and the first crossing's radial amplitude; 6, 7, 8: the other crossings'.
+    //   The disc's surface (0.95.0): 9..12, two for each of the first two crossings: F(phi | u+/u-) of the surface's phi (the Mino time back from the
+    //   crossing, dtau = F / sq), then the radial amplitude at tau_k - dtau (r there); the first of the two starts phi by the fixed-point steps on the line
+    //   through the crossing (disc.h surfaceStep), the second gives the hit (kerr_closed.cpp surfaceHitMino: kSurfaceExactSpin = 1 exact step, then the hit).
+    //   The moving gas (0.72.0, kerr_closed.cpp phiTimeAt, Radial::timeInts, Polar::Gt), only where a crossing is timed: 13, 14 the polar D(Psi_0), D(pi/2)
+    //   (D = (F - E) / m as (Pi - F) / n at n = 0) and, for a ray that ends at the horizon, G_phi's Pi(Psi_0) and the complete Pi; 15 the camera's radial
+    //   amplitude and 16..19 each timed crossing's: Pi of the substitution's own n (I1), E (I2), and the two of r+ and r- (I+-; case (3) near r2: E).
+    //   (0.56.2: not made where not used: the radial K but for case (1), and for a ray that ends at the horizon its far direction's integrals.)
+    for (int it = 0; it < 20; it++) {
+        bool run = true;
+        int nJ = 0;
+        float es = 1.0, ec = 0.0, ek = rk;
+        vec4 en = vec4(0.0), enc = vec4(1.0);
+        bvec4 eE = bvec4(false), eD = bvec4(false);
+        int ia = it - 15, sc = (it - 9) / 2, sst = (it - 9) - 2 * sc;
+        float amp = 0.0;
+        if (it <= 1) {
+            run = !eq0; ek = pk; es = it == 0 ? ps0 : 1.0; ec = it == 0 ? pc0 : 0.0;
+            if (sky) { nJ = 1; en.x = pn; enc.x = pnc; }
+        } else if (it == 2) run = sub == 1;
+        else if (it <= 4) {
+            es = as_[it - 3]; ec = ac_[it - 3];
+            if (sky && sub != 1) { nJ = 2; en.xy = vec2(rN[0], rN[1]); enc.xy = vec2(rNc[0], rNc[1]); eE.xy = bvec2(rE[0], rE[1]); eD.xy = bvec2(two, two); }
+        } else if (it == 5) {
+            run = sky && !eq0 && !noG;
+            float jj = floor(ps / PI + 0.5), pp = ps - jj * PI;
+            es = sin(pp); ec = cos(pp); ek = pk; nJ = 1; en.x = pn; enc.x = pnc;
+        } else if (it <= 8) run = false;
+        else if (it <= 12) {                              // the surface of crossing sc, step sst (see above)
+            float rk0 = rx[sc], drk = 0.0;
+            if (sst == 0) {
+                sOn[sc] = surfOn && sc < nx && rx[sc] > 0.0;
+                if (sOn[sc]) {                            // the fixed-point steps on the line through the crossing (disc.h surfaceStep): dr/dPsi = (dr/dtau) / sq,
+                    float tq = taus[sc];                  // (dr/dtau)^2 = R(r) (GLa (7)) with the ray's sign there (kerr_closed.cpp Radial::sign)
+                    float sgr = (sub == 2 && nuR < 0.0) ? (tq < pref * Fc ? -1.0 : 1.0) : ((sub == 1 && nuR > 0.0) ? (tq < pref * (Kr - Fc) ? 1.0 : -1.0) : nuR);
+                    drk = sgr * sqrt(max(((rk0 * rk0 + A) * rk0 + B) * rk0 + C, 0.0)) / sq;
+                }
+            }
+            if (sOn[sc]) {                                // phi = asin(h(R) / (r u+^(1/2))): step 0, the crossing's r (clamped to the disc) and 4 steps on the
+                float d = 0.0;                            // line; step 1, once at the point the exact step reached (rqS, RqS). (0.95.0: one hgtAt, the size limit)
+                for (int j = 0; j < 5; j++) {
+                    if (sst == 1 && j > 0) break;
+                    bool first = sst == 0 && j == 0;
+                    float rl = sst == 1 ? rqS : rk0 - drk * d, zl = rl * Cs * sin(d), Rl = sst == 1 ? RqS : sqrt(max(rl * rl - zl * zl, 0.0));
+                    float Rq = first ? clamp(rk0, uDR.x, uDR.y) : Rl, den = first ? rk0 : (sst == 1 ? rqS : max(rl, 1e-9));
+                    d = asin(min(hgtAt(Rq) / (den * Cs), sst == 0 ? sin(0.5) : sMaxS));
+                }
+                phiS[sc] = d;
+                sOn[sc] = d > 0.0;
+            }
+            run = sOn[sc]; ek = pk; es = sin(phiS[sc]); ec = cos(phiS[sc]);
+        } else if (it <= 14) {
+            run = tUse; ek = pk; es = it == 13 ? ps0 : 1.0; ec = it == 13 ? pc0 : 0.0;
+            nJ = 1; eD.x = true;
+            if (!sky && !noG) { nJ = 2; en.y = pn; enc.y = pnc; }
+        } else {
+            run = tUse && (ia == 0 || tOn[ia - 1]);
+            amp = ia == 0 ? nuR : amc[ia - 1];              // (the camera's amplitude nuR phi_c: only its sign is used, kerr_closed.cpp camInts)
+            float pa = sub == 4 ? amp : abs(amp);
+            es = ia == 0 ? as_[0] : sin(pa); ec = ia == 0 ? ac_[0] : cos(pa);
+            nJ = 4;
+            en = vec4(oN, 0.0, rN[0], rN[1]); enc = vec4(oNc, 1.0, rNc[0], rNc[1]);
+            eE = bvec4(false, true, sub == 3 && rE[0], sub == 3 && rE[1]); eD = bvec4(false, false, two, two);
+        }
+        float F = 0.0;
+        vec4 P = vec4(0.0);
+        if (run) F = ellFP(en, enc, es, ec, ek, eE, eD, nJ, P);
+        if (it == 0) { F0 = F; G0 = noG ? 0.0 : P.x; }
+        else if (it == 1) { Kp = F; PiFull = P.x; }
+        else if (it == 2) Kr = F;
+        else if (it == 3) { Fc = F; Pc = P.xy; }
+        else if (it == 4) Fe = F;
+        else if (it == 5) Gend = P.x;
+        else if (it <= 12 && it >= 9 && run) { dtS = F / sq; if (!(dtS > 0.0 && dtS < taus[sc])) sOn[sc] = false; }
+        else if (it == 13) { D0 = P.x; if (!sky && !noG) G0 = P.y; }
+        else if (it == 14) { Dh = P.x; if (!sky && !noG) PiFull = P.y; }
+        if (it == 4) {
+            Pe = P.xy;
+            // the set-up's results; the Mino time to the end (traceClosed) and the crossings' times
+            float Ic = pref * Fc, Ie = pref * Fe;
             if (sub == 1) tau = nuR < 0.0 ? Ic - Ie : 2.0 * pref * Kr - Ic - Ie;
             else if (sky) tau = Ie + (nuR > 0.0 ? -1.0 : 1.0) * Ic;
             else tau = Ic - Ie;
@@ -2431,89 +2598,49 @@ SkyRay traceRay(vec3 look) {
                     if (tj > 0.0) { taus[nx] = tj; jh[nx] = j; nx++; }
                 }
             }
-            float Fc = jr[3].x;
-            for (int i = 0; i < 5; i++) {
-                if (i > 0 && i > nx) break;
-                bool pol = i == 0;
-                float uu = pol ? sq * tau + F0 : (sub == 4 ? nuR * taus[i - 1] / pref + Fc : taus[i - 1] / pref + nuR * Fc);
-                float am = amAny(uu, pol ? pk : rk);
-                if (pol) { ps = am; continue; }
-                amc[i - 1] = am;
+        }
+        // the amplitude (one a set): after set 4 the polar end's, after sets 5..8 the crossings', after the surface's sets the radius at tau_k - dtau
+        bool srf = it >= 9 && it <= 12 && sOn[sc];
+        if ((it >= 4 && it <= 8 && (it == 4 || it - 5 < nx)) || srf) {
+            bool pol = it == 4;
+            float tq = srf ? taus[sc] - dtS : (pol ? 0.0 : taus[it - 5]);
+            float uu = pol ? sq * tau + F0 : (sub == 4 ? nuR * tq / pref + Fc : tq / pref + nuR * Fc);
+            float am = amAny(uu, pol ? pk : rk);
+            if (pol) ps = eq0 ? 0.0 : am;
+            else {
                 float rr = 0.0;
-                if (sub == 4) rr = a2 * tan(am - atanS(g0)) - b1;
+                if (sub == 4) { float sa = sin(am), ca = cos(am); rr = a2 * (sa - g0 * ca) / (ca + g0 * sa) - b1; }   // (tan(am - atan g0), as a quotient: no atan)
                 else if (sub == 3) { float cn = cos(am); rr = ((BB * r2 - AA * r1) + (BB * r2 + AA * r1) * cn) / ((BB - AA) + (BB + AA) * cn); }
                 else { float s2 = sin(am) * sin(am); rr = sub == 1 ? (r2 * r31 - r1 * r32 * s2) / (r31 - r32 * s2) : (r4 * r31 - r3 * r41 * s2) / (r31 - r41 * s2); }
-                rx[i - 1] = rr;
-            }
-            if (eq0) ps = 0.0;
-            float jj = floor(ps / PI + 0.5), pp = ps - jj * PI;
-            jn[7] = pn; jnc[7] = pnc; js[7] = sin(pp); jc[7] = cos(pp); jk[7] = pk;
-            for (int i = 0; i < 4; i++) { tOn[i] = i < nx && rx[i] > 0.0 && rx[i] >= uTimeR.x && rx[i] <= uTimeR.y; tUse = tUse || tOn[i]; }
-            if (eq0 || noG || !sky) { if (!tUse) break; skip7 = true; }
-        }
-        // (0.56.2: not made where not used: K(mu) (job 2; the polar amplitude's AGM has it), the radial K but for case (1), and for a ray that ends at
-        // the horizon the far direction's integrals: the I_+- terms (jobs 4, 6, the third kind of 3, 5) and the polar third kind (0, 1, 7))
-        // 0.72.0, the moving gas (kerr_closed.cpp phiTimeAt, Radial::timeInts, Polar::Gt): jobs 8, 9 the polar D(pi/2), D(Psi_0) (D = (F - E) / m as
-        // (Pi - F) / n at n = 0: dAny); 10, 11 G_phi's Pi(Psi_0) and the complete Pi for a ray that ends at the horizon (jobs 0 and 1 made them without
-        // their R_J); then four per amplitude, the camera's (12..15) and each timed crossing's: Pi of the substitution's own n (I1), E (I2), and the two of
-        // r+ and r- (I+-; case (3) near r2: E, as the sky's end)
-        if (k < 8) {
-            if (k == 2 && sub != 1) continue;
-            if ((k == 0 || k == 1) && eq0) continue;
-            if (k >= 3 && k < 7 && (sub == 1 || !sky) && (k % 2) == 0) continue;
-            if (k == 7 && skip7) continue;
-        } else if (!tUse) break;
-        float en = 0.0, enc = 1.0, es = 1.0, ec = 0.0, ek = rk;
-        bool eE = false, eD = false, eNo = false;
-        int q = k - 8, ia = 0, jb = 0;
-        float amp = 0.0;
-        if (k < 8) { en = jn[k]; enc = jnc[k]; es = js[k]; ec = jc[k]; ek = jk[k]; eE = je[k]; eD = two && k >= 3 && k < 7; eNo = k == 2 || !sky; }
-        else if (q < 2) { es = q == 0 ? 1.0 : ps0; ec = q == 0 ? 0.0 : pc0; ek = pk; eD = true; }
-        else if (q < 4) {                                 // (a ray that ends at the horizon: the polar third kind was not made above, jobs 0 and 1)
-            if (sky || noG) continue;
-            en = pn; enc = pnc; es = q == 2 ? ps0 : 1.0; ec = q == 2 ? pc0 : 0.0; ek = pk;
-        } else {
-            ia = (q - 4) / 4; jb = q - 4 - 4 * ia;
-            if (ia > 0 && !tOn[ia - 1]) continue;
-            amp = ia == 0 ? nuR : amc[ia - 1];              // (the camera's amplitude nuR phi_c: only its sign is used, kerr_closed.cpp camInts)
-            float p = sub == 4 ? amp : abs(amp);
-            es = ia == 0 ? as_[0] : sin(p); ec = ia == 0 ? ac_[0] : cos(p);
-            if (jb == 0) {
-                if (sub == 1) { en = r32 / r31; enc = r21 / r31; }
-                else if (two) { en = r41 / r31; enc = -r43 / r31; }
-                else if (sub == 3) { float l = (BB + AA) / (BB - AA), l2 = l * l; en = l2 / (l2 - 1.0); enc = -1.0 / (l2 - 1.0); }
-                else { en = 1.0 + g0 * g0; enc = -g0 * g0; }
-            } else if (jb == 1) eE = true;
-            else {
-                float rr = jb == 2 ? rp : rm;
-                if (two) { en = (rr - r3) * r41 / ((rr - r4) * r31); enc = -(rr - r1) * r43 / ((rr - r4) * r31); eD = true; }
-                else if (sub == 1) { float q1 = rr - r1, q2 = rr - r2; en = q1 * r32 / (q2 * r31); enc = (rr - r3) * r21 / (q2 * r31); }
-                else if (sub == 3) { float l = al[jb], l2 = l * l; eE = abs(l2 - 1.0) < 1e-3; en = l2 / (l2 - 1.0); enc = -1.0 / (l2 - 1.0); }
-                else { float l = al[jb], l2 = l * l; en = 1.0 + l2; enc = -l2; }
+                if (!srf) { amc[it - 5] = am; rx[it - 5] = rr; }
+                else if (!(rr > 0.0)) sOn[sc] = false;
+                else {                                    // (kerr_closed.cpp surfaceHitMino: |z| = r u+^(1/2) sin phi; the next phi, or the hit)
+                    float zz = rr * Cs * sin(phiS[sc]), Rr = sqrt(max(rr * rr - zz * zz, 0.0));
+                    if (sst == 1) rS[sc] = Rr;
+                    else { rqS = rr; RqS = Rr; }           // (the next phi at the start of step 1)
+                }
             }
         }
-        vec2 v = ellFP(en, enc, es, ec, ek, eE, eD, eNo);
-        if (k < 8) { jr[k] = v; continue; }
-        if (q == 0) { Dh = v.y; continue; }
-        if (q == 1) { D0 = v.y; continue; }
-        if (q == 2) { G0 = v.y; continue; }
-        if (q == 3) { PiFull = v.y; continue; }
-        jv[jb] = v;
-        if (jb < 3) continue;
-        // the amplitude's antiderivatives (Radial::timeInts): I1, I2, I+, I- at (s, c) = (es, ec)
-        float s = es, c = ec, Fu = jv[1].x, F = pref * Fu, E = jv[1].y, d = sqrt(c * c + rk * s * s), jm = 1.0 - rk;
+        if (it == 8) for (int i = 0; i < 4; i++) { tOn[i] = i < nx && rx[i] > 0.0 && rx[i] >= uTimeR.x && rx[i] <= uTimeR.y; tUse = tUse || tOn[i]; }
+        if (it == 12 && !tUse) break;
+        bool ipSet = (it == 3 || it == 4) && sky && sub != 1;   // 0.95.0: also the camera's and the end's I+- of a ray to the sky (sets 3, 4: P = (Pi of r+, of r-))
+        if (!ipSet && (it < 15 || !run)) continue;               // (one copy of the formulas: the size limit, tests/check_shaders.py)
+        // the amplitude's antiderivatives (Radial::timeInts): I1, I2, I+, I- at (s, c) = (es, ec); P = (Pi of the own n, E, Pi of r+, of r-)
+        vec2 Pr = ipSet ? P.xy : P.zw;
+        float s = es, c = ec, Fu = F, Fr = pref * Fu, E = P.y, d = sqrt(c * c + rk * s * s), jm = 1.0 - rk;
         float i1 = 0.0, i2 = 0.0, ipm[2];
         ipm[0] = 0.0; ipm[1] = 0.0;
-        if (sub == 1 || two) {
+        if (!ipSet && (sub == 1 || two)) {
             float rA = sub == 1 ? r1 : r3, rB = sub == 1 ? r21 : r43, n = sub == 1 ? r32 / r31 : r41 / r31;
-            i1 = rA * F + rB * pref * jv[0].y;
-            i2 = 2.0 * n * s * c * d / (pref * (1.0 - n * s * s)) - (r1 * r4 + r2 * r3) * 0.5 * F - sqrt(r31 * r42) * E;
+            i1 = rA * Fr + rB * pref * P.x;
+            i2 = 2.0 * n * s * c * d / (pref * (1.0 - n * s * s)) - (r1 * r4 + r2 * r3) * 0.5 * Fr - sqrt(r31 * r42) * E;
         }
         // R1 (case (3)) or S1 (case (4)) of the substitution's own alpha (u = 0: I1, I2) and of r+-'s (u = 1, 2: I+-), one stage
         float sab = sqrt(AA * BB), W = 2.0 * r21 * sab / (BB * BB - AA * AA);
         for (int u = 0; u < 3; u++) {
             if (sub != 3 && sub != 4) break;
-            float rr = u == 1 ? rp : rm, l = u == 0 ? (sub == 3 ? (BB + AA) / (BB - AA) : g0) : al[u + 1], l2 = l * l, Pv = jv[u == 0 ? 0 : u + 1].y;
+            if (ipSet && u == 0) continue;
+            float rr = u == 1 ? rp : rm, l = u == 0 ? (sub == 3 ? (BB + AA) / (BB - AA) : g0) : al[u - 1], l2 = l * l, Pv = u == 0 ? P.x : (u == 1 ? Pr.x : Pr.y);
             float q1 = rr - r1, q2 = rr - r2, x = (rr + b1) / a2, R = 0.0;
             if (sub == 3) {
                 if (u > 0 && abs(l2 - 1.0) < 1e-3) {           // near r2 (kerr_closed.cpp nearR2): E in place of Pi
@@ -2523,26 +2650,27 @@ SkyRay traceRay(vec3 look) {
                 }
                 float w = jm + (1.0 - jm) * l2, p1 = sqrt((l2 - 1.0) / w), pl = p1 * d + s;
                 R = (Pv - l * p1 * 0.5 * log(abs(pl * pl * w / (l2 * c * c - 1.0)))) / (1.0 - l2);
-                if (u > 0) { ipm[u - 1] = -1.0 / (BB * q2 + AA * q1) * ((BB + AA) * F + 2.0 * r21 * sab / (BB * q2 - AA * q1) * R); continue; }
+                if (u > 0) { ipm[u - 1] = -1.0 / (BB * q2 + AA * q1) * ((BB + AA) * Fr + 2.0 * r21 * sab / (BB * q2 - AA * q1) * R); continue; }
                 float qq = (BB * r2 + AA * r1) / (BB + AA), P1 = W * R;
                 float R2 = (Fu - l2 / w * (E - l * s * d / (1.0 + l * c))) / (l2 - 1.0) + (2.0 * jm - l2 / (l2 - 1.0)) / w * R;
-                i1 = qq * F + P1;
-                i2 = qq * qq * F + 2.0 * qq * P1 + sab * W * W * R2;
+                i1 = qq * Fr + P1;
+                i2 = qq * qq * Fr + 2.0 * qq * P1 + sab * W * W * R2;
             } else {
                 float p2 = sqrt((1.0 + l2) / (rk + l2));
                 R = (Fu + l2 * Pv - l * p2 * 0.5 * log(abs((1.0 + p2 * d) * (1.0 + p2 * d) / ((1.0 + p2) * (1.0 + p2) * ((1.0 + l2) * s * s - 1.0))))) / (1.0 + l2);
-                if (u > 0) { ipm[u - 1] = g0 / (a2 * (1.0 - g0 * x)) * F - pref * (1.0 + g0 * g0) / (a2 * (1.0 - g0 * x) * (g0 + x)) * R; continue; }
+                if (u > 0) { ipm[u - 1] = g0 / (a2 * (1.0 - g0 * x)) * Fr - pref * (1.0 + g0 * g0) / (a2 * (1.0 - g0 * x) * (g0 + x)) * R; continue; }
                 float Qq = a2 / g0 - b1, Pq = a2 * (1.0 + g0 * g0) / g0, P1 = pref * Pq * R;
                 float S2 = -((1.0 - jm) * Fu + l2 * E + l2 * d * (l * c - s) / (c + l * s) - l2 * l) / ((1.0 + l2) * (1.0 - jm + l2)) + (1.0 / (1.0 + l2) + (1.0 - jm) / (1.0 - jm + l2)) * R;
-                i1 = Qq * F - P1;
-                i2 = Qq * Qq * F - 2.0 * Qq * P1 + pref * Pq * Pq * S2;
+                i1 = Qq * Fr - P1;
+                i2 = Qq * Qq * Fr - 2.0 * Qq * P1 + pref * Pq * Pq * S2;
             }
         }
         if (sub == 1 || two) for (int u = 0; u < 2; u++) {
-            float rr = u == 0 ? rp : rm, Pv = jv[2 + u].y;
+            float rr = u == 0 ? rp : rm, Pv = u == 0 ? Pr.x : Pr.y;
             if (two) { float r4_ = rr - r4; ipm[u] = -pref / r4_ * (Fu + r43 * r41 / (r4_ * r31) * Pv); }
-            else { float q1 = rr - r1, q2 = rr - r2; ipm[u] = -F / q1 - pref * r21 / (q1 * q2) * Pv; }
+            else { float q1 = rr - r1, q2 = rr - r2; ipm[u] = -Fr / q1 - pref * r21 / (q1 * q2) * Pv; }
         }
+        if (ipSet) { ipC[it - 3] = ipm[0]; imC[it - 3] = ipm[1]; continue; }
         float sgn = sub != 4 && amp < 0.0 ? -1.0 : 1.0;
         i1 *= sgn; i2 *= sgn; ipm[0] *= sgn; ipm[1] *= sgn;
         if (ia == 0) { ca1 = i1; ca2 = i2; cap = ipm[0]; cam = ipm[1]; continue; }
@@ -2559,7 +2687,7 @@ SkyRay traceRay(vec3 look) {
     }
     if (bad) return o;
 #if defined(SKY_STOP) && SKY_STOP == 3
-    o.kind = 1; o.dir = normalize(vec3(jr[0].x + jr[1].y + jr[2].x, jr[3].y + jr[4].y + jr[5].y + jr[6].y + jr[7].y, ps + rx[0] + rx[1] + rx[2] + rx[3] + 1.0)); return o;
+    o.kind = 1; o.dir = normalize(vec3(F0 + PiFull + Kr, Pc.x + Pc.y + Pe.x + Pe.y + Gend, ps + rx[0] + rx[1] + rx[2] + rx[3] + 1.0)); return o;
 #endif
     // the crossings' u (and the first one not made, continued as spinRayClosed does), the end
     float dmu = 0.0, mu = cth, G = 0.0;
@@ -2569,41 +2697,14 @@ SkyRay traceRay(vec3 look) {
         if (!vort) { mu = -nu * sqrt(up) * s; dmu = -nu * sqrt(up) * c * sq * dn; }
         else { float w = sqrt(um + (up - um) * s * s); mu = h * w; dmu = h * (up - um) * s * c * sq * dn / w; }
         float jj = floor(ps / PI + 0.5);
-        G = noG ? 0.0 : (jr[7].y + 2.0 * jj * PiFull - G0) * gscale;
+        G = noG ? 0.0 : (Gend + 2.0 * jj * PiFull - G0) * gscale;
     }
     mu = clamp(mu, -1.0, 1.0);
     vec4 u = vec4(0.0);
     int nCross = 0;
-    for (int i = 0; i < 4; i++) if (i < nx && rx[i] > 0.0 && nCross == i) { u[i] = 1.0 / rx[i]; nCross++; }
+    for (int i = 0; i < 4; i++) if (i < nx && rx[i] > 0.0 && nCross == i) { u[i] = 1.0 / ((i < 2 && rS[i] > 0.0) ? rS[i] : rx[i]); nCross++; }   // (0.95.0: R at the surface)
     if (sky) {
-        float ip[2]; float im[2];
-        if (sub != 1) for (int k = 0; k < 4; k++) {
-            int pt = k / 2;
-            float rr = (k % 2) == 0 ? rp : rm, F = pref * jr[3 + 2 * pt].x, Pi = jr[3 + k].y, s = as_[pt], c = ac_[pt], v = 0.0;
-            if (two) {
-                float r4_ = rr - r4;
-                v = -pref / r4_ * (jr[3 + 2 * pt].x + r43 * r41 / (r4_ * r31) * Pi);   // (Pi here (Pi - F) / n: kerr_closed.cpp Ipm)
-            } else if (sub == 3) {
-                float q1 = rr - r1, q2 = rr - r2, l = al[k], l2 = l * l, jm = 1.0 - rk;
-                if (je[3 + k]) {
-                    float d = sqrt(c * c + rk * s * s), Ft = F / pref, R1m = -d * (1.0 + c) / s + Ft - Pi;
-                    v = pref / (r21 * AA) * (-(BB + AA) * Ft + 2.0 * BB * R1m);
-                } else {
-                    float w = jm + (1.0 - jm) * l2, p1 = sqrt((l2 - 1.0) / w), d = sqrt(c * c + rk * s * s), pl = p1 * d + s;
-                    float f1 = p1 * 0.5 * log(abs(pl * pl * w / (l2 * c * c - 1.0)));
-                    float R1 = (Pi - l * f1) / (1.0 - l2);
-                    v = -1.0 / (BB * q2 + AA * q1) * ((BB + AA) * F + 2.0 * r21 * sqrt(AA * BB) / (BB * q2 - AA * q1) * R1);
-                }
-            } else {
-                float x = (rr + b1) / a2, l = al[k], l2 = l * l, d = sqrt(c * c + rk * s * s);
-                float p2 = sqrt((1.0 + l2) / (rk + l2));
-                float f2 = p2 * 0.5 * log(abs((1.0 + p2 * d) * (1.0 + p2 * d) / ((1.0 + p2) * (1.0 + p2) * ((1.0 + l2) * s * s - 1.0))));
-                float S1 = (F / pref + l2 * Pi - l * f2) / (1.0 + l2);
-                v = g0 / (a2 * (1.0 - g0 * x)) * F - pref * (1.0 + g0 * g0) / (a2 * (1.0 - g0 * x) * (g0 + x)) * S1;
-            }
-            if ((k % 2) == 0) ip[pt] = v; else im[pt] = v;
-        }
-        float Ip = ip[1] + sg * ip[0], Im = im[1] + sg * im[0];
+        float Ip = ipC[1] + sg * ipC[0], Im = imC[1] + sg * imC[0];   // (the camera's and the end's, sets 3 and 4)
         float Iphi = 2.0 * a / (rp - rm) * ((rp - a * lam * 0.5) * Ip - (rm - a * lam * 0.5) * Im);
         float npol = 0.0;
         if (noG && !eq0) { float off = vort ? 0.0 : PI * 0.5; npol = floor((ps - off) / PI) - floor((ph0 - off) / PI); }
@@ -2681,9 +2782,13 @@ float strkField(float R, float phi, float te, float fe, float fp, out float s2) 
             float v = B.x + te / life + 0.5 * float(j), nn = floor(v), u = v - nn, wt = wb * sin(PI * u);
             uint h = gasHash(K + uint(int(nn)), uint(2 * k + j + 7), 0x51u);
             float X = X0 + float(h & 0xFFFFFFu) / 16777216.0, Y = (phi - om * u * life) / (2.0 * PI) + float((h * 747796405u + 1u) & 0xFFFFFFu) / 16777216.0;
-            float e0 = 0.0, e1 = 0.0;
-            float v0 = strkSample(L, X, Y, e0), v1 = 0.0;
-            if (w > 0.0) v1 = strkSample(L + 1, X, Y, e1);
+            float vl[2]; float el[2];
+            vl[0] = 0.0; vl[1] = 0.0; el[0] = 0.0; el[1] = 0.0;
+            for (int l = 0; l < 2; l++) {             // (level L, and L + 1 where w > 0; 0.95.0: one strkSample, the size limit, tests/check_shaders.py)
+                if (l == 1 && !(w > 0.0)) break;
+                vl[l] = strkSample(L + l, X, Y, el[l]);
+            }
+            float v0 = vl[0], v1 = vl[1], e0 = el[0], e1 = el[1];
             f += wt * ((1.0 - w) * v0 + w * v1);
             sv += wt * wt * ((1.0 - w) * (1.0 - w) * e0 + w * w * e1 + 2.0 * w * (1.0 - w) * cv);
         }
@@ -2730,7 +2835,6 @@ uniform int uMode;
 uniform float uBright;
 uniform int uSky;
 uniform int uDisc;
-uniform vec4 uDR;
 uniform vec4 uDT;
 uniform ivec3 uDN;
 uniform vec4 uDFix;
@@ -2821,6 +2925,9 @@ void main() {
         return;
     }
     vec2 pos = gl_FragCoord.xy;
+#if defined(SKY_STOP) && SKY_STOP == 5
+    fragColor = vec4(pos, 0.0, 1.0); return;                  // (0.95.0: nothing but the pass itself: the split's fixed cost)
+#endif
     if (uMode == 10) pos = vec2(uSamp.x + floor(gl_FragCoord.x) * uSamp.y, uSamp.z - floor(gl_FragCoord.y) * uSamp.w);
     vec2 o = pos - uCentre;
     float rr = length(o), th = rr / uKpx;
@@ -2829,6 +2936,9 @@ void main() {
     if (chi < 0.0) chi += 2.0 * PI;
     float thc = min(th, PI);
     SkyRay R = traceRay(vec3(-cos(thc), sin(thc) * cos(chi), sin(thc) * sin(chi)));
+#if defined(SKY_STOP) && SKY_STOP == 4
+    fragColor = vec4(R.dir, R.u.x + R.u.y + R.ph.x + R.tt.x + R.f); return;   // (0.95.0: the whole ray, no disc light and no sky map: the split's last part)
+#endif
     bool skyEnd = R.kind == 1;
     // the edge's distance in pixels (derivatives taken by every pixel: uniform control flow)
     float gx = dFdx(R.f), gy = dFdy(R.f), gl = length(vec2(gx, gy));

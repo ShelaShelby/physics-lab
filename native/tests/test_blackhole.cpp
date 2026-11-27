@@ -4055,6 +4055,236 @@ static void testHotColour() {
 // 0.94.1 (the owner's decision, 27 Nov 2026): the camera stays outside the disc's thickness. The height |z| = dist |cos(pitch)| is at least h(R) + kCamDiscMargin
 // where R = dist sin(pitch) lies on the disc, h from DiscPhys::height (Zhu App. B, the lab's own tested thickness); beyond the disc's edges the camera still
 // crosses the plane. camDiscPitch and keepOutsideDisc are new: this does not build on 0.94.0.
+// 0.95.0, CARLSON'S STOP AT 0.03 (render/shaders.h kEllipticPart kCarlsonStop): the sky shader's duplication (carlsonFJ: R_F and R_J stopped when every
+// deviation from the mean is below eps, then the degree-5 series) written here in double, against elliptic.cpp (stopped at 1e-3: far below double's
+// rounding), over arguments spanning 12 decades. The written bound: the relative error at most 0.11 eps^6 (R_F) and 2.8 eps^6 (R_J) to leading order; the
+// test allows 10 % for the degree-7 rest (measured 2 % at eps = 0.03) and 1e-13 for double's rounding. At eps = 0.03 both are far below single precision.
+static double cfRF(double x, double y, double z, double eps) {
+    for (int it = 0; it < 64; it++) {
+        const double A = (x + y + z) / 3, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A;
+        if (std::max({std::fabs(dx), std::fabs(dy), std::fabs(dz)}) < eps) {
+            const double e2 = dx * dy - dz * dz, e3 = dx * dy * dz;
+            return (1 + (e2 / 24 - 0.1 - 3.0 / 44 * e3) * e2 + e3 / 14) / std::sqrt(A);
+        }
+        const double sx = std::sqrt(x), sy = std::sqrt(y), sz = std::sqrt(z), l = sx * sy + sy * sz + sz * sx;
+        x = (x + l) / 4; y = (y + l) / 4; z = (z + l) / 4;
+    }
+    return std::nan("");
+}
+static double cfRJ(double x, double y, double z, double p, double eps) {
+    double sum = 0, fac = 1;
+    for (int it = 0; it < 64; it++) {
+        const double A = (x + y + z + p + p) / 5, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A, dp = (A - p) / A;
+        if (std::max({std::fabs(dx), std::fabs(dy), std::fabs(dz), std::fabs(dp)}) < eps) {
+            const double C1 = 3.0 / 14, C2 = 1.0 / 3, C3 = 3.0 / 22, C4 = 3.0 / 26, C5 = 0.75 * C3, C6 = 1.5 * C4, C7 = 0.5 * C2, C8 = C3 + C3;
+            const double ea = dx * (dy + dz) + dy * dz, eb = dx * dy * dz, ec = dp * dp, ed = ea - 3 * ec, ee = eb + 2 * dp * (ea - ec);
+            return 3 * sum + fac * (1 + ed * (-C1 + C5 * ed - C6 * ee) + eb * (C7 + dp * (-C8 + dp * C4)) + dp * ea * (C2 - dp * C3) - C2 * dp * ec) / (A * std::sqrt(A));
+        }
+        const double sx = std::sqrt(x), sy = std::sqrt(y), sz = std::sqrt(z), l = sx * sy + sy * sz + sz * sx;
+        const double al = p * (sx + sy + sz) + sx * sy * sz, be = p * (p + l) * (p + l);
+        sum += fac * carlsonRC(al * al, be);
+        fac /= 4;
+        p = (p + l) / 4; x = (x + l) / 4; y = (y + l) / 4; z = (z + l) / 4;
+    }
+    return std::nan("");
+}
+static void testCarlsonStop095() {
+    const double eps = 0.03, e6 = std::pow(eps, 6), bF = 1.1 * 0.11 * e6 + 1e-13, bJ = 1.1 * 2.8 * e6 + 1e-13;
+    double wF = 0, wJ = 0;
+    int n = 0;
+    for (double x : {0.0, 1e-9, 1e-5, 0.02, 0.3, 1.0, 2.5, 40.0, 1e3})
+        for (double y : {1e-6, 0.4, 1.0, 7.0})
+            for (double z : {0.0, 1.0, 3.0})
+                for (double p : {1e-3, 0.5, 1.0, 9.0}) {
+                    if (x + z == 0) continue;
+                    n++;
+                    wF = std::max(wF, std::fabs(cfRF(x, y, z, eps) / carlsonRF(x, y, z) - 1));
+                    wJ = std::max(wJ, std::fabs(cfRJ(x, y, z, p, eps) / carlsonRJ(x, y, z, p) - 1));
+                }
+    std::printf("Carlson stop 095: eps %.3g on %d argument sets: R_F %.3e (bound %.3e), R_J %.3e (bound %.3e)\n", eps, n, wF, bF, wJ, bJ);
+    check(n > 300 && wF <= bF && wJ <= bJ, "Carlson's stop at 0.03: R_F within " + f(bF) + " (" + f(wF) + ") and R_J within " + f(bJ) + " (" + f(wJ) + "), below single precision");
+}
+
+// 0.95.0, THE SPINNING HOLE'S DISC SURFACE (kerr_closed.h "THE DISC'S SURFACE"): traceClosed's surface hit against the integrator (geodesic.h KerrBL in double,
+// rtol 1e-11) followed from the camera, in steps of at most 0.3 of its height above the surface, until it first meets |z| <= h(R) over the disc (R in
+// [rIn, rOut]; z = r cos theta, R = r sin theta), then bisected to 1e-9 of the step. The feeding preset's thickness table (disc.h heightTable, the floats the
+// shaders read). Views: spin 0 (the closed forms at a = 0 against the same reference, and against 0.94.1's spin-0 surface, below), 0.5, 0.9 and 0.99; near
+// and far, above and below the plane, and grazing (the camera at the camera rule's lowest pitch, lab.h camDiscPitch). Compared as testDiscSurface (spin 0)
+// compares: the hit's R and its azimuth phi (Boyer-Lindquist, the camera at phi = 0), each error divided by how much that quantity changes across a pixel
+// there (the closed form's own hits half a pixel to either side), so the error is in pixels of a 480 x 300 picture.
+// Every 8th pixel each way. LIMIT 0.5 px (testDiscSurface's): half a pixel is where a pixel's coverage of an edge changes (the shaders take one ray per pixel). At least 99 % of the
+// disc pixels within it; at most 1 % seen on the disc by one side only (the hit lies across the disc's edge, or on a thin ring the closed form takes at the
+// plane: kSurfaceOrders).
+// Spin 0 through the new code: at a = 0 the closed forms' surface R against 0.94.1's (disc.h discRayTable through lab.h discPixelG, the DiscTable lookup),
+// within the same 0.5 px at the same share of pixels: the paths differ (the closed forms against the spin-0 table's cubic), so not to the bit.
+static void testSpinSurface095() {
+    struct Vw { const char* name; double a, dist, aboveDeg, fov; };   // aboveDeg > 0 above the plane, < 0 below; 0: grazing (the camera rule's limit, above)
+    for (const Vw& w : {Vw{"spin 0, far above", 0, 50, 10, 45}, Vw{"spin 0, near above", 0, 20, 5, 90}, Vw{"near above", 0.5, 12, 8, 90}, Vw{"far above", 0.9, 50, 10, 45},
+                        Vw{"below", 0.9, 20, -12, 90}, Vw{"near above", 0.99, 8, 10, 120}, Vw{"far below", 0.99, 40, -6, 60}, Vw{"grazing", 0.99, 20, 0, 90}}) {
+        if (const char* only = std::getenv("PL_SURFVIEW")) if (std::string(w.name) != only || (std::getenv("PL_SURFSPIN") && std::atof(std::getenv("PL_SURFSPIN")) != w.a)) continue;   // (by hand: one view)
+        Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        setSpin(s, w.a); setDistance(s, w.dist); setFov(s, w.fov);
+        s.pitch = w.aboveDeg == 0 ? camDiscPitch(s, w.dist, 1) : (90 - w.aboveDeg) * kPi / 180;
+        const int W = 480, H = 300;
+        const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+        DiscGeom g;
+        g.rIn = discInner(s.spin); g.rOut = s.outer;
+        DiscPhys P; P.massSun = s.massSun; P.lEdd = s.feed; P.aSigned = s.spin;
+        const HeightTable ht = heightTable(P);
+        g.height = &ht;
+        const double a = s.spin;
+        const Camera cam{s.dist, s.pitch, 0};
+        const KerrBL bl(a);
+        struct Hit { bool ok = false; double R = 0, az = 0; };
+        const auto lookOf = [&](double X, double Y, Vec3& look) {
+            const double dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
+            if (!(th <= kPi) || d <= 0) return false;
+            double chi = std::atan2(-dx / d, dy / d);
+            if (chi < 0) chi += 2 * kPi;
+            look = lookAt(th, chi);
+            return true;
+        };
+        const auto closed = [&](double X, double Y) {
+            Hit o;
+            Vec3 look;
+            if (!lookOf(X, Y, look)) return o;
+            const ClosedEnd e = traceClosed(a, cam, look, kClosedCross, false, &g);
+            static const bool lin = std::getenv("PL_SURFLIN") != nullptr;   // (by hand: the spin table's line through the crossing, spin_sky.cpp spinDisc)
+            for (int k = 0; k < e.nCross; k++) {
+                double R = k < kSurfaceOrders && e.uS[k] > 0 ? 1 / e.uS[k] : 1 / e.u[k];
+                if (lin) {
+                    SpinHit hh; hh.b = e.b; hh.cn = e.cn;
+                    for (int q = 0; q < kSpinCross && q < e.nCross; q++) { hh.u[q] = e.u[q]; hh.sl[q] = e.slope[q]; }
+                    const SpinDisc sd = spinDisc(hh, a, g.rIn, g.rOut, &ht);
+                    if (sd.order < 0) return o;
+                    o.ok = true; o.R = sd.r; o.az = 0;
+                    ClosedState st;
+                    if (closedStateAt(a, cam, look, e.tauS[sd.order], st)) o.az = st.phi;
+                    return o;
+                }
+                if (!(R >= g.rIn && R <= g.rOut)) continue;
+                ClosedState st;
+                if (!closedStateAt(a, cam, look, e.tauS[k], st)) return o;
+                o.ok = true; o.R = R; o.az = st.phi;
+                return o;
+            }
+            return o;
+        };
+        const double rp = horizon(a), rStop = 1.5 * std::max(s.dist, g.rOut);
+        const auto inside = [&](const double* y) {
+            const double z = y[0] * std::cos(y[1]), R = y[0] * std::sin(y[1]);
+            return R >= g.rIn && R <= g.rOut && std::fabs(z) <= ht.at(R);
+        };
+        const auto ref = [&](double X, double Y) {
+            Hit o;
+            Vec3 look;
+            Ray ray;
+            if (!lookOf(X, Y, look) || !bl.launch(cam, look, ray)) return o;
+            TraceOptions opt;
+            for (int st = 0; st < 20000; st++) {
+                double dy[kMaxState];
+                bl.rhs(ray, ray.y, dy);
+                const double r = ray.y[0], z = r * std::cos(ray.y[1]), R = r * std::sin(ray.y[1]);
+                const double gap = std::fabs(z) - (R >= 0.9 * g.rIn && R <= 1.1 * g.rOut ? ht.at(R) : 0.0);
+                const double dz = std::fabs(dy[0] * std::cos(ray.y[1]) - r * std::sin(ray.y[1]) * dy[1]), dr = std::fabs(dy[0]);
+                const double step = std::clamp(std::min(0.3 * std::max(gap, 0.0) / (dz + 1e-30), 0.05 * r / (dr + 1e-30)), 2e-3, 0.05 * r);
+                const Ray prev = ray;
+                integrateSpan(bl, ray, -step, opt);
+                if (inside(ray.y)) {
+                    double lo = 0, hi = step;
+                    Ray m = ray;
+                    for (int it = 0; it < 40 && hi - lo > 1e-9 * step; it++) {
+                        const double mid = 0.5 * (lo + hi);
+                        m = prev;
+                        integrateSpan(bl, m, -mid, opt);
+                        if (inside(m.y)) hi = mid; else lo = mid;
+                    }
+                    m = prev;
+                    integrateSpan(bl, m, -hi, opt);
+                    o.ok = true; o.R = m.y[0] * std::sin(m.y[1]); o.az = m.y[2];
+                    return o;
+                }
+                if (ray.y[0] > rStop || ray.y[0] < rp + 1e-3 || !std::isfinite(ray.y[0])) break;
+            }
+            return o;
+        };
+        long disc = 0, within = 0, oneSided = 0, tabN = 0, tabWithin = 0;
+        double worst = 0;
+        const DiscTable* T = a == 0 ? new DiscTable(s.dist) : nullptr;
+        for (int j = 0; j < H; j += 8)
+            for (int i = 0; i < W; i += 8) {
+                const double X = i + 0.5, Y = j + 0.5;
+                const Hit q = closed(X, Y), r0 = ref(X, Y);
+                if (!r0.ok && !q.ok) continue;
+                disc++;
+                if (r0.ok != q.ok) { oneSided++; continue; }
+                const Hit rx0 = closed(X - 0.5, Y), rx1 = closed(X + 0.5, Y), ry0 = closed(X, Y - 0.5), ry1 = closed(X, Y + 0.5);   // (the gradient's scale only)
+                if (!(rx0.ok && rx1.ok && ry0.ok && ry1.ok)) { within++; continue; }   // (at an edge of the image: the coverage's business)
+                const double gR = std::hypot(rx1.R - rx0.R, ry1.R - ry0.R), gA = std::hypot(std::remainder(rx1.az - rx0.az, 2 * kPi), std::remainder(ry1.az - ry0.az, 2 * kPi));
+                const double e = std::max(gR > 0 ? std::fabs(q.R - r0.R) / gR : 0.0, gA > 0 ? std::fabs(std::remainder(q.az - r0.az, 2 * kPi)) / gA : 0.0);
+                worst = std::max(worst, e);
+                if (e <= 0.5) within++;
+                else if (std::getenv("PL_SURFDBG")) std::printf("SURFDBG %s a=%g %g %g R %g ref %g az %g ref %g gR %g gA %g e %g\n", w.name, a, X, Y, q.R, r0.R, q.az, r0.az, gR, gA, e);
+                if (T) {                                                    // spin 0: against 0.94.1's surface (the table's), R in pixels
+                    const DiscPixel t = discPixelG(*T, s, g, v, X, Y, false);
+                    if (t.hit.order >= 0) { tabN++; if (gR > 0 && std::fabs(t.hit.r - q.R) / gR <= 0.5) tabWithin++; }
+                }
+            }
+        delete T;
+        const long cmp = disc - oneSided;
+        const bool ok = disc > 200 && within >= 0.99 * static_cast<double>(cmp) && oneSided <= 0.01 * static_cast<double>(disc) && (a > 0 || (tabN > 200 && tabWithin >= 0.99 * static_cast<double>(tabN)));
+        std::printf("spin surface 095: %s, spin %g, %g M, %g deg: %ld of %ld within 0.5 px (worst %.3f px), %ld one-sided, spin-0 table %ld of %ld\n", w.name, a, w.dist,
+                    w.aboveDeg, within, cmp, worst, oneSided, tabWithin, tabN);
+        check(ok, std::string("spin surface (") + w.name + ", spin " + f(a) + ", " + f(w.dist) + " M, " + f(w.aboveDeg) + " degrees): " + f(static_cast<double>(within)) + " of " +
+                  f(static_cast<double>(cmp)) + " disc pixels within 0.5 px of the integrator's surface (worst " + f(worst) + " px), " + f(static_cast<double>(oneSided)) +
+                  " seen on the disc by one side only" + (a == 0 ? ", against 0.94.1's spin-0 surface " + f(static_cast<double>(tabWithin)) + " of " + f(static_cast<double>(tabN)) : std::string()));
+    }
+}
+
+// 0.95.0: the disc's words and switches at spin (lab.h discThickDrawn, discShapeWords, discEdgeOnWords, discThicknessWords; disc.h heightOn): Real at spins
+// 0.5 and 0.99 is drawn thick (a thickness table for the passes) and every caption says "calculated thickness"; the old words "drawn flat", "drawn in its
+// plane" and the light paths' "find only where they cross the plane" are gone. And the camera rule at spin 0.99 (lab.h keepOutsideDisc) against the slab as
+// the picture draws it (the table's h, disc.h HeightTable): after the rule, at every distance and pitch tried, the camera is not inside it.
+static void testDiscSpin095() {
+    const auto has = [](const std::string& t, const char* w) { return t.find(w) != std::string::npos; };
+    for (double a : {0.5, 0.99}) {
+        Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        setSpin(s, a);
+        const Settings v = shown(s);
+        const std::string shape = discShapeWords(v), edge = discEdgeOnWords(v), thk = discThicknessWords(v);
+        check(heightOn(a) && discThickDrawn(v) && discGeom(v).height && discGeom(v).height->on(), "spin " + f(a) + ": the Real disc is drawn at its thickness (a table for the passes)");
+        check(has(shape, "calculated thickness") && has(edge, "drawn at its calculated thickness") && has(thk, "drawn at its calculated thickness"),
+              "spin " + f(a) + ": the three captions say the disc is drawn at its calculated thickness");
+        bool old = false;
+        for (const std::string* t : {&shape, &edge, &thk}) old = old || has(*t, "drawn flat") || has(*t, "drawn in its plane") || has(*t, "find only where they cross the plane");
+        check(!old, "spin " + f(a) + ": the old words (drawn flat, in its plane, only where they cross the plane) are gone");
+    }
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    setSpin(s, kSpinTop);
+    DiscPhys P; P.massSun = s.massSun; P.lEdd = s.feed; P.aSigned = s.spin;
+    const HeightTable ht = heightTable(P);
+    const DiscGeom g = discGeom(shown(s));
+    long tried = 0, inside = 0;
+    double worst = 1e9;
+    for (double d = kDistMin; d <= 200; d *= 1.07)
+        for (int k = 0; k <= 400; k++) {
+            Settings t = s;
+            setDistance(t, d);
+            t.pitch = kPi / 2 + (k - 200) * 0.0005;                      // (within 0.1 rad of the plane, both sides and in it)
+            keepOutsideDisc(t);
+            const double z = std::fabs(t.dist * std::cos(t.pitch)), R = t.dist * std::sin(t.pitch);
+            if (R < g.rIn || R > g.rOut) continue;
+            tried++;
+            worst = std::min(worst, z - ht.at(R));
+            if (z < ht.at(R)) inside++;
+        }
+    check(tried > 1000 && inside == 0, "spin 0.99: the camera rule keeps the camera outside the drawn slab (" + f(static_cast<double>(tried)) + " places over the disc, " +
+          f(static_cast<double>(inside)) + " inside; the closest " + f(worst) + " GM/c^2 above the surface)");
+}
+
 static void testCameraOutsideDisc094() {
     const auto heightAt = [](const Settings& s) {                   // the camera's height and the disc's surface under it, independently of camDiscPitch
         const double z = std::fabs(s.dist * std::cos(s.pitch)), R = s.dist * std::sin(s.pitch);
@@ -4127,6 +4357,9 @@ int main() {
         if (!std::strcmp(only, "streaks")) testStreaks();
         if (!std::strcmp(only, "real")) { testColourCorrection087(); testLimb087(); testReturning087(); }   // 0.87.0: the disc's real light
         if (!std::strcmp(only, "surface")) testDiscSurface();
+        if (!std::strcmp(only, "spinsurface")) testSpinSurface095();
+        if (!std::strcmp(only, "discspin")) testDiscSpin095();
+        if (!std::strcmp(only, "carlson")) testCarlsonStop095();
         if (!std::strcmp(only, "hot")) { testHotModel(); testHotEmissivity(); testHotTransfer(); testHotSpectrum(); testHotColour(); }
         std::printf("%d checks, %d failed\n", g_checks, g_failed);
         return g_failed ? 1 : 0;
@@ -4180,6 +4413,9 @@ int main() {
     testDiscWords();
     testStreaks();
     testDiscSurface();
+    testCarlsonStop095();
+    testSpinSurface095();
+    testDiscSpin095();
     testHotModel();
     testHotEmissivity();
     testHotTransfer();

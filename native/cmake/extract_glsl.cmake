@@ -27,7 +27,12 @@ string(REPLACE "\r" "" all "${all}")
 file(WRITE ${OUT} "${all}")
 # 0.67.0: VARIANT (the light paths' detective work, render/vk_helper.cpp): kKerrTableCS cut down, made only by the helper process while the light paths are
 # off (their real pipeline crashed the driver): its own main() takes the place of the real one, which stays as mainFull() (unused)
-if(DEFINED VARIANT)
+# 0.95.0: VARIANT skystop1 .. skystop5 (the sky pass's split, blackhole_view.cpp skyTimeHook; PL_BH_SKYSTOP picks one): kKerrSkyFS with SKY_STOP defined
+if(DEFINED VARIANT AND VARIANT MATCHES "^skystop([1-5])$")
+  file(READ ${OUT} all)
+  string(REPLACE "#version 330 core\n" "#version 330 core\n#define SKY_STOP ${CMAKE_MATCH_1}\n" all "${all}")
+  file(WRITE ${OUT} "${all}")
+elseif(DEFINED VARIANT)
   file(READ ${OUT} all)
   string(REPLACE "void main() {" "void mainFull() {" all "${all}")
   if(VARIANT STREQUAL "math")          # the double-precision functions alone (sine and cosine, exp, log, arctangent, cube root)
@@ -65,7 +70,7 @@ void main() {
 void main() {
     int k = int(gl_GlobalInvocationID.x);
     if (k >= uN) return;
-    ray(In[2 * k], In[2 * k + 1], 16 * k, true);
+    ray(In[2 * k], In[2 * k + 1], 16 * k, true, false);
 }
 ]=])
   elseif(VARIANT STREQUAL "short")     # the whole shader with its step loops bounded at 64 instead of 200,000

@@ -29,6 +29,7 @@
 #include <atomic>
 #include <vector>
 
+#include "blackhole/disc.h"
 #include "blackhole/geodesic.h"
 
 namespace blackhole {
@@ -52,7 +53,14 @@ struct SpinHit {
     int nCross = 0;
     bool timed = false;
     double phi[kSpinCross] = {}, t[kSpinCross] = {};
+    // 0.95.0 (the disc's surface, kerr_closed.h "THE DISC'S SURFACE"): dr/dPsi at each crossing (0 where it is not made, or the ray is not of polar type A)
+    // and u+^(1/2); interpolated by the lookup like u. Rays followed by mino.h (the closed forms' fallback) have none: their disc stays at the plane.
+    double sl[kSpinCross] = {};
+    double cn = 0;
 };
+// 0.95.0: a crossing's slope from the integrator's state there: dr/dPsi = (dr/dtau) / (-u- a^2)^(1/2), dr/dtau = -Delta p_r (J15 (A.15) with Mino time
+// d tau = -d zeta / rho^2, mino.h), and u+^(1/2) (kerr_closed.h Polar); both 0 for a ray that is not of type A (eta <= 0)
+void crossingSlope(double a, double b, double q, double r, double pr, double& sl, double& cn);
 
 // 0.55.8: how a table's rays are followed: their tolerance (spinRay's rtol), the form (mino.h: the Mino-time form; else geodesic.h's KerrBL) and the
 // columns' nearest |x| to the edge (rays nearer are drawn as the ray there)
@@ -127,8 +135,10 @@ public:
     const SpinHit& node(int side, int i, int j) const { return v_[index(side, i, j)]; }
     double nodePsi(int side, int i, int j) const;
     // the card's data: rows side 0 (nChi of them) then side 1, nS columns each; texA (dir x, y, z, b), texB (u0..u3); the edge samples
+    // 0.95.0: texC (the slopes dr/dPsi of the first two crossings, u+^(1/2), 0): the disc's surface (kKerrFS)
     const std::vector<float>& texA() const { return fa_; }
     const std::vector<float>& texB() const { return fb_; }
+    const std::vector<float>& texC() const { return fc_; }
     const std::vector<float>& texEdge() const { return fe_; }
     const std::vector<float>& texTau() const { return ft_; }
     // the lookup the card does, in double
@@ -141,7 +151,7 @@ private:
     long rays_ = 0, mism_ = 0, lost_ = 0, fall_ = 0;
     std::vector<double> edge_, tau_, rowChi_, rowEdge_;
     std::vector<SpinHit> v_;
-    std::vector<float> fa_, fb_, fe_, ft_;
+    std::vector<float> fa_, fb_, fc_, fe_, ft_;
     std::size_t index(int side, int i, int j) const { return (static_cast<std::size_t>(side) * nChi_ + i) * nS_ + j; }
     void finish(const std::atomic<long>& mism, const std::atomic<long>& lost);
 };
@@ -154,9 +164,11 @@ SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double 
 // rtol (its fallback flag set)
 SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol, bool timed = false);
 
-// the disc through a hit: the first crossing with rIn <= r <= rOut (order, r, g); order -1 for none
-struct SpinDisc { int order = -1; double r = 0, g = 0; };
-SpinDisc spinDisc(const SpinHit& h, double a, double rIn, double rOut);
+// the disc through a hit: the first crossing with rIn <= r <= rOut (order, r, g); order -1 for none. 0.95.0: with a thickness table (ht), the first
+// kSurfaceOrders crossings meet the surface |z| = h(R) instead (disc.h surfaceStep on the line through the crossing, its slope sl and u+^(1/2) cn: the
+// table has no path beyond the crossing, so no exact steps), r = R there, z its height. The card's table pass (kKerrFS) does the same in single precision.
+struct SpinDisc { int order = -1; double r = 0, g = 0, z = 0; };
+SpinDisc spinDisc(const SpinHit& h, double a, double rIn, double rOut, const HeightTable* ht = nullptr);
 
 // the images of a far direction (unit, chart axes, camera at phi = 0) through the table: (psi, chi, magnification), magnification = solid angle on the camera's
 // sky over solid angle on the far sky of the cell's triangle. Cells within kStarXmin of the edge are not used.

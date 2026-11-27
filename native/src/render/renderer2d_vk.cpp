@@ -235,6 +235,10 @@ void Renderer2D::skyMath(const std::vector<float>& in, std::vector<float>& out) 
     if (vkbh_) vkbh_->math(in, out);
     else out.assign(in.size() / 12 * 8, 0.0f);
 }
+void Renderer2D::skyTime(const LensSky& L, int w, int h, int reps, std::vector<double>& ms) {
+    ms.clear();
+    if (vkbh_) vkbh_->skyTime(L, w, h, texW_[static_cast<int>(Map::Sky)], reps, ms);
+}
 void Renderer2D::glareVeilCard(int W, int H, double cx, double cy, double K, int b, const std::vector<float>& src, std::vector<float>& out,
                                void (*tables)(int, int, double, double, double, std::vector<float>&, std::vector<float>&, double[2])) {
     out.clear();

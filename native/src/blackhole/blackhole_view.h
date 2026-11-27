@@ -78,6 +78,7 @@ float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen wi
 class BlackHoleView {
     friend void compareHook(render::Renderer2D& R, const char* spec);
     friend void toneCompare(render::Renderer2D& R);
+    friend void skyTimeHook(render::Renderer2D& R);   // 0.95.0 (PL_BH_COMPARE=skytime)
 // 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;
 // set by main.cpp (render/vk_backend.h renderToImage); false: not drawn
 using TestShot = std::function<bool(render::Renderer2D&, int, int, std::vector<unsigned char>&)>;
@@ -294,6 +295,7 @@ private:
 // Lab's sky map, and the frame times; prints PLBHCMP / PLBHTIME lines. Needs the renderer's Vulkan device.
 void compareHook(render::Renderer2D& R, const char* spec);
 void toneCompare(render::Renderer2D& R);   // 0.70.0 (PL_BH_COMPARE=sky)
+void skyTimeHook(render::Renderer2D& R);   // 0.95.0 (PL_BH_COMPARE=skytime)
 // 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;
 // set by main.cpp (render/vk_backend.h renderToImage); false: not drawn
 using TestShot = std::function<bool(render::Renderer2D&, int, int, std::vector<unsigned char>&)>;

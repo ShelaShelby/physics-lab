@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.94.1 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.95.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -493,6 +493,19 @@ if(PL_BUILD_APP)
       COMMAND $<TARGET_FILE:glslang-standalone> -V -R --aml --amb --sdub uDefault 0 7 --target-env vulkan1.0 -S comp --vn k_r2d_kerrvar_${kv} -o ${shOut} ${shGlsl}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake glslang-standalone
       COMMENT "SPIR-V (Vulkan, kKerrTableCS variant ${kv}): r2d_kerrvar_${kv}")
+    list(APPEND PL_VK_SHADER_HEADERS ${shOut})
+  endforeach()
+
+  # 0.95.0: the sky pass's split (blackhole_view.cpp skyTimeHook): kKerrSkyFS cut after its set-up, its radial case, its integrals and crossings, its whole
+  # ray, or at once (SKY_STOP 1 .. 5), used only when PL_BH_SKYSTOP asks
+  foreach(kv 1 2 3 4 5)
+    set(shGlsl ${CMAKE_BINARY_DIR}/vk_shaders/r2d_skystop${kv}.frag)
+    set(shOut ${CMAKE_BINARY_DIR}/vk_shaders/r2d_skystop${kv}.h)
+    add_custom_command(OUTPUT ${shOut}
+      COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h -DNAME=kKerrSkyHeadPart+kEllipticPart+kKerrSkyTracePart+kGasPart+kDiscLightPart+kKerrSkyMainPart -DVARIANT=skystop${kv} -DOUT=${shGlsl} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake
+      COMMAND $<TARGET_FILE:glslang-standalone> -V -R --aml --amb --sdub uDefault 0 1 --target-env vulkan1.0 -S frag --vn k_r2d_skystop${kv} -o ${shOut} ${shGlsl}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake glslang-standalone
+      COMMENT "SPIR-V (Vulkan, kKerrSkyFS cut at SKY_STOP ${kv}): r2d_skystop${kv}")
     list(APPEND PL_VK_SHADER_HEADERS ${shOut})
   endforeach()
 

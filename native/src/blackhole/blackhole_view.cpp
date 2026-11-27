@@ -31,6 +31,10 @@
 #include <thread>
 
 namespace blackhole {
+namespace {
+bool g_hgtHookOff = false;   // 0.79.0 (the hooks' checks of the plane's crossings: the surface off; 0.95.0: also spinDisc's, surfaceOf)
+const HeightTable* surfaceOf(const DiscGeom& g) { return g_hgtHookOff ? nullptr : g.height; }
+}  // namespace
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
@@ -333,10 +337,31 @@ DiscPixel BlackHoleView::spinPixel(const Settings& s, const HoleView& v, double 
     if (chi < 0) chi += 2 * kPi;
     const SpinHit h = spin_->lookup(th, chi);
     const DiscGeom g = discGeom(s);
-    const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
+    const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut, surfaceOf(g));
     o.hit.order = sd.order; o.hit.r = sd.r; o.hit.g = sd.g; o.hit.b = h.b; o.hit.Lz = h.b;
     if (sd.order < 0 || !light) return o;
     discLightSeen(s, sd.r, sd.g, h.b, spinEmissionCos(s, th, chi, sd.g, sd.r), o);   // 0.55.3: by the look's rule (lab.h); 0.84.0: the camera's own shift for this ray's b
+    return o;
+}
+
+// 0.95.0: the spinning hole's disc pixel from the closed forms in double (traceClosed with the disc's surface: kerr_closed.h), as the sky pass draws it (the
+// tests' reference for kKerrSkyFS; spinPixel is the table's, the fallback's)
+DiscPixel spinPixelExact(const Settings& s, const HoleView& v, double X, double Y, bool light) {
+    DiscPixel o;
+    const double dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
+    if (!(th <= kPi)) return o;
+    const double nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : 1;
+    double chi = std::atan2(-nx, ny);
+    if (chi < 0) chi += 2 * kPi;
+    const DiscGeom g = discGeom(s);
+    const ClosedEnd e = traceClosed(s.spin, Camera{s.dist, s.pitch, 0}, lookAt(th, chi), kClosedCross, false, &g);
+    for (int k = 0; k < e.nCross && k < kSpinCross; k++) {
+        const double r = k < kSurfaceOrders && e.uS[k] > 0 ? 1 / e.uS[k] : 1 / e.u[k];
+        if (!(r >= g.rIn && r <= g.rOut)) continue;
+        o.hit.order = k; o.hit.r = r; o.hit.b = e.b; o.hit.Lz = e.b; o.hit.g = discShiftKerr(r, e.b, s.spin);
+        if (light) discLightSeen(s, r, o.hit.g, e.b, emissionCos(o.hit.g, e.q, r), o);
+        return o;
+    }
     return o;
 }
 
@@ -415,7 +440,6 @@ void BlackHoleView::toneFields(render::Renderer2D::LensSky& L, const Settings& s
 // far time T; gasVer: a new number for a new T or a changed choice (the kept picture is drawn anew)
 namespace {
 bool g_gasHookOff = false;   // (the comparison hooks: their reference pictures are still; 2a turns the gas on for its own check)
-bool g_hgtHookOff = false;   // 0.79.0 (the hooks' checks of the plane's crossings: the surface off)
 void gasFields(render::Renderer2D::LensSky& L, const Settings& s, double T) {
     if (g_gasHookOff || !s.gasMoving || !(s.gasClump || s.gasPattern)) return;
     const DiscGeom g = discGeom(s);
@@ -450,6 +474,17 @@ static void discLightFields(render::Renderer2D::LensSky& L, const Settings& s, d
     const std::array<double, kLimbFineN> fine = limbFine();
     for (int k = 0; k < kLimbFineN; k++) L.limb[k] = real && R.limb ? static_cast<float>(fine[static_cast<std::size_t>(k)]) : 1.0f;
 }
+// 0.79.0 (0.95.0: every spin): the disc's thickness table for the passes (kLensFS, kKerrFS, kKerrSkyFS uHgt, uHgtR), where discThickDrawn
+static void heightFields(render::Renderer2D::LensSky& L, const Settings& s, const DiscGeom& g) {
+    const HeightTable* ht = surfaceOf(g);
+    if (!ht) return;
+    L.hgt = &ht->h;
+    L.hgtR[0] = static_cast<float>(ht->ln0); L.hgtR[1] = static_cast<float>(ht->dln); L.hgtR[2] = static_cast<float>(ht->h.size()); L.hgtR[3] = 1;
+    std::uint64_t hh = 1469598103934665603ULL;
+    for (double x : {s.feed, s.massSun, s.spin}) { std::uint64_t b; std::memcpy(&b, &x, sizeof b); hh = (hh ^ b) * 1099511628211ULL; }
+    L.hgtVersion = hh | 1;
+}
+
 render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const HoleView& v) const {
     render::Renderer2D::LensSky L;
     L.cx = v.cx; L.cy = v.cy; L.kRad = v.K;
@@ -506,6 +541,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
             L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
             discLightFields(L, s, 1);                                       // 0.87.0
+            heightFields(L, s, g);                                          // 0.95.0: the surface at every spin
             L.whiteMode = 1;                                                // (0.70.0: your choice too: stops from the card's automatic)
             toneFields(L, s);
             L.expStep = 4;
@@ -526,7 +562,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         const SpinTable& T = *spin_;
         L.kerr = true;
         L.bend = true;
-        L.kA = &T.texA(); L.kB = &T.texB(); L.kEdge = &T.texEdge(); L.kTau = &T.texTau();
+        L.kA = &T.texA(); L.kB = &T.texB(); L.kC = &T.texC(); L.kEdge = &T.texEdge(); L.kTau = &T.texTau();
         L.kChi = T.nChi(); L.kS = T.nS(); L.kEdgeN = T.nEdge();
         L.kSLo = T.sLo(); L.kXc = T.xc(); L.kXlo = T.xlo(); L.spin = s.spin;
         L.kVersion = spinVer_;
@@ -556,6 +592,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
             L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
             discLightFields(L, s, 1);                                       // 0.87.0
+            heightFields(L, s, g);                                          // 0.95.0: the surface at every spin (with texC's slopes)
             skyCamera(L, s.spin, s.dist, s.pitch);                          // 0.87.0 R10: the camera's numbers for each ray's Carter constant (kKerrFS uCam, uMet)
             toneFields(L, s);
             if (!lookRule(s.look).shifts) {                                 // 0.55.3, Film: one colour all over the disc (lab.h discLight), over the screen's white as discColour does
@@ -604,13 +641,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             }
             L.retF = retF_.get(); L.retN = static_cast<int>(retF_->size()); L.retLog0 = retFLog0_; L.retDl = retFDl_; L.retVersion = retFVer_;
         }
-        if (const HeightTable* ht = g_hgtHookOff ? nullptr : g.height) {    // 0.79.0: the disc's true thickness (lab.h discHeight, discThickDrawn)
-            L.hgt = &ht->h;
-            L.hgtR[0] = static_cast<float>(ht->ln0); L.hgtR[1] = static_cast<float>(ht->dln); L.hgtR[2] = static_cast<float>(ht->h.size()); L.hgtR[3] = 1;
-            std::uint64_t hh = 1469598103934665603ULL;
-            for (double x : {s.feed, s.massSun, s.spin}) { std::uint64_t b; std::memcpy(&b, &x, sizeof b); hh = (hh ^ b) * 1099511628211ULL; }
-            L.hgtVersion = hh | 1;
-        }
+        heightFields(L, s, g);                                              // 0.79.0: the disc's true thickness (lab.h discHeight, discThickDrawn)
         {   Vec3 rows[3];
             viewRows(v, rows);
             for (int i = 0; i < 3; i++) { L.gasE1[i] = static_cast<float>(rows[i].x); L.gasE2[i] = static_cast<float>(rows[i].y); } }
@@ -978,7 +1009,7 @@ void discShift(const BlackHoleView& v, const SpinTable& moving, const SpinTable&
         if (!(th <= kPi)) return false;
         double chi = std::atan2(-(d > 0 ? dx / d : 0), d > 0 ? dy / d : 1);
         if (chi < 0) chi += 2 * kPi;
-        return spinDisc(T.lookup(th, chi), s.spin, g.rIn, g.rOut).order >= 0;
+        return spinDisc(T.lookup(th, chi), s.spin, g.rIn, g.rOut, surfaceOf(g)).order >= 0;
     };
     parallelFor(ny, [&](int j) {
         for (int i = 0; i < nx; i++) {
@@ -1521,7 +1552,8 @@ void cardCompare(render::Renderer2D& R) {
         const double pms = msSince(t1);
         if (!G) { std::printf("PLBHCARDT case=%s none=1\n", cs.name); continue; }
         long nodes = 0, ends = 0, lost = 0;
-        double dir[3] = {0, 0, 0}, db = 0, du[2] = {0, 0}, de = 0, dc = 0, drow = 0;
+        double dir[3] = {0, 0, 0}, db = 0, du[2] = {0, 0}, de = 0, dc = 0, drow = 0, dsl = 0;   // (0.95.0: dsl, the slopes and u+^(1/2) of the disc's surface)
+        long slOne = 0;
         long cnt[3] = {0, 0, 0};
         for (int i = 0; i < kSpinEdge; i++) de = std::max(de, std::fabs(G->edgeSample(i) - P.edgeSample(i)));
         for (int i = 0; i < kSpinChiFine; i++) { dc = std::max(dc, std::fabs(G->rowChi(i) - P.rowChi(i))); drow = std::max(drow, std::fabs(G->rowEdge(i) - P.rowEdge(i))); }
@@ -1540,6 +1572,13 @@ void cardCompare(render::Renderer2D& R) {
                         const double d = std::fabs(g.u[k] - p.u[k]) / (1 + std::fabs(p.u[k]));
                         du[bd == 0 ? 1 : 0] = std::max(du[bd == 0 ? 1 : 0], std::isfinite(d) ? d : 1.0);
                     }
+                    for (int k = 0; k < kSurfaceOrders; k++) {                  // 0.95.0: where both made the crossing (a crossing one of them did not make: 0 on that side)
+                        if (!(g.sl[k] != 0 && p.sl[k] != 0)) continue;
+                        const double d = std::fabs(g.sl[k] - p.sl[k]) / (1 + std::fabs(p.sl[k]));
+                        dsl = std::max(dsl, std::isfinite(d) ? d : 1.0);
+                    }
+                    if (g.cn > 0 && p.cn > 0) dsl = std::max(dsl, std::fabs(g.cn - p.cn));
+                    else if (g.cn > 0 || p.cn > 0) slOne++;                     // (one side has none: the processor's rays followed by mino.h, its fallback)
                 }
         // the conservation laws on 300 of the card's rays (camera sky between 1e-3 of the edge and the far side)
         std::vector<double> pc;
@@ -1573,8 +1612,8 @@ void cardCompare(render::Renderer2D& R) {
             qcpu = std::max(qcpu, std::fabs(ch.carterQ(r0.c[0], e.y) - r0.c[1]) / (1 + std::fabs(r0.c[1])));
         }
         std::printf("PLBHCARDT case=%s a=%g dist=%g pitch=%.4f nodes=%ld endsdiffer=%ld lost=%ld dirnear=%.2e dirmid=%.2e dirfar=%.2e nnear=%ld nmid=%ld nfar=%ld b=%.2e u=%.2e unear=%.2e "
-                    "edge=%.2e rowchi=%.2e rowedge=%.2e mism=%ld rays=%zu ended=%d null=%.2e qdrift=%.2e cpunull=%.2e cpuqdrift=%.2e cardms=%.0f cpums=%.0f\n",
-                    cs.name, cs.a, cs.r, cs.th, nodes, ends, lost, dir[0], dir[1], dir[2], cnt[0], cnt[1], cnt[2], db, du[0], du[1], de, dc, drow, G->mismatches(), cr.size(), ended, hmax, qmax, hcpu, qcpu, gms, pms);
+                    "edge=%.2e rowchi=%.2e rowedge=%.2e mism=%ld rays=%zu ended=%d null=%.2e qdrift=%.2e cpunull=%.2e cpuqdrift=%.2e cardms=%.0f cpums=%.0f sl=%.2e slone=%ld fallbacks=%ld\n",
+                    cs.name, cs.a, cs.r, cs.th, nodes, ends, lost, dir[0], dir[1], dir[2], cnt[0], cnt[1], cnt[2], db, du[0], du[1], de, dc, drow, G->mismatches(), cr.size(), ended, hmax, qmax, hcpu, qcpu, gms, pms, dsl, slOne, P.fallbacks());
     }
 }
 }  // namespace
@@ -1598,8 +1637,12 @@ void toneCompare(render::Renderer2D& R) {
                         Tc{"closetable", kSpinTop, kDistMin, 150, 0},
                         // 0.87.0 (disc.h, THE DISC'S REAL LIGHT): a stellar-mass disc (the colour correction well above 1: R9), and the top spin seen 85 degrees
                         // from the pole through the sky pass and the table pass (the limb darkening's grazing rays: R10)
-                        Tc{"hot", 0, 30, 60, 60, 10}, Tc{"edgesky", kSpinTop, 30, 60, 85}, Tc{"edgetable", kSpinTop, 30, 60, 85}}) {
-        const bool table = std::strcmp(c.name, "closetable") == 0 || std::strcmp(c.name, "edgetable") == 0;   // 0.84.0: the table's pass (kKerrFS, the fallback without the sky pass), at the processor's exposure
+                        Tc{"hot", 0, 30, 60, 60, 10}, Tc{"edgesky", kSpinTop, 30, 60, 85}, Tc{"edgetable", kSpinTop, 30, 60, 85},
+                        // 0.95.0: the disc at its thickness round a spinning hole, 5 degrees above the plane at 20 GM/c^2: the sky pass (the exact surface,
+                        // kerr_closed.h) at spins 0.5 and 0.99 and the table pass (the line through each crossing) at 0.99, against the processor's spin
+                        // table (spin_sky.cpp spinDisc, the same line)
+                        Tc{"thick05", 0.5, 20, 60, 85}, Tc{"thick99", kSpinTop, 20, 60, 85}, Tc{"thick99table", kSpinTop, 20, 60, 85}}) {
+        const bool table = std::strcmp(c.name, "closetable") == 0 || std::strcmp(c.name, "edgetable") == 0 || std::strcmp(c.name, "thick99table") == 0;   // 0.84.0: the table's pass (kKerrFS, the fallback without the sky pass), at the processor's exposure
         const bool streaks = std::strcmp(c.name, "streaks") == 0;
         BlackHoleView view;
         Settings u = settingsDefaults();
@@ -1640,7 +1683,8 @@ void toneCompare(render::Renderer2D& R) {
         for (int j = 0; j < H; j++)
             for (int i = 0; i < W; i++) {
                 const double X = i + 0.5, Y = H - 1 - j + 0.5;
-                DiscPixel q = s.spin > 0 ? view.spinPixel(s, v, X, Y) : discPixel(*view.discTable(), s, v, X, Y);
+                // (0.95.0: the sky pass against the closed forms with the disc's surface; the table pass against the table)
+                DiscPixel q = s.spin > 0 ? (table ? view.spinPixel(s, v, X, Y) : spinPixelExact(s, v, X, Y, true)) : discPixel(*view.discTable(), s, v, X, Y);
                 const std::size_t at = static_cast<std::size_t>(j) * W + i;
                 ord[at] = q.hit.order;
                 rad[at] = q.hit.r;
@@ -1708,10 +1752,65 @@ void toneCompare(render::Renderer2D& R) {
     }
 }
 
+// 0.95.0 (PL_BH_COMPARE=skytime, PL_BH_SKYTIME="w,h,reps"): the spinning hole's sky pass alone timed by GPU timestamps (Renderer2D::skyTime), the median and
+// the fastest of reps pictures, at two views: "spin" (toneCompare's: 0.9, 30 GM/c^2, 60 degrees, 80 degrees from the pole) and "thick" (the Hard scene
+// blackhole.thick_spin's view: the top spin, the closest distance, the camera at the disc's surface rule, the widest view). PL_BH_SKYSTOP (kerr_sky.cpp)
+// cuts the shader after its set-up (1), the radial case (2) or the elliptic integrals and crossings (3): the split of REPORT 0.95.0.
+void skyTimeHook(render::Renderer2D& R) {
+    double v[3] = {1280, 800, 9};
+    if (const char* e = std::getenv("PL_BH_SKYTIME")) std::sscanf(e, "%lf,%lf,%lf", &v[0], &v[1], &v[2]);
+    const int W = static_cast<int>(v[0]), H = static_cast<int>(v[1]), reps = std::max(1, static_cast<int>(v[2]));
+    render::KerrSky& K = R.kerrSky();
+    struct NoSteps : render::KerrSteps { void begin(const std::string&) override {} void end(const std::string&, const std::string&) override {} } steps;
+    std::string why;
+    for (int st = 0; st < render::KerrSky::kStages; st++)
+        for (int t = 0;; t++) {
+            if (!K.build(st, &steps, why) || t > 6000) { std::printf("PLBHSKYTIME none why=%s\n", why.c_str()); return; }
+            if (!K.building()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    struct Tv { const char* name; double spin, dist, fov, tiltDeg; bool gas; };   // (gas: the moving gas drawn, as the lab shows the feeding preset)
+    for (const Tv& c : {Tv{"spin", 0.9, 30, 60, 80, false}, Tv{"spingas", 0.9, 30, 60, 80, true}, Tv{"thick", kSpinTop, kDistMin, kFovMax, -1, true}}) {
+        g_gasHookOff = !c.gas;
+        BlackHoleView view;
+        Settings u = settingsDefaults();
+        applyPreset(u, kFeedingKey);
+        u.glare = false;
+        setDistance(u, c.dist); setFov(u, c.fov);
+        setSpin(u, c.spin);
+        u.pitch = c.tiltDeg > 0 ? c.tiltDeg * kPi / 180 : camDiscPitch(u, c.dist, 1);
+        const Settings s = shown(u);
+        returnFluxNow(s.spin);
+        view.exact_ = true;
+        view.ensureSpin(s, true);
+        view.prepare(s, W, H, W / 2.0, H / 2.0, nullptr);
+        const HoleView hv = holeView(s, W, H, W / 2.0, H / 2.0);
+        view.skyUse_ = true; view.lookUse_ = true;
+        view.ensureSkyF(s.spin);
+        view.gasT = c.gas ? kSkyGasT : 0;
+        static const bool noSurf = std::getenv("PL_BH_SKYTIME_PLANE") != nullptr;   // (by hand: the same shader with the disc in its plane)
+        g_hgtHookOff = noSurf;
+        render::Renderer2D::LensSky L = view.lensFor(s, hv);
+        g_hgtHookOff = false;
+        view.gasT = 0;
+        L.glareKeep = 0;
+        std::vector<double> ms;
+        R.skyTime(L, W, H, reps, ms);
+        if (ms.empty()) { std::printf("PLBHSKYTIME case=%s none\n", c.name); continue; }
+        std::vector<double> o = ms;
+        std::sort(o.begin(), o.end());
+        const char* stop = std::getenv("PL_BH_SKYSTOP");
+        std::printf("PLBHSKYTIME case=%s stop=%s w=%d h=%d reps=%d median=%.3f min=%.3f pitch=%.6f gas=%d\n", c.name, stop ? stop : "0", W, H, reps, o[o.size() / 2], o[0], s.pitch, L.gas ? 1 : 0);
+        std::fflush(stdout);
+    }
+    g_gasHookOff = true;
+}
+
 void compareHook(render::Renderer2D& R, const char* spec) {
     if (!R.vulkan()) { std::printf("PLBHCOMPARE skipped: no Vulkan\n"); return; }   // on Vulkan
     g_gasHookOff = true;                                                    // 0.72.0: the hooks' pictures without the moving gas (but 2a's)
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
+    if (spec && std::string(spec) == "skytime") { skyTimeHook(R); return; }   // 0.95.0
     if (spec && std::string(spec) == "sky") {                              // 0.56.0
         skyCompareHook(R);
         // the exposure found on the card (the brightest channel of the first disc image at the scan's points, reduced on the card) against the processor's
@@ -1756,9 +1855,9 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                         if (!(th <= kPi)) continue;
                         double chi = std::atan2(d > 0 ? -dx / d : 0, d > 0 ? dy / d : 1);
                         if (chi < 0) chi += 2 * kPi;
-                        const ClosedEnd ce = traceClosed(s.spin, cam, lookAt(th, chi), kClosedCross);
+                        const ClosedEnd ce = traceClosed(s.spin, cam, lookAt(th, chi), kClosedCross, false, &g);   // (0.95.0: with the disc's surface)
                         for (int k = 0; k < ce.nCross && k < kSpinCross; k++) {
-                            const double r = ce.u[k] > 0 ? 1 / ce.u[k] : 0;
+                            const double r = k < kSurfaceOrders && ce.uS[k] > 0 ? 1 / ce.uS[k] : (ce.u[k] > 0 ? 1 / ce.u[k] : 0);
                             if (!(r >= g.rIn && r <= g.rOut)) continue;
                             DiscPixel q;
                             const double ge = discShiftKerr(r, ce.b, s.spin);
@@ -1814,8 +1913,11 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         // 0.55.9: the fine table's rays now come from the closed forms (spin_sky.h kSpinFineFill, kerr_closed.h): the same picture drawn with 0.55.8's rays
         // (Mino's form, kSpinFineFillMino) gives 0.55.8's saved hash, and the two pictures differ by at most one level of 255 (their largest difference and
         // the pixels that differ at all). (0.55.8 did the same against 0.55.7's rays.)
+        // 0.95.0: drawn with the disc in its plane (g_hgtHookOff, as 2a): the check compares the two forms' crossings, and mino.h's rays carry no slopes
         std::vector<unsigned char> pNew, pOld;
+        g_hgtHookOff = true;
         const std::uint64_t hNew = realCaseHash(R, 1280, 800, kSpinFineFill, &pNew), hOld = realCaseHash(R, 1280, 800, kSpinFineFillMino, &pOld);
+        g_hgtHookOff = false;
         int maxDiff = 0;
         long differ = 0;
         for (std::size_t i = 0; i < pNew.size() && pNew.size() == pOld.size(); i += 4) {
@@ -1874,7 +1976,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 double chi = std::atan2(-dx / d, dy / d);
                 if (chi < 0) chi += 2 * kPi;
                 const SpinHit h = T.lookup(th, chi);
-                const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
+                const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut, surfaceOf(g));
                 const std::size_t at = static_cast<std::size_t>(j) * W0 + i;
                 kk[at] = sd.order; rr[at] = sd.r;
                 for (int k = 0; k < kSpinCross && k < 4; k++) {
@@ -2343,7 +2445,9 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 view.st_.look.white = 1;
                 std::vector<float> px[2];
                 for (int mode = 0; mode < 2; mode++) {
-                    render::Renderer2D::LensSky L = view.lensFor(s, v);
+                    g_hgtHookOff = true;                                // 0.95.0: as 2a, this check is the plane's crossings (the surface at spin: tests/test_blackhole.cpp
+                    render::Renderer2D::LensSky L = view.lensFor(s, v); // testSpinSurface095, check_blackhole.py sky's thick05, thick99, thick99table)
+                    g_hgtHookOff = false;
                     if (mode == 0) L.debug = true; else L.debugDisc = true;
                     px[mode].resize(static_cast<std::size_t>(W) * H * 4);
                     R.lensFloat(L, W, H, px[mode]);   // (0.69.0: the float outputs on Vulkan)
@@ -2365,7 +2469,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                         xr[at] = d - T.edge(chi) * v.K;
                         const SpinHit h = T.lookup(th, chi);
                         dd[at] = h.dir;
-                        const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
+                        const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut, nullptr);
                         kk[at] = sd.order; rr[at] = sd.r;
                     }
                 double refShift = 0, edgeLook = 0, edgeClosed = 0, band[4] = {0, 0, 0, 0}, refBand[3] = {0, 0, 0}, dr = 0, dg = 0, refR[2] = {0, 0}, refG[2] = {0, 0}, shift = 0;
@@ -2414,7 +2518,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                             refN++;
                             const double pe = shadowEdge(s.spin, cam, chi), xpe = std::fabs(th - pe) / pe;
                             if (ref.sky && th > pe) refBand[xpe < 1e-3 ? 0 : xpe < 0.1 ? 1 : 2] = std::max(refBand[xpe < 1e-3 ? 0 : xpe < 0.1 ? 1 : 2], angleBetween(h.dir, ref.dir));
-                            const SpinDisc rd = spinDisc(ref, s.spin, g.rIn, g.rOut), td = spinDisc(h, s.spin, g.rIn, g.rOut);
+                            const SpinDisc rd = spinDisc(ref, s.spin, g.rIn, g.rOut, nullptr), td = spinDisc(h, s.spin, g.rIn, g.rOut, nullptr);
                             bool fold = false;
                             for (int k = 0; k + 1 < kSpinCross; k++) if (ref.u[k] > 0 && ref.u[k + 1] > 0 && std::fabs(ref.u[k] - ref.u[k + 1]) < 0.3 * ref.u[k]) fold = true;
                             if (rd.order != td.order) { if (!fold && !edge && xpe > 1e-2) refWrong++; }

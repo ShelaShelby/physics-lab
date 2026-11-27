@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.95.0", "Black Hole Lab: the spinning hole's disc at its true thickness, and a faster spinning sky",
+     "Round a spinning hole the Real look now draws the gas disc at its calculated thickness, as it already did without spin. Seen edge on it is a band, not "
+     "a line. Each ray's meeting with the disc's surface is worked out from its exact path near where it crosses the disc's plane. The faint rings of light "
+     "that went round the hole more than once stay in the plane. The spinning hole's sky and disc are drawn faster on the graphics card: integrals of the "
+     "same angle now share one calculation, which stops where single precision ends. The picture is the same. Benchmark: a new hard scene circles the top "
+     "spin's thick disc from the closest place at its surface; the older close circling scene moved to All scenes."},
     {"0.94.1", "Moons under their planets, the camera outside the black hole's disc, two benchmark fixes",
      "Orbit Lab: in Pick a body each planet and dwarf planet with moons has a fold arrow and its count (\"Jupiter ▸ 4 moons\"). The arrow shows its moons "
      "under it; the separate Moons list is gone. The filter still finds a moon and shows it under its planet. Black Hole Lab: the camera now stops at the gas "

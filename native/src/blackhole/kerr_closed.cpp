@@ -355,6 +355,13 @@ struct Radial {
         const double P = r * r + a * a - a * lam, D = r * r - 2 * r + a * a;
         return P * P - D * (eta + (lam - a) * (lam - a));
     }
+    // 0.95.0: the sign of dr/dtau at Mino time tau from the camera (nu: its sign at the camera): turned at r4 in case (2) (inward first: its antiderivative is
+    // 0 there, reached at tau = I0(camera)) and at r3 in case (1) (outward first: reached at pref (K - F_c)); the other cases do not turn outside the horizon
+    double sign(double tau, double Fc, double nu) const {
+        if (sub == 2 && nu < 0) return tau < pref * Fc ? -1 : 1;
+        if (sub == 1 && nu > 0) return tau < pref * (K - Fc) ? 1 : -1;
+        return nu;
+    }
 };
 
 // 0.56.4: the azimuth and the far time at Mino time tau from the camera (GLa (11), (12), (B2), (B3)): with the path integrals I+-, I0 = tau, I1, I2 between the
@@ -416,7 +423,26 @@ bool closedRadialIntegrals(double a, double lambda, double eta, double rs, doubl
     return true;
 }
 
-ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross, bool timed) {
+double surfaceHitMino(double rk, double tauK, double drk, double C, double sq, double kc2, const HeightTable& h, const DiscGeom& d,
+                      double (*rOf)(double tau, const void* ctx), const void* ctx, double& r, double& z) {
+    r = rk; z = 0;
+    double phi = surfaceStep(rk, drk, C, h, d);                              // (disc.h: the fixed-point steps on the line through the crossing)
+    if (!(phi > 0) || !(sq > 0)) return 0;
+    const double sMax = std::sin(kSurfaceMaxSpin);
+    for (int it = 0; it <= kSurfaceExactSpin; it++) {                        // kSurfaceExactSpin steps on the closed forms, then the hit at the last phi
+        const double dtau = ellFang(std::sin(phi), std::cos(phi), kc2) / sq;
+        if (!(dtau > 0) || !(dtau < tauK)) { r = rk; z = 0; return 0; }
+        const double rr = rOf(tauK - dtau, ctx), zz = rr * C * std::sin(phi);
+        if (!(rr > 0) || !std::isfinite(rr)) { r = rk; z = 0; return 0; }
+        if (it == kSurfaceExactSpin) { r = rr; z = zz; return dtau; }
+        const double R = std::sqrt(std::max(rr * rr - zz * zz, 0.0));
+        phi = std::asin(std::min(h.at(R) / (rr * C), sMax));
+        if (!(phi > 0)) { r = rk; z = 0; return 0; }
+    }
+    return 0;
+}
+
+ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross, bool timed, const DiscGeom* surf) {
     ClosedEnd out;
     out.timed = timed;
     const KerrBL ch(a);
@@ -457,10 +483,24 @@ ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCros
     // 0.57.2: phi and t only when asked (timed): 0.56.4 took them at every crossing of every ray, five times the cost of the rest (REPORT 0.57.2)
     CamInts ci{};
     if (timed && nc > 0) ci = camInts(rad, Fc, nuR);
+    const bool typeA = !pol.flat && !pol.vort;
+    out.cn = typeA ? std::sqrt(pol.up) : 0;
+    struct Rc { const Radial* rad; double Fc, nu; } rcx{&rad, Fc, nuR};
+    const auto rAt = [](double t, const void* c) { const Rc& q = *static_cast<const Rc*>(c); return q.rad->rOf(t, q.Fc, q.nu); };
+    const bool surface = surf && surf->height && surf->height->on() && typeA;
     for (int i = 0; i < nc; i++) {
         const double r = rad.rOf(taus[i], rad.sub == 4 ? Fc : Fc, nuR);
         if (!(r > 0) || !std::isfinite(r)) break;
         if (timed) phiTimeAt(pol, rad, ci, a, lam, cam.phi, Fc, nuR, taus[i], out.phi[out.nCross], out.t[out.nCross]);
+        // 0.95.0: the slope dr/dPsi = (dr/dtau) / sq and, asked for, the surface hit (THE DISC'S SURFACE, kerr_closed.h)
+        const int k = out.nCross;
+        out.tauS[k] = taus[i];
+        out.slope[k] = typeA ? rad.sign(taus[i], Fc, nuR) * std::sqrt(std::max(rad.R(r), 0.0)) / pol.sq : 0;
+        if (surface && k < kSurfaceOrders) {
+            double rh, zh;
+            const double dt = surfaceHitMino(r, taus[i], out.slope[k], out.cn, pol.sq, pol.kc2, *surf->height, *surf, rAt, &rcx, rh, zh);
+            if (dt > 0) { const double R = std::sqrt(std::max(rh * rh - zh * zh, 0.0)); out.uS[k] = R > 0 ? 1 / R : 0; out.zS[k] = zh; out.tauS[k] = taus[i] - dt; }
+        }
         out.u[out.nCross++] = 1 / r;
     }
     double mu, dmu, G;

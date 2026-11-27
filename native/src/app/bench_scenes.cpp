@@ -82,10 +82,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "ui.resize_blackhole", BenchKind::UiResizeBlackHole, -1, "Panels, the window resized over the Black Hole Lab",
             "A feeding hole spinning at 0.9, the disc on, the streaks and the clump: the window's size changed every 4 frames from its size at the start down to the "
             "smallest window and back, as a corner is dragged. Each size makes the swapchain and the pictures again. The window is put back after.");
-        // 0.84.0: the held camera's own shift drawn ray by ray (blackhole.extreme reaches the same view but drags the spin for 40 % of its time and turns by setting the angles)
-        add(true, "blackhole.close_spin", BenchKind::BlackHoleCloseSpin, -1, "Black Hole Lab, circling at the closest distance and the top spin",
-            "A feeding hole at spin 0.99 (the top), the disc on, Real, the camera at 2.2 GM/c\xC2\xB2 (the closest) with a 360\xC2\xB0 view (the widest): dragged round 2 rad "
-            "a second and up or down for 0.6 s, then let go to glide 0.6 s, over and over. Each ray's colour and light carry the camera's own shift.");
+        // 0.95.0: the spinning hole's disc at its thickness (blackhole/kerr_closed.h THE DISC'S SURFACE), from the closest place the camera rule allows near the plane
+        add(true, "blackhole.thick_spin", BenchKind::BlackHoleThickSpin, -1, "Black Hole Lab, the top spin's thick disc from the closest place at its surface",
+            "A feeding hole at spin 0.99 (the top), the disc on at its calculated thickness, Real, the camera at 2.2 GM/cÂ² (the closest) just above the disc's "
+            "surface with a 360Â° view (the widest): dragged round 2 rad a second and down onto the surface and up again for 0.6 s, then let go to glide 0.6 s.");
         // 0.85.0 (the outside review, PLAN_REVIEW.md R1-R4; the limit raised once to 4.9 minutes by the owner, 25 Nov 2026)
         add(true, "orbit.true_light", BenchKind::OrbitTrueLight, -1, "Orbit Lab, True sunlight: Neptune followed, then Earth, in turn",
             "Lighting True sunlight (each body by its distance from the Sun, the exposure set for the followed one, its readout), 3D, true scale, moons on: Neptune followed "
@@ -107,6 +107,12 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         // 0.92.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.porkchop and its wait: 1 % low 524.3 and 406.2 fps in bench_0.85.2, over 1.5 x 255 Hz
         // 0.93.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for atom.stark_drag: 1 % low 435.8 fps in bench_0.85.2, over 1.5 x 255 Hz
         // 0.94.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.sun_surface and its waits: 1 % low 650.9 fps in bench_0.85.2, over 1.5 x 255 Hz
+        // 0.95.0: moved here from the Hard list to make room for blackhole.thick_spin within the owner's 4.9 minutes: the same hole, distance and view (circled
+        // and dragged through the plane, so its camera stops at the disc's surface too)
+        // 0.84.0: the held camera's own shift drawn ray by ray (blackhole.extreme reaches the same view but drags the spin for 40 % of its time and turns by setting the angles)
+        add(false, "blackhole.close_spin", BenchKind::BlackHoleCloseSpin, -1, "Black Hole Lab, circling at the closest distance and the top spin",
+            "A feeding hole at spin 0.99 (the top), the disc on, Real, the camera at 2.2 GM/c\xC2\xB2 (the closest) with a 360\xC2\xB0 view (the widest): dragged round 2 rad "
+            "a second and up or down for 0.6 s, then let go to glide 0.6 s, over and over. Each ray's colour and light carry the camera's own shift.");
         add(false, "blackhole.moving_gas", BenchKind::BlackHoleMovingGas, -1, "Black Hole Lab, the moving gas at the fastest rate while the view turns",
             "A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), "
             "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "

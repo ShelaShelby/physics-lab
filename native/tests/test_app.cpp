@@ -1118,6 +1118,10 @@ static void testBenchNewScenes() {
     const bh::Settings cs = bh::benchSettings("blackhole.close_spin", false, ok);   // 0.84.0
     checkTrue("blackhole.close_spin: a feeding hole at kSpinTop, the disc on, Real, at kDistMin with kFovMax", ok && cs.preset == bh::kFeedingKey && cs.disc && cs.look == bh::Look::Real &&
               near(cs.spin, bh::kSpinTop) && near(cs.dist, bh::kDistMin) && near(cs.fovDeg, bh::kFovMax));
+    const bh::Settings ts = bh::benchSettings("blackhole.thick_spin", false, ok);   // 0.95.0
+    checkTrue("blackhole.thick_spin: a feeding hole at kSpinTop, Real, the disc drawn thick, at kDistMin with kFovMax, the camera at the disc's surface from above",
+              ok && ts.preset == bh::kFeedingKey && ts.disc && ts.look == bh::Look::Real && bh::discThickDrawn(bh::shown(ts)) && near(ts.spin, bh::kSpinTop) &&
+              near(ts.dist, bh::kDistMin) && near(ts.fovDeg, bh::kFovMax) && ts.pitch < 1.5707963267948966 && near(ts.pitch, bh::camDiscPitch(ts, bh::kDistMin, 1)));
     bh::benchSettings("no.such", false, ok);
     checkTrue("benchSettings: an unknown id says so", !ok);
     // atom.emit_all: radium-226 (the heaviest with level clouds), every electron, Glow, Ultra, Cloud 3D, Emit and Absorb on offer (level clouds)
@@ -1140,12 +1144,12 @@ static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
     // 0.83.0 (on purpose, the owner's rule of 24 Nov 2026): 23 scenes whose 1 % low in his 0.82.0 run was at least 1.5 x 255 Hz moved to All scenes; 9 new hard
     // scenes (atom.bfield_drag dropped: a field change remakes nothing heavy). REPORT 0.83.0.
-    checkTrue("benchmark lists (on purpose, 0.94.0: orbit.sun_surface in, blackhole.moving_gas to All scenes by the 1.5 x refresh rule, 29 and 73; 0.93.0: atom.stark_drag in, blackhole.edge_on to All scenes by the 1.5 x refresh rule, 29 and 72; 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 73 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 73 && int(v.size()) == 73);
+    checkTrue("benchmark lists (on purpose, 0.95.0: blackhole.thick_spin in, blackhole.close_spin to All scenes, 29 and 74; 0.94.0: orbit.sun_surface in, blackhole.moving_gas to All scenes by the 1.5 x refresh rule, 29 and 73; 0.93.0: atom.stark_drag in, blackhole.edge_on to All scenes by the 1.5 x refresh rule, 29 and 72; 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 74 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 74 && int(v.size()) == 74);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[73] = {
+    static const char* const ids[74] = {
         // the Hard list (0.83.0): the 17 kept, in the owner's order, then the new ones a to j of the job (f dropped)
         "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.circle_spin",   // 0.94.0: blackhole.moving_gas to All scenes
         "atom.nucleus_zoom", "atom.nucleon", "molecule.vib_density", "atom.slice_dirac_drag", "atom.jump_all", "ui.settings_open", "atom.side_all_glow", "orbit.real_fast",
@@ -1153,11 +1157,12 @@ static void testBenchSceneNumbers() {
         "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "orbit.saturn_real_fast", "atom.emit_all", "atom.slice_dense",   // 0.91.0: atom.slice_dense in molecule.live_hot's place (moved to All scenes by the 1.5 x rule)
         "atom.stark_drag",                                                       // 0.93.0 (blackhole.edge_on went to All scenes by the 1.5 x rule)
         "ui.settings_over_blackhole", "ui.resize_blackhole",
-        "blackhole.close_spin",                                                  // 0.84.0
+        "blackhole.thick_spin",                                                  // 0.95.0 (in blackhole.close_spin's place)
         "orbit.true_light",                                                      // 0.85.0 (orbit.sun_edge and orbit.oort_region went to All scenes in 0.92.0)
         "orbit.true_light_stars",                                                // 0.86.0 (in place of blackhole.film_soft, removed with its drawing: R6)
         "orbit.porkchop",                                                        // 0.92.0
         "orbit.sun_surface",                                                     // 0.94.0 (blackhole.moving_gas went to All scenes by the 1.5 x rule)
+        "blackhole.close_spin",                                                  // 0.95.0: moved to All scenes (blackhole.thick_spin has its view, at the disc's surface)
         "blackhole.moving_gas",                                                  // 0.94.0: moved to All scenes (1 % low 650.9 fps in bench_0.85.2)
         "blackhole.edge_on",                                                     // 0.93.0: moved to All scenes (1 % low 435.8 fps in bench_0.85.2)
         "orbit.sun_edge", "orbit.oort_region",                                   // 0.92.0: moved to All scenes (1 % low 524.3 and 406.2 fps in bench_0.85.2)

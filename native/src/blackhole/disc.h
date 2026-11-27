@@ -104,9 +104,8 @@ struct DiscPhys {                                   // a disc in numbers
 //   The test (tests/test_blackhole.cpp testDiscHeightSpin): Q = (u^t)^2 omega_theta^2, omega_theta^2 = Omega_K^2 (1 - 4 a r^-3/2 + 3 a^2 r^-2) (AF13 (40),
 //   Omega_K = 1 / (r^3/2 + a), BPT (2.16)), u^t = 1 / (E - Omega_K L) (u.u = -1 on a circular orbit): the restoring term per unit proper time squared is the
 //   squared vertical frequency at infinity times (dt/dtau)^2. Within 1e-10 for a = 0, 0.5, 0.9, 0.99 from r_ms to 100 M. At a = 0 Q is 0.79.0's L^2 / r^4 to the bit.
-//   (B1d)'s R_F takes the spin as Zhu prints it. The thickness is computed for every spin (heightOn). The picture draws it at a = 0 only (lab.h discThickDrawn):
-//   the light paths round a spinning hole (spin_sky.h) store only where they cross the plane, not the path near it, so a surface above the plane cannot be
-//   found there yet (ROADMAP). m_H: the hydrogen-1 atom, 1.00782503223 u (NIST, from AME2020,
+//   (B1d)'s R_F takes the spin as Zhu prints it. The thickness is computed for every spin (heightOn) and drawn at every spin (0.95.0, lab.h discThickDrawn;
+//   round a spinning hole kerr_closed.h "THE DISC'S SURFACE" finds where each ray meets it). m_H: the hydrogen-1 atom, 1.00782503223 u (NIST, from AME2020,
 //   as atom/atom_learn.cpp), u = 1.66053906892e-27 kg (CODATA 2022).
 constexpr double kZhuKappa = 0.03383;               // m^2/kg (0.3383 cm^2/g), Zhu App. B
 constexpr double kZhuMu = 0.615;                    // mean particle weight in m_H, Zhu App. B
@@ -168,7 +167,7 @@ double dilutedPlanck(double nu, double T, double f);   // f^-4 B_nu(nu, f T), W 
 //   polarisation is computed by the source but not drawn.
 // THE EMISSION ANGLE: the gas orbits in the equator; its frame moves along e_phi only, so the ray's part along e_theta (p_theta / rho, rho = r on the
 //   equator) is the same in its frame, where the ray's energy is 1 / g (g = C75 (A9), spin.h discShiftKerr; p_t = -1). On the equator p_theta^2 = q, the
-//   Carter constant (J15 (A.12)): mu = g q^(1/2) / r. Spin 0: q = b^2 - Lz^2. The thick disc (spin 0) is drawn with this same mu: its surface's tilt is left out.
+//   Carter constant (J15 (A.12)): mu = g q^(1/2) / r. Spin 0: q = b^2 - Lz^2. The thick disc (0.95.0: at every spin; r the distance R from the axis where the ray meets the surface) is drawn with this same mu: its surface's tilt is left out.
 constexpr int kLimbN = 11;
 extern const double kLimbTable[kLimbN];             // [Il + Ir] / F at mu = 0.1 k
 double limbRaw(double mu);                          // the cubic through the table
