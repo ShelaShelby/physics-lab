@@ -40,6 +40,11 @@ double secondAu(const Par& s);                     // E2 / F^2 = -(n^4 / 16) [17
 // the energy to second order, in hartree, of hydrogen (reduced mass mu, in m_e) in the field F (atomic units E_h / (e a0)). mu = 1: an infinitely heavy nucleus
 double energyAu(const Par& s, double F, double mu = 1.0);
 double saddleFieldAu(int n, double mu = 1.0);      // F_c = W^2 / 4 with W = mu / (2 n^2): mu^2 / (16 n^4)
+// 0.97.0 (outside review of 28 Nov 2026, second, part 4): where the lab's no-fine-structure picture starts to hold. Dirac's fine-structure splitting of n,
+// E(n, j = n - 1/2) - E(n, j = 1/2), hartree (the Dirac formula for Z = 1, CODATA 2022 alpha, an infinitely heavy nucleus), and the field at which the
+// largest linear shift (3/2) n (n - 1) F equals it. Below that field the real levels of n shift with the square of the field (not modelled).
+double diracFineSplitAu(int n);
+double fineCrossFieldAu(int n);
 
 // ---- the within-n diagonalisation ----
 // The field term inside one n, block m: H1 = F z in the basis |n l m>, l = |m| .. n-1. The radial integrals <n l| r |n l'> are worked out by Gauss-Laguerre

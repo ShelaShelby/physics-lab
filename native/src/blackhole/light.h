@@ -10,8 +10,12 @@
 //     ("Magnitudes of the Sun", row "Johnson V", column (5) "App (Vega)"; its absolute magnitude, column (2), 4.81, is the abstract's M_V = 4.81; the two differ by
 //     the distance modulus of 1 AU, 5 log10(10 pc / 1 AU) = 31.57, a check the test makes; data/photometry/willmer2018_arxiv1804.07788.extract.txt).
 //   - Pogson's scale (orbit/sky.h: IAU 2015 Resolution B2, eq. 4): a star of magnitude m gives 10^(-0.4 (m - m_Sun)) of the Sun's light in the band.
-//   - the Sun's light at 1 AU = its surface brightness x the solid angle of its disc, Omega_Sun = pi (R_Sun / 1 AU)^2 (a disc of uniform brightness: the Sun's
-//     limb darkening is not in the app, ROADMAP; R_Sun = 695,700 km, IAU 2015 B3, and the IAU au, orbit/units.h).
+//   - the Sun's light at 1 AU = its surface brightness x the solid angle of its disc, Omega_Sun = pi (R_Sun / 1 AU)^2 (R_Sun = 695,700 km, IAU 2015 B3, and the
+//     IAU au, orbit/units.h). 0.97.0 (outside review of 28 Nov 2026, second, part 5): the brightness used is the disc's MEAN, not its centre's. The effective
+//     temperature is defined by the flux, sigma Teff^4 = F, and the mean intensity over the disc is F / pi, so a black body at Teff has the mean brightness.
+//     For the total light a uniform disc at the mean brightness is exact: the flux at 1 AU is the mean intensity times Omega_Sun whatever the limb law.
+//     The Orbit Lab draws the limb darkening since 0.85.0 (render/sun_limb.h, Neckel & Labs 1994: centre = mean / (F/I), Equation 6). It changes how the
+//     light is spread over the disc, not its sum, so this bridge needs no change. (The Sun's spectrum is not a black body: that approximation is stated below.)
 //   So a star's light, in units of (the Sun's surface luminance x 1 sr):  E(m) = Omega_Sun x 10^(-0.4 (m - m_Sun)).  A "star" of the Sun's magnitude spread
 //   over the Sun's disc is the Sun's surface (the identity the test checks). Approximations, stated in the app: the V band is taken as the eye's visible light
 //   (V and the CIE photopic curve are close but not equal; the exact conversion depends on the spectrum: Bara & Bao-Varela 2023, section 2, below); the Sun's

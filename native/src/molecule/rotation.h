@@ -15,6 +15,14 @@
 //     of the two nuclei; the whole state must be symmetric for bosons (integer I) and antisymmetric for fermions (half-integer I); in a Sigma_g+ state the even-J levels
 //     are symmetric, in O2's Sigma_g- state the odd-N ones. H2 even 1, odd 3; 14N2 6 and 3; 16O2 only odd N; 12C16O2 only even J; C2H2 1 and 3 (the H pair; 12C has
 //     spin 0); HCl and HCN 1 (no exchange). Constant factors (the spins of unexchanged nuclei) are left out: they cancel in every share.
+//   - Ortho and para (0.97.0, the outside review of 28 Nov 2026, second): with two unequal non-zero weights (H2, N2, C2H2) the even-J and the odd-J levels are two
+//     spin forms that hardly turn into each other without a catalyst. SpinMix::Balance puts every J in one Boltzmann sum (the forms in balance, as with a catalyst).
+//     SpinMix::Kept holds each form at its high-temperature share g_set / (g_even + g_odd) (H2 odd 3/4, N2 even 2/3, C2H2 odd 3/4) and shares it out over that
+//     form's own levels only: N_J / N = f_set g(J) (2J+1) exp(-hc F(J) / kT) / Q_set, Q_set the sum over the levels of J's parity (gas cooled from warm, no
+//     catalyst). O2, CO2 (one weight zero) and HCl, HCN (no exchange) are the same in both. Checked: the balance's para share of H2 against Woolley, Scott &
+//     Brickwedde, J. Res. NBS 41, 379 (1948), Table 12 (tests/test_rotation.cpp testOrthoPara). Not modelled: the conversion over time, excited electronic or
+//     vibrational states. The slowness: in liquid H2 the uncatalysed conversion is -d[o]/dt = k1 [o]^2 - k2 [o][p], k1 = 0.0114 per hour in mole fractions
+//     (the same paper, p. 455; the liquid only: no gas rate is given there).
 //   - O2's ground state is a triplet: N is the rotation quantum number, and each N level is split into three (J = N - 1, N, N + 1) by about 2 cm^-1 (not shown).
 //   - Lines. Pure rotation J -> J + 1 (only a molecule with a permanent dipole: HCl, HCN): nu = F(J+1) - F(J) in v = 0. HCl's fundamental band v = 0 -> 1:
 //     R(J) = nu0 + F_1(J+1) - F_0(J), P(J) = nu0 + F_1(J-1) - F_0(J), nu0 = G(1) - G(0) from the lab's measured ladder (vibration.h). A line's relative strength:
@@ -63,6 +71,9 @@ const Measured* measured(const std::string& id);   // H2, N2, O2, HCl; nullptr o
 // even levels are then antisymmetric). Gives the weights of the even and the odd levels.
 void spinWeights(int twoI, bool sigmaMinus, int& gEven, int& gOdd);
 
+// 0.97.0: how the two spin forms are shared out (see the comment at the top)
+enum class SpinMix { Kept = 0, Balance = 1 };
+
 struct Rotor {
     std::string id;            // the molecule
     int iso = 0;               // the isotope (HCl only; else 0)
@@ -78,6 +89,7 @@ struct Rotor {
     double abundance = 1;      // in the natural mix
     bool scaled = false;       // constants scaled from H35Cl, not measured
     const char* source = "";   // where B comes from
+    SpinMix mix = SpinMix::Balance;   // 0.97.0: the two spin forms kept as when warm, or in balance (only where hasSpinForms)
 };
 bool hasRotation(const Molecule& m);               // the linear ones (H2, N2, O2, HCl, CO2, HCN, C2H2)
 Rotor rotor(const std::string& id, int iso = kH35Cl);   // iso kNatural gives H35Cl (the natural mix's main part)
@@ -89,6 +101,10 @@ struct Partition { double Q = 0; int top = 0; bool cut = false; double lastRel =
 Partition partition(const Rotor& r, double T);     // T in K, energies from F(0) = 0 (the textbook's); T <= 0: Q = 0 (only the lowest allowed level is held)
 double share(const Rotor& r, int J, double T);     // N_J / N
 int lowestJ(const Rotor& r);                       // the lowest allowed level (O2: N = 1)
+bool hasSpinForms(const Rotor& r);                 // 0.97.0: two unequal non-zero weights (H2, N2, C2H2): the Ortho and para choice applies
+double formShare(const Rotor& r, int parity);      // g_set / (g_even + g_odd) for the even (0) or odd (1) levels: the share each form keeps (SpinMix::Kept)
+constexpr double kLiquidH2ConvPerHour = 0.0114;    // k1 of liquid H2's self conversion, per hour, mole fractions (Woolley, Scott & Brickwedde 1948, p. 455)
+double liquidOrthoHalfHours(double x0);            // hours for liquid H2's ortho fraction to fall from x0 to x0 / 2 by k1 alone: (2/x0 - 1/x0) / k1
 int mostPopulated(const Rotor& r, double T);
 
 struct Line {
@@ -111,7 +127,7 @@ enum class Measure { Strength = 0, Absorbance = 1 };
 extern const double kC2;                           // the second radiation constant hc/k, cm K (CODATA 2022; HITRAN: 1.4387769)
 double absorbanceFactor(double nuCm, double T);    // nu (1 - exp(-c2 nu / T)); T <= 0: nu
 // The lines of one molecule (iso: kNatural gives both chlorines, each weighted by its abundance), sorted by wavenumber; lines below minRel of the strongest are left out
-std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel = 1e-3, Measure meas = Measure::Strength);
+std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel = 1e-3, Measure meas = Measure::Strength, SpinMix mix = SpinMix::Balance);
 
 // H35Cl's measured fundamental lines (Rank, Eastman, Rao & Wiggins, J. Opt. Soc. Am. 52, 1 (1962), Table III, observed): R(0..15), P(1..15)
 struct MeasuredLine { char branch; int J; double nu; };

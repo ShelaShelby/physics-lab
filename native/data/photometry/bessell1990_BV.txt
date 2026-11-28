@@ -1,0 +1,52 @@
+# Johnson B and V passbands: M. S. Bessell, "UBVRI passbands", PASP 102, 1181-1199 (1990), Table 2 "Normalized standard passbands", columns B and V.
+# Read from the saved scan (sources repo data/photometry/bessell_1990_pasp102_1181.pdf, NASA ADS) and the same numbers as served by the SVO Filter Profile Service,
+# Generic/Bessell.B and Generic/Bessell.V (sources repo data/stars/svo_generic_bessell_{B,V}_2026-11-28.dat; SVO lists them as energy-counter responses). Read 2026-11-28.
+# Vega zero points of the same filters, calculated by the SVO (pages saved: data/stars/svo_generic_bessell_{B,V}_page_2026-11-28.html), erg/cm2/s/A:
+zpB 6.13268e-9
+zpV 3.62708e-9
+# band wavelength_nm response
+B 360 0.000
+B 370 0.030
+B 380 0.134
+B 390 0.567
+B 400 0.920
+B 410 0.978
+B 420 1.000
+B 430 0.978
+B 440 0.935
+B 450 0.853
+B 460 0.740
+B 470 0.640
+B 480 0.536
+B 490 0.424
+B 500 0.325
+B 510 0.235
+B 520 0.150
+B 530 0.095
+B 540 0.043
+B 550 0.009
+B 560 0.000
+V 470 0.000
+V 480 0.030
+V 490 0.163
+V 500 0.458
+V 510 0.780
+V 520 0.967
+V 530 1.000
+V 540 0.973
+V 550 0.898
+V 560 0.792
+V 570 0.684
+V 580 0.574
+V 590 0.461
+V 600 0.359
+V 610 0.270
+V 620 0.197
+V 630 0.135
+V 640 0.081
+V 650 0.045
+V 660 0.025
+V 670 0.017
+V 680 0.013
+V 690 0.009
+V 700 0.000

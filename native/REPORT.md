@@ -1,24 +1,23 @@
-# 0.96.0: the outside review of 28 Nov 2026, parts A to G
+# 0.97.0: the outside review of 28 Nov 2026 (second), parts 1 to 5
 
 ## What changed
-- A: the 0.95.0 full-test failures are fixed. B: every lab opens in its Most realistic settings (app/realistic.cpp). Old settings switch once, at the first start of 0.96.0 (prefs.realest). First-start waits on the build machine: orbit to atom 5,019 ms, atom to molecule 38 ms, molecule to black hole 1 ms, black hole to orbit 3 ms.
-- C: Jupiter is lit by Dyudina et al. 2016 Eq. (1) with Mayorga et al. 2016's Cassini phase curves. Saturn uses the Barkstrom law of Dyudina Table 3, red row. Both are in kPlanetFS with the CPU twin render/giant_photometry.h. Uranus and Neptune are unchanged. New Hard scene orbit.jupiter_limb. blackhole.over_poles (1 % low 639 fps) moved to All scenes.
-- D: the rotation spectrum's Line strength / Absorbance control. Absorbance is each line times nu (1 - exp(-c2 nu / T)), from the saved HITRAN definitions page.
-- E: hashPhase set only Earth's Moon, before 1 Jan 1800 12:00 TDB and after 1 Jan 2100 12:00 TDB. The 13 other moons have used JPL's mean elements there since 0.88.0. The Moon there is now on a precessing ellipse fitted to ELP2000-82B (moon_elp.h, tools/fit_moon_ellipse.py). Its worst error is 2.416 deg and 15,324 km against ELP over 1800-2100, and 2.20 deg and 14,027 km against Horizons at 444 dates from 1600 to 2300. The card states both. hashPhase is removed. No eclipses are drawn outside 1800-2100.
-- F: Lande g uses g_L = 1 - m_e/m_nuc (Steck, "Sodium D Line Data" Eqs. (19) and (21), after Bethe & Salpeter). The belts.h Oort comment now names Vokrouhlicky, Nesvorny & Dones 2019.
-- G: four searches, saved to the sources repo, with ROADMAP lines. Ring phase law: only Deau 2009 (opposition only). Earth: NEO's MODIS cloud fraction, not an albedo. Debrecen: the DPD row format only. Milky Way: GAMBONS (Masana et al. 2021).
+- 1: Molecule Lab, Controls › Rotation › Ortho and para (H2, N2, C2H2): Kept as when warm (default, Most realistic, saved) or In balance. Kept gives each spin form g_set / (g_even + g_odd) over its own levels. Ladder, shares, most populated level, card, lines and the Data panel's table follow. Balance against Woolley, Scott & Brickwedde 1948 Table 12: worst gap 0.0041 percentage points (40 K). Their liquid-H2 rate gives "about 5 days" for the extra ortho to halve. No gas rate was found.
+- 2: eq. (14) of Ballesteros 2012 is NOT a black body's colour temperature. tools/bv_blackbody.py (Bessell 1990 B and V, SVO Vega zero points): B-V -0.301 needs a 36,300 K black body; eq. (14) gives 16,640 K, whose own B-V is -0.129. Against Mamajek's 2022 table (B0V: 31,400 K, -0.301; Pecaut & Mamajek 2013 v1 Table 4: 31,500 K, -0.307) eq. (14) is within 1.0 % (G), 1.6 % (K), 3.8 % (F). Colours unchanged; texts and sky.cpp say what is drawn. The paper states no range for eq. (14).
+- 3: D0: H2 para 36118.06962(37) cm-1 (Hoelsch et al. 2019, Table II note a). N2 941.310, O2 493.686, HCl 427.643 kJ/mol from ATcT 1.228 (0 K formation enthalpies). Darwent 1970 agrees within its printed uncertainty (O2, HCl). N2 differs by 0.38 kJ/mol.
+- 4: Stark limits text: below 2.9 (n = 2), 0.38, 0.089, 0.029 (n = 5) kV/cm the fine-structure splitting exceeds the largest linear shift.
+- 5: light.h (the bridge uses the Sun's mean brightness: exact for the total light), the exchange rule for spin-0 nuclei, the Absorbance choice, the dotted ring, the ROADMAP Saturn line rebuilt from 0.54.4 and the thin-ring line merged.
 
 ## Tests run
-- Unit: orbit 3138/0, moon 33/0, moon_real 65/0, atom 12409/0, rotation 476/0, app 202,599/0, analysis (the e/m table) passes. check_sources ok (819 lines, 100 extracts).
-- UI by hand: check_orbit_ui review085 35/0 and planets 25/0, check_molecule rotation 11/0. All 13 ui groups on the part C build: 12 passed. ui_molecule failed only because that binary predates part D's control.
-- `check.sh job`: 18/18 and ui_smoke passed. ui_orbit, ui_orbit_card and ui_molecule on the final build: all passed.
+- rotation_tests 558/0 (new testOrthoPara; testMorseMeasured on Hoelsch and ATcT). atom_tests 12419/0 (testStarkFineStructure). orbit_tests 3145/0 (testStarTemperature097). check_sources ok (831 lines, 104 extracts).
+- `check.sh job`: 17/18 at first. app_settings failed on the Most realistic list's count (now 6 Molecule rows), fixed; then app_settings 202,612/0 and ui_smoke passed. check_molecule rotation by hand: 11/0.
+- The new tests fail on 0.96.0: they call rot::SpinMix, formShare, diracFineSplitAu, and read the new D0 values.
 
 ## Not done
-- Needs pc_tests.ps1 on the owner's PC: orbit.jupiter_limb, the first-start waits, the giants' GPU-against-CPU pictures and cardstark on the Radeon.
-- Doubtful, not used: Saturn's blue row (0.44 um) of Dyudina Table 3 integrates to a spherical albedo of 0.453. The paper's Table 4 says 0.39.
-- HITRAN's line lists need an account (the API answered 404), so there is no test against HITRAN's relative heights. NIST ASD lists no Lande g for atoms lighter than K. The test uses Na 3P from Arimondo et al. 1977, as given by Steck.
+- (b) of part 1: kept and in balance agree within 1e-6 at 1000 K (N2, C2H2 also at 3000 K). H2 at 3000 K differs by 3.4e-5: its sum is cut at J = 25 (the centrifugal formula). The test's limit there is the cut's last term, 2.6e-4.
+- Part 1: the conversion time is the liquid's only (Woolley et al. p. 455). The owner's "days to weeks" for the gas has no source here.
+- Part 2: the owner's premise (eq. (14) = the black body of the star's colour) does not hold. The B and O colours are left as they are: ROADMAP owner-decides line. No Teff swap. The Woolley 1948 scan is 87 MB in the sources repo (GitHub warned, accepted).
+- Hardware: none needed.
 
 ## References changed on purpose
-- B: check_025 and check_shell_state start from the 0.95.0 choices. check_blackhole disc and gasrow set the old rows. check_molecule sets the ball style and expects "real" after damaged settings. test_review085 R1 reads realistic.cpp. The check_orbit_ui planets check runs in 2D. test_app has the new benchmark lists.
-- E: test_orbit expected "simple ellipse" and "made-up starting angle". test_moon_real expected Earth at the barycentre with no phase. Both now expect the fitted ellipse.
-- F: test_zeeman now expects the normal triplet at +-g_L, the Na D patterns, the 2P closed form and the weak and strong limits with g_L. test_analysis's e/m table expects the slope g_L mu_B/hc (cadmium: 1 - 4.8e-6).
+- test_app: the Most realistic list has 6 Molecule rows (the new Ortho and para row), was 5.
+- test_rotation testMorseMeasured: H2's D0 was footnote 125 (36118.3 cm-1, an upper limit), N2, O2, HCl were Darwent 1970. Now Hoelsch 2019 and ATcT 1.228 (newer measurements). The Morse gaps move: H2 +4.5 %, N2 +21.9 %, O2 +24.3 %, HCl +14.3 %.

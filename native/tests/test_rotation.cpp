@@ -3,7 +3,7 @@
 //    read here from the files as received;
 //  - textbook formulas: the rigid rotor's spacing 2B(J+1); the band's first R and P lines 2B from the band origin with no line at the origin; the most populated level
 //    J = sqrt(kT / 2hcB) - 1/2 (weights 1); the high-temperature partition function kT / (sigma hcB) (1 + hcB / 3kT) (its next term is of order (hcB/kT)^2);
-//    ortho : para hydrogen 3 : 1 when hot and all para when cold; the levels the Pauli principle forbids (16O2 even N, 12C16O2 odd J) hold exactly nothing;
+//    ortho : para hydrogen 3 : 1 when hot and all para when cold; the levels the exchange rule for identical nuclei forbids (16O2 even N, 12C16O2 odd J) hold exactly nothing;
 //  - the Born-Oppenheimer mass rules against the measured D35Cl constants (NIST WebBook's DCl page, saved for this test);
 //  - HCl's measured fundamental lines (Rank, Eastman, Rao & Wiggins, J. Opt. Soc. Am. 52, 1 (1962), Table III, saved).
 // 0.53.1, the Morse curve and the bond that breaks (molecule/morse.h), written before the code:
@@ -11,7 +11,8 @@
 //  - the motion: the energy (1/2) mu (dr/dt)^2 + V(r) stays the level's energy along the path (1e-9 relative); the turning points solve V(r) = E; the period and
 //    the mean bond length against a direct quadrature of dr / speed (independent of the closed form); the mean grows with v; the period tends to 1 / (c we);
 //    the harmonic limit (wexe -> 0) gives the lab's harmonic swing (vib::turningPoint);
-//  - each D0 and re equals its saved page (Huber & Herzberg's footnote 125 for H2; Darwent, NSRDS-NBS 31 (1970) for N2, O2, HCl; Rank et al. 1962's band origins);
+//  - each D0 and re equals its saved page (0.97.0: H2 from Hoelsch et al. 2019's Table II note a; N2, O2, HCl from the Active Thermochemical Tables 1.228;
+//    until 0.96.0 Huber & Herzberg's footnote 125 and Darwent, NSRDS-NBS 31 (1970), which must still agree within Darwent's printed uncertainty; Rank et al. 1962's band origins);
 //  - the Pekeris alpha_e against the measured one, within the limits set from the comparison (REPORT 0.53.1).
 #include <algorithm>
 #include <cmath>
@@ -19,6 +20,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -499,19 +501,52 @@ static void testMorseMeasured() {
         const std::vector<double> x = xRow(std::string("molecules/vib/webbook_diatomic/nist_webbook_") + p.file + "_constants.extract.txt");
         check(x.size() >= 10 && morse::reMeasured(p.id) == x[9] && morse::curve(p.id).re == x[9], std::string(p.id) + ": re equals the page's " + (x.size() >= 10 ? f(x[9]) : std::string("?")) + " A");
     }
-    // D0: H2 from Huber & Herzberg's footnote 125 ("This is an upper limit (36118.3 ..."), the others from Darwent 1970 (kJ/mol, converted with CODATA's exact constants)
-    const double h2 = pageFootnoteNumber("molecules/vib/webbook_diatomic/nist_webbook_h2_constants.extract.txt", "id=\"Dia125\"", "This is an upper limit (");
-    check(h2 == 36118.3 && morse::d0Measured("H2") == h2, "H2: D0 equals footnote 125 of the saved page (" + f(h2) + " cm^-1)");
+    // D0, 0.97.0: H2 (para, N = 0) from note a of Hoelsch et al. 2019's Table II ("... dissociation energy of para-H2 must be corrected to ... 36 118.069 62(37) cm-1")
+    {
+        std::string s = readFile("molecules/vib/dissociation/holsch_2019_arxiv1902.09471.extract.txt");
+        const std::size_t a = s.find("37.509013(10) cm−1 and ");
+        std::string num = a == std::string::npos ? "" : s.substr(a + std::string("37.509013(10) cm−1 and ").size(), 20);
+        num = num.substr(0, num.find('(')); num.erase(std::remove(num.begin(), num.end(), ' '), num.end());
+        const double h2 = std::atof(num.c_str());
+        check(h2 == 36118.06962 && morse::d0Measured("H2") == h2, "H2: D0 (para) equals Hoelsch et al. 2019's Table II note a (" + num + " cm^-1)");
+        const std::size_t o = s.find("D0N =1 (H2 ) = (4)+(7)-(8)");
+        std::string on = o == std::string::npos ? "" : s.substr(o + 26, 60);
+        on = on.substr(on.find_first_of("0123456789")); on = on.substr(0, on.find('(')); on.erase(std::remove(on.begin(), on.end(), ' '), on.end());
+        std::printf("  H2: para D0 %.5f - ortho D0 %s = %.5f cm^-1, the lab's F(J = 1) %.5f\n", h2, on.c_str(), h2 - std::atof(on.c_str()), rot::term(rot::rotor("H2"), 0, 1));
+        check(std::atof(on.c_str()) == 35999.582834, "H2: Hoelsch's ortho D0 read (" + on + ")");
+    }
     const double kJ = 1000 / (6.02214076e23 * kH * kC * 100);
     check(rel(morse::kKJmolToCm, kJ, 1e-15) && std::fabs(kJ - 83.5935) < 1e-4, "1 kJ/mol = " + f(kJ) + " cm^-1");
+    // N2, O2, HCl from ATcT 1.228's 0 K enthalpies of formation: the number after "(g)" in each row of the extract (tags removed)
+    std::map<std::string, double> hf;
+    {
+        const std::string s = readFile("molecules/vib/dissociation/atct_v1.228.extract.txt");
+        std::istringstream in(s);
+        std::string blk, ln;
+        for (std::string l; std::getline(in, l);) {
+            if (l.rfind("#--- begin ", 0) == 0) { blk = l.substr(11); continue; }
+            if (l.rfind("#---", 0) == 0 || l.rfind("# ", 0) == 0 || blk.empty()) continue;
+            std::string t; bool tag = false;
+            for (char ch : l) { if (ch == '<') { tag = true; t += ' '; } else if (ch == '>') tag = false; else if (!tag) t += ch; }
+            std::istringstream w(t); std::string tok; bool after = false;
+            while (w >> tok) { if (tok == "(g)") { after = true; continue; } if (after) { hf[blk] = std::atof(tok.c_str()); break; } }
+        }
+    }
+    check(hf.size() == 5 && hf["N (g)"] == 470.655 && hf["O (g)"] == 246.843 && hf["H (g)"] == 216.034 && hf["Cl (g)"] == 119.621 && hf["HCl (g)"] == -91.988,
+          "ATcT 1.228: the five 0 K enthalpies of formation read (" + std::to_string(hf.size()) + ")");
+    const std::map<std::string, double> atct = {{"N2", 2 * hf["N (g)"]}, {"O2", 2 * hf["O (g)"]}, {"HCl", hf["H (g)"] + hf["Cl (g)"] - hf["HCl (g)"]}};
+    for (const auto& kv : atct) check(rel(morse::d0Measured(kv.first), kv.second * kJ, 1e-12), kv.first + ": D0 equals ATcT 1.228's " + f(kv.second) + " kJ/mol = " + f(kv.second * kJ) + " cm^-1 (has " + f(morse::d0Measured(kv.first)) + ")");
+    // the old values (Darwent 1970) against the new: within Darwent's printed uncertainty where it has one
     std::istringstream in(readFile("molecules/vib/dissociation/darwent1970_d0.txt"));
     int rows = 0;
     for (std::string ln; std::getline(in, ln);) {
         if (ln.empty() || ln[0] == '#') continue;
-        std::istringstream w(ln); std::string id, bond; double kjmol;
-        w >> id >> bond >> kjmol;
+        std::istringstream w(ln); std::string id, bond, unc; double kjmol;
+        w >> id >> bond >> kjmol >> unc;
         rows++;
-        check(rel(morse::d0Measured(id), kjmol * kJ, 1e-12), id + ": D0 equals Darwent 1970's " + f(kjmol) + " kJ/mol = " + f(kjmol * kJ) + " cm^-1 (has " + f(morse::d0Measured(id)) + ")");
+        const double d = kjmol - atct.at(id);
+        std::printf("  %s: Darwent 1970 %.2f kJ/mol, ATcT 1.228 %.3f: %+.3f kJ/mol (Darwent's uncertainty %s)\n", id.c_str(), kjmol, atct.at(id), d, unc.c_str());
+        if (unc != "nan") check(std::fabs(d) <= std::atof(unc.c_str()), id + ": Darwent 1970 agrees with ATcT within its printed " + unc + " kJ/mol");
     }
     check(rows == 3, "Darwent's file: N2, O2, HCl read (" + std::to_string(rows) + ")");
     check(std::isnan(morse::d0Measured("H2O")) && !morse::has("H2O") && !morse::has("CO2"), "no Morse curve or D0 for the polyatomics");
@@ -634,12 +669,95 @@ static void testAbsorbance() {
     check(same, "absorbance: Line strength is unchanged (the default)");
 }
 
+// 0.97.0 (the outside review of 28 Nov 2026, second, part 1): ortho and para, written before the code. References:
+//  - Herzberg's rule (the weights' ratio): each spin form keeps g_set / (g_even + g_odd) when it cannot convert: H2 odd 3/4, 14N2 even 2/3, C2H2 odd 3/4;
+//  - with the forms in balance, H2's para share against Woolley, Scott & Brickwedde, J. Res. NBS 41, 379 (1948), Table 12 (typed in wsb1948_table12.txt from the
+//    page images; each number is also looked up in the OCR extract). The limit at each T: 0.001 percentage points (one unit of the table's last digit) plus
+//    |p(the model's levels) - p(the paper's own eq. 2.17 levels)|, both summed here. The paper's eq. 2.17 levels themselves give up to 0.017 points more than its
+//    table at 40-90 K (with CODATA 2022's hc/k; the cause is not stated in the paper), so the table is not reproduced better than that by any level set;
+//  - the two cases agree when hot: at 3000 K H2's sum is cut at J = 25 (the one-term centrifugal formula, rotation.h), and the gap is below the share of the last
+//    level summed (Partition::lastRel); N2 and C2H2 at 3000 K and H2 at 1000 K agree within 1e-6;
+//  - the liquid's slowness: the closed form of -dx/dt = k1 x^2 against a direct integration of the paper's full rate law (k2 = k1 o/p at 20.39 K from Table 12).
+static double oddShare(const rot::Rotor& q, double T) { double o = 0; for (int J = 1; J <= 400; J += 2) o += rot::share(q, J, T); return o; }
+static void testOrthoPara() {
+    struct Form { const char* id; int parity; double keep; };
+    for (const Form& fm : {Form{"H2", 1, 3.0 / 4}, Form{"N2", 0, 2.0 / 3}, Form{"C2H2", 1, 3.0 / 4}}) {
+        rot::Rotor r = rot::rotor(fm.id);
+        check(rot::hasSpinForms(r), std::string(fm.id) + ": two spin forms");
+        check(std::fabs(rot::formShare(r, fm.parity) - fm.keep) < 1e-15, std::string(fm.id) + ": the kept share from the weights is " + f(fm.keep));
+        r.mix = rot::SpinMix::Kept;
+        for (double T : {5.0, 20.0, 77.0, 300.0, 3000.0}) {
+            const double sh = fm.parity ? oddShare(r, T) : 1 - oddShare(r, T);
+            double all = 0; for (int J = 0; J <= 400; J++) all += rot::share(r, J, T);
+            check(std::fabs(sh - fm.keep) < 1e-12 && std::fabs(all - 1) < 1e-12, std::string(fm.id) + " kept at " + f(T) + " K: the form's share is " + f(fm.keep) + " (" + f(sh) + "), all add to 1");
+        }
+        // hot: the two cases agree
+        rot::Rotor b = r; b.mix = rot::SpinMix::Balance;
+        for (double T : {1000.0, 3000.0}) {
+            double gap = 0; for (int J = 0; J <= 400; J++) gap = std::max(gap, std::fabs(rot::share(r, J, T) - rot::share(b, J, T)));
+            const double lim = std::string(fm.id) == "H2" && T > 2000 ? rot::partition(b, T).lastRel : 1e-6;
+            check(gap <= lim, std::string(fm.id) + " at " + f(T) + " K: kept and in balance agree within " + f(lim) + " (" + f(gap) + ")");
+        }
+    }
+    for (const char* id : {"O2", "CO2", "HCl", "HCN"}) {   // unchanged
+        rot::Rotor k = rot::rotor(id), b = k; k.mix = rot::SpinMix::Kept;
+        bool same = !rot::hasSpinForms(k);
+        for (double T : {0.0, 20.0, 300.0}) for (int J = 0; J < 40; J++) same = same && rot::share(k, J, T) == rot::share(b, J, T);
+        check(same, std::string(id) + ": the same in both cases");
+    }
+    {   // cold H2, kept: a quarter in J = 0 and three quarters in J = 1 (the most populated)
+        rot::Rotor k = rot::rotor("H2"); k.mix = rot::SpinMix::Kept;
+        check(std::fabs(rot::share(k, 0, 0) - 0.25) < 1e-15 && std::fabs(rot::share(k, 1, 0) - 0.75) < 1e-15 && std::fabs(rot::share(k, 1, 5) - 0.75) < 1e-12 &&
+              rot::mostPopulated(k, 5) == 1 && rot::mostPopulated(k, 0) == 1, "H2 kept, cold: J = 0 holds 1/4, J = 1 holds 3/4 and is the most populated");
+        rot::Rotor n = rot::rotor("N2"); n.mix = rot::SpinMix::Kept;
+        check(rot::mostPopulated(n, 0) == 0, "N2 kept at 0 K: J = 0 (2/3) is the most populated");
+    }
+    // the balance against Woolley, Scott & Brickwedde 1948, Table 12
+    std::istringstream in(readFile("molecules/rotation/wsb1948_table12.txt"));
+    std::string ex = readFile("molecules/rotation/wsb1948.extract.txt");
+    ex.erase(std::remove(ex.begin(), ex.end(), ' '), ex.end());
+    double c[10] = {0}, k1 = 0;
+    std::vector<std::pair<double, double>> rows;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream ls(line);
+        std::string a; ls >> a;
+        if (a == "eq218") { for (double& x : c) ls >> x; continue; }
+        if (a == "k1") { ls >> k1; check(ex.find("0.0114perhour") != std::string::npos, "k1 0.0114 per hour is in the extract"); continue; }
+        double p = 0; ls >> p; rows.push_back({std::atof(a.c_str()), p});
+        std::string pv; { std::istringstream l2(line); l2 >> pv >> pv; }
+        check(ex.find(pv) != std::string::npos, "Table 12: " + pv + " is in the extract");
+    }
+    check(rows.size() == 21 && k1 == 0.0114 && c[0] == 60.8483, "Table 12: 21 rows, eq. 2.18 and k1 read");
+    const double x = 0.5, Bw = c[0] + c[1] * x + c[2] * x * x + c[3] * x * x * x, Dw = c[4] + c[5] * x + c[6] * x * x, Fw = c[7] + c[8] * x, Hw = c[9];
+    const double c2 = kH * kC * 100 / kK;
+    const auto FW = [&](int J) { if (J == 0) return 0.0; const double y = double(J) * (J + 1), h = Hw * y * y * y * y; return Bw * y + Dw * y * y + Fw * y * y * y + h + h * h / (Fw * y * y * y - h); };
+    const auto paraW = [&](double T) { double e = 0, o = 0; for (int J = 0; J <= 25; J++) (J % 2 ? o : e) += (J % 2 ? 3 : 1) * (2 * J + 1) * std::exp(-c2 * FW(J) / T); return 100 * e / (e + o); };
+    const rot::Rotor h2 = rot::rotor("H2");
+    double worst = 0, worstT = 0;
+    for (const auto& rw : rows) {
+        const double T = rw.first, model = 100 * (1 - oddShare(h2, T)), lim = 0.001 + std::fabs(model - paraW(T));
+        check(std::fabs(model - rw.second) <= lim, "H2 in balance at " + f(T) + " K: para " + f(model) + " % against Table 12's " + f(rw.second) + " within " + f(lim));
+        if (std::fabs(model - rw.second) > worst) { worst = std::fabs(model - rw.second); worstT = T; }
+    }
+    std::printf("  ortho-para: the worst gap to Table 12 is %.4f percentage points at %g K\n", worst, worstT);
+    {   // liquid H2: the ortho share 0.75 halves in (2/x0 - 1/x0)/k1 hours; the full law with k2 changes it by under 1 %
+        const double th = rot::liquidOrthoHalfHours(0.75);
+        double xo = 0.75, t = 0;
+        const double pe = 0.99789, k2 = k1 * (1 - pe) / pe, dt = 1e-3;
+        while (xo > 0.375) { const auto d = [&](double q) { return -(k1 * q * q - k2 * q * (1 - q)); }; const double a = d(xo), b = d(xo + dt / 2 * a), cc = d(xo + dt / 2 * b), e = d(xo + dt * cc); xo += dt / 6 * (a + 2 * b + 2 * cc + e); t += dt; }
+        check(std::fabs(th - 4 / (3 * 0.0114)) < 1e-9 && std::fabs(t - th) / th < 0.01, "liquid H2: 0.75 to 0.375 ortho in " + f(th) + " h by k1 alone, " + f(t) + " h with k2 (20.39 K)");
+    }
+}
+
 int main() {
     testAbsorbance();
     testConstants();
     testWeights();
     testLevels();
     testPopulations();
+    testOrthoPara();
     testIsotopes();
     testMeasuredLines();
     testTurning();

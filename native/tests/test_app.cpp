@@ -2504,7 +2504,15 @@ static void testRealisticDefaults() {
         checkStr("0.96.0: a fresh " + lab + " lab has " + key + " at its Most realistic value", got, r.p.value);
         rows[lab == "orbit" ? 0 : lab == "atom" ? 1 : lab == "molecule" ? 2 : 3]++;
     }
-    checkTrue("0.96.0: the list has rows for all four labs (13 Orbit, 16 Atom, 5 Molecule, 8 Black Hole)", rows[0] == 13 && rows[1] == 16 && rows[2] == 5 && rows[3] == 8);
+    // 0.97.0: Molecule 6 (the new Ortho and para row, "opara")
+    checkTrue("0.96.0: the list has rows for all four labs (13 Orbit, 16 Atom, 6 Molecule, 8 Black Hole)", rows[0] == 13 && rows[1] == 16 && rows[2] == 6 && rows[3] == 8);
+    {   // 0.97.0: the Ortho and para choice is saved only when it is In balance, and read back
+        molecule::Settings st; st.spinMix = 1;
+        const std::string line = molecule::saveSettings(st);
+        checkTrue("0.97.0: In balance is saved as opara=balance and read back; Kept (the default) is not written",
+                  line.find(" opara=balance") != std::string::npos && molecule::loadSettings(line).spinMix == 1 && molecule::saveSettings(molecule::Settings{}).find("opara") == std::string::npos &&
+                  realistic::freshMolecule().set.spinMix == 0);
+    }
     // the Atom Lab's own list (atom/atom_tools.h, what its Most realistic button presses) is the same list
     for (const char* k : {"picture", "ostyle", "scale", "qstyle", "detail", "style", "cstyle", "cdens", "phase", "dirac", "elec", "rscale", "mrel", "hrel", "vdots", "sdots"})
         checkStr(std::string("0.96.0: the Atom Lab's realisticValue(") + k + ") is the list's", atom::realisticValue(k) ? atom::realisticValue(k) : "(none)", realistic::find("atom", k) ? realistic::find("atom", k)->value : "(missing)");

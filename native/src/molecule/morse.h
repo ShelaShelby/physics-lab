@@ -5,9 +5,9 @@
 //   - Measured: the ladder G(v) of vib::anharmonic (Huber & Herzberg 1979 via the NIST WebBook), shown as measured only up to the highest level its constants
 //     were fitted to (validTo: H2 3, HCl 5). N2's and O2's pages do not say how far their constants hold; each page quotes the measured first spacing Delta G(1/2)
 //     (N2 footnote 109, Bendtsen 1974; O2 footnote 69, Babcock & Herzberg 1948), so for them only v = 0 and 1 are shown as measured.
-//     The bond length re: the X row of the same pages. The dissociation energy D0 (from the lowest level): H2 Huber & Herzberg's footnote 125 on the saved page
-//     (36118.3 cm^-1, "an upper limit ... the true value is probably close to the upper limit", Herzberg 1970); N2, O2, HCl: Darwent, NSRDS-NBS 31 (1970), the
-//     recommended values, saved in data/molecules/vib/dissociation/. HCl's band origins nu0(v-0), v = 1..5: Rank, Eastman, Rao & Wiggins, JOSA 52, 1 (1962), saved.
+//     The bond length re: the X row of the same pages. The dissociation energy D0 (from the lowest level), since 0.97.0: H2 (para) Altmann et al. 2018 as corrected
+//     by Hoelsch et al. 2019; N2, O2, HCl from the Active Thermochemical Tables 1.228 (2026) (morse.cpp has the numbers; data/molecules/vib/dissociation/).
+//     Until 0.96.0: Huber & Herzberg's footnote 125 (36118.3 cm^-1, an upper limit) and Darwent, NSRDS-NBS 31 (1970). HCl's band origins nu0(v-0), v = 1..5: Rank, Eastman, Rao & Wiggins, JOSA 52, 1 (1962), saved.
 //   - Model: the Morse curve V(r) = De (1 - exp(-a (r - re)))^2 fixed by the measured we and wexe alone: De = we^2 / (4 wexe), a = 2 pi c we sqrt(mu / (2 De))
 //     (the curve's harmonic frequency is then we). Its levels are exactly we (v + 1/2) - wexe (v + 1/2)^2 and end at v_max = floor(we / (2 wexe) - 1/2).
 //     The levels above the measured ones are the Morse ones, labelled model.

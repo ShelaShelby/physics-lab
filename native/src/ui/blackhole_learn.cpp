@@ -70,7 +70,9 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "out), its temperature (each face a black body), the light's shift on the way to you from the gas's speed and from gravity (Luminet 1979), and where every "
           "pixel's light path meets the disc: over the hole, under it (the disc's underside, bent into view) and in thin rings closer to the shadow. Seen from near the "
           "disc's plane, those rings are thinner than a pixel: one ring along the shadow's edge then looks like a faint dotted curve that ends on the disc's straight edge. "
-          "It is real: light that went round the hole once or more before reaching you (it is in the double-precision reference too). A black body seen "
+          "The curve is real: light that went round the hole once or more before reaching you (it is in the double-precision reference too). Its dotted look is not: it "
+          "comes from the pixel grid, because each pixel looks along one ray and only some of them hit the thin ring. A camera that averages over each pixel would show "
+          "a smooth, faint line. A black body seen "
           "shifted is still a black body, at the shifted temperature (Riazuelo 2019); with spin the shift is Cunningham 1975's; its colour and visible brightness come from the CIE 1931 eye, the same rule as "
           "the stars' colours. The side coming towards you is brighter. The picture is checked pixel by pixel against the double-precision reference.") +
         p("<b>The inner edge</b> is the innermost stable orbit, 6 GM/c² without spin (2.32 at spin 0.9): inside it the gas falls in and gives no light here. The <b>outer edge</b> is your choice: the "
@@ -121,7 +123,9 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>Drawn: your own place.</b> Held still near the hole, you see all the light that falls in towards you bluer and brighter, the disc and the stars alike: "
           "each colour temperature times the card's factor, the light by its fourth power (Riazuelo 2019, eqs. 52, 53). Without spin it is one factor for the whole "
           "picture; round a spinning hole each ray has its own. Exact for a camera held still (not falling, not orbiting). The faint sky map is not shifted: it has no "
-          "colour temperature. The automatic exposure follows, so the picture is not simply brighter: it is bluer, and the card says how much brighter it really is.")});
+          "colour temperature. Each star is shifted as a black body at the temperature Ballesteros's (2012) formula gives for its B−V. For blue B and O stars that is "
+          "well below their surface temperature (a B0 star: 16,600 K against 31,400 K, Mamajek's table after Pecaut & Mamajek 2013), so their shifted light is not exact: that needs their "
+          "measured spectra. The automatic exposure follows, so the picture is not simply brighter: it is bluer, and the card says how much brighter it really is.")});
     {   // 0.55.3: the Film look, one row per choice (blackhole/looks.h filmRows: the physics, the film's choice, the paper's reason, where in the paper)
         std::string h = p("Controls › Look › <b>Film</b> draws the choices the makers of the film Interstellar made for its black hole, as James, von Tunzelmann, Franklin and "
                           "Thorne (2015) state them, on the same calculated hole and the same light paths as the Real look. One row per choice:");

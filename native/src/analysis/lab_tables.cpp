@@ -565,10 +565,13 @@ Table rotation() {
 // 0.53: rotation (molecule/rotation.h)
 const char* const kRank = "D. H. Rank, D. P. Eastman, B. S. Rao and T. A. Wiggins, J. Opt. Soc. Am. 52, 1 (1962), Table III: H35Cl's 1-0 band, observed (vacuum)";
 const char* const kNistMass = "NIST Atomic Weights and Isotopic Compositions (1H, 2H, 35Cl, 37Cl): masses and abundances";
+const char* const kWsb = "H. W. Woolley, R. B. Scott, F. G. Brickwedde, J. Res. NBS 41, 379 (1948), Table 12: H2's para share in balance (the check) and the slow conversion of liquid H2";   // 0.97.0
 std::string tempText(double T) { return fmt("%.0f K", T); }
 Table rotLevels(const LabContext& c) {
     namespace rot = molecule::rot;
-    const rot::Rotor r = rot::rotor(c.molecule, c.rotIso);
+    rot::Rotor r = rot::rotor(c.molecule, c.rotIso);
+    r.mix = c.spinMix == 1 ? rot::SpinMix::Balance : rot::SpinMix::Kept;   // 0.97.0: the Ortho and para choice
+    const bool forms = rot::hasSpinForms(r), kept = forms && r.mix == rot::SpinMix::Kept;
     Table t;
     t.id = "rotlevels";
     const char* q = r.nLevels ? "N" : "J";
@@ -576,10 +579,14 @@ Table rotLevels(const LabContext& c) {
     t.about = std::string("F(") + q + ") = B " + q + "(" + q + "+1)" + (r.D[0] > 0 ? " − D [" + std::string(q) + "(" + q + "+1)]²" : "") + " in the ground vibrational level, B = " + fmt("%.6g", r.B[0]) +
               (r.D[0] > 0 ? " cm⁻¹, D = " + fmt("%.4g", r.D[0]) + " cm⁻¹" : " cm⁻¹ (rigid: no centrifugal term)") + (c.molecule == "HCl" ? " (B and D of v = 0 from Huber & Herzberg's series in v + ½, γe and D's change with v included)" : "") +
               (r.scaled ? " (scaled from H³⁵Cl by the Born-Oppenheimer mass rules, not measured)" : "") +
-              ". The share at " + tempText(c.T) + " is g (2" + q + "+1) e^(−hcF/kT) over the sum of all of them (the partition function). g is the nuclear-spin weight." +
+              (kept ? ". Ortho and para kept as when warm (no catalyst): even " + std::string(q) + " hold " + fmt("%.4g", rot::formShare(r, 0)) + " and odd " + q + " " + fmt("%.4g", rot::formShare(r, 1)) +
+                      " of the molecules at every temperature; the share at " + tempText(c.T) + " is that fraction times g (2" + q + "+1) e^(−hcF/kT) over the sum of the same form's levels. g is the nuclear-spin weight."
+                    : ". The share at " + tempText(c.T) + " is g (2" + q + "+1) e^(−hcF/kT) over the sum of all of them (the partition function). g is the nuclear-spin weight." +
+                      std::string(forms ? " Ortho and para in balance (with a catalyst)." : "")) +
               (r.nLevels ? " O₂'s ground state is a triplet: each N level is split into three (J = N−1, N, N+1) by about 2 cm⁻¹, not shown." : "");
     t.sources = {r.source, molecule::rot::measured(c.molecule) ? kHuber : kCccbdb, "nuclear spins: NUBASE2020; the weights by the rule of Herzberg, Spectra of Diatomic Molecules (1950), ch. III", "CODATA 2022 (h, c, k)"};
     if (c.molecule == "HCl") t.sources.push_back(kNistMass);
+    if (c.molecule == "H2") t.sources.push_back(kWsb);
     Column J = num(q, "", "the level"), F = num("F", "cm^-1", "computed from B and D"), g = num("weight g", "", "nuclear spin"), sh = num("share", "", std::string("computed at ") + tempText(c.T)),
            deg = num(std::string("2") + q + "+1", "", "the level's states");
     const int top = std::max(10, std::min(rot::partition(r, c.T).top, 60));
@@ -595,7 +602,7 @@ Table rotLines(const LabContext& c) {
     namespace rot = molecule::rot;
     const bool hcl = c.molecule == "HCl";
     const rot::Spectrum sp = hcl ? rot::Spectrum::Fundamental : rot::Spectrum::PureRotation;
-    std::vector<rot::Line> L = rot::lines(c.molecule, hcl ? c.rotIso : 0, sp, c.T, hcl ? 0 : 1e-3);
+    std::vector<rot::Line> L = rot::lines(c.molecule, hcl ? c.rotIso : 0, sp, c.T, hcl ? 0 : 1e-3, rot::Measure::Strength, c.spinMix == 1 ? rot::SpinMix::Balance : rot::SpinMix::Kept);
     const rot::Rotor r = rot::rotor(c.molecule, c.rotIso);
     Table t;
     t.id = "rotlines";

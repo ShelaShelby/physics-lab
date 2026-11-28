@@ -18,17 +18,22 @@ constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 // re (angstrom): the X row of Huber & Herzberg (1979) via the NIST WebBook, the saved pages in data/molecules/vib/webbook_diatomic/ (a subscript digit kept):
 //   H2 0.74144, N2 1.09768_5, O2 1.20752, HCl 1.27455_2 (footnote 31: the uncorrected value from Be; Bunker 1972 gives 1.2746149 at the Born-Oppenheimer minimum)
-// D0 (cm^-1, from v = 0 to the separated atoms):
-//   H2: footnote 125 of the same page: "This is an upper limit (36118.3 +- 0.5 cm^-1), the lower limit being 4.4779 eV. According to Herzberg, 1970 the true value
-//       is probably close to the upper limit".
-//   N2, O2, HCl: B. deB. Darwent, "Bond Dissociation Energies in Simple Molecules", NSRDS-NBS 31 (1970), the recommended (bold) 0 K values: N-N 941.69, O-O 493.59 +- 0.4,
-//       Cl-H 428.02 +- 0.42 kJ/mol (data/molecules/vib/dissociation/, the PDF and the rows read from it), converted with N_A h c (CODATA 2022, exact).
+// D0 (cm^-1, from the lowest level, v = 0 and the lowest rotational level, to the separated atoms in their ground levels). 0.97.0 (the outside review of 28 Nov 2026,
+// second, part 3): newer values. Until 0.96.0: H2 36118.3 (Huber & Herzberg's footnote 125, an upper limit) and Darwent, NSRDS-NBS 31 (1970): N-N 941.69,
+// O-O 493.59 +- 0.4, Cl-H 428.02 +- 0.42 kJ/mol (data/molecules/vib/dissociation/darwent1970_d0.txt, kept for the test that compares them).
+//   H2: 36118.06962(37) cm^-1, the dissociation energy of para-H2 (N = 0) of Altmann et al., PRL 120, 043204 (2018), as corrected in note a of Table II of
+//       N. Hoelsch et al., arXiv:1902.09471 (2019) (data/molecules/vib/dissociation/holsch_2019_arxiv1902.09471.extract.txt). The same paper measures ortho-H2
+//       (N = 1): 35999.582834(11) cm^-1.
+//   N2, O2, HCl: Active Thermochemical Tables ver. 1.228 (Ruscic & Bross, Argonne, 2026; atct_v1.228.extract.txt), the enthalpies of formation at 0 K (kJ/mol,
+//       95 % limits): N 470.655 +- 0.021, O 246.843 +- 0.0021, H 216.034 (+- < 0.0005), Cl 119.621 +- 0.0011, HCl -91.988 +- 0.0062. D0(N2) = 2 dfH(N) =
+//       941.310 +- 0.042, D0(O2) = 2 dfH(O) = 493.686 +- 0.0042, D0(HCl) = dfH(H) + dfH(Cl) - dfH(HCl) = 427.643 +- 0.0063 (the three added in quadrature, ATcT's
+//       independent-errors rule; covariances are given only at 298.15 K). Converted with N_A h c (CODATA 2022, exact).
 struct Row { const char* id; double re, d0; const char* src; };
 const Row kRows[] = {
-    {"H2", 0.74144, 36118.3, "Huber & Herzberg 1979, footnote 125 (upper limit, probably close to the true value)"},
-    {"N2", 1.097685, 941.69 * kKJmolToCm, "Darwent, NSRDS-NBS 31 (1970): 941.69 kJ/mol"},
-    {"O2", 1.20752, 493.59 * kKJmolToCm, "Darwent, NSRDS-NBS 31 (1970): 493.59 ± 0.4 kJ/mol"},
-    {"HCl", 1.274552, 428.02 * kKJmolToCm, "Darwent, NSRDS-NBS 31 (1970): 428.02 ± 0.42 kJ/mol"},
+    {"H2", 0.74144, 36118.06962, "para-H₂ (J = 0): 36,118.06962 ± 0.00037 cm⁻¹ (Altmann et al. 2018, as corrected by Hölsch et al. 2019)"},
+    {"N2", 1.097685, 2 * 470.655 * kKJmolToCm, "Active Thermochemical Tables 1.228 (2026): 941.310 ± 0.042 kJ/mol"},
+    {"O2", 1.20752, 2 * 246.843 * kKJmolToCm, "Active Thermochemical Tables 1.228 (2026): 493.686 ± 0.004 kJ/mol"},
+    {"HCl", 1.274552, (216.034 + 119.621 + 91.988) * kKJmolToCm, "Active Thermochemical Tables 1.228 (2026): 427.643 ± 0.006 kJ/mol"},
 };
 const Row* row(const std::string& id) {
     for (const Row& r : kRows) if (id == r.id) return &r;

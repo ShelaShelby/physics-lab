@@ -444,6 +444,7 @@ std::string saveSettings(const Settings& s) {
     for (int i = 0; i < 9; i++) o << (i ? "," : "") << s.cam.R[i];
     if (s.realUsed || s.style == Style::Realistic)
         o << " rdots=" << s.realDots << " riso=" << kRealIsoText[std::clamp(s.realIso, 0, 3)] << " rcol=" << (s.realPot ? "pot" : "plain") << " rshow=" << kRealShowText[std::clamp(s.realShow, 0, 2)];
+    if (s.spinMix == 1) o << " opara=balance";   // 0.97.0 (kept, the default, is not written: an older line is written back byte for byte)
     return o.str();
 }
 Settings loadSettings(const std::string& text) {
@@ -467,6 +468,7 @@ Settings loadSettings(const std::string& text, const Settings& base) {
         else if (k == "riso") { s.realUsed = true; for (int i = 0; i < 4; i++) if (v == kRealIsoText[i]) s.realIso = i; }
         else if (k == "rcol") { s.realUsed = true; if (v == "pot" || v == "plain") s.realPot = v == "pot"; }
         else if (k == "rshow") { s.realUsed = true; for (int i = 0; i < 3; i++) if (v == kRealShowText[i]) s.realShow = i; }
+        else if (k == "opara") { if (v == "balance") s.spinMix = 1; else if (v == "kept") s.spinMix = 0; }
         else if (k == "labels") { if (v == "0" || v == "1") s.labels = v == "1"; }
         else if (k == "spin") { if (v == "0" || v == "1") s.spin = v == "1"; }
         else if (k == "zoom") { if (readD(v, d) && d > 0) s.cam.zoom = std::clamp(d, kZoomMin, kZoomMax); }

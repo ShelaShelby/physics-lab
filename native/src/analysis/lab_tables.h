@@ -17,6 +17,7 @@ struct LabContext {
     std::string molecule = "H2O";  // the Molecule Lab's molecule id
     double T = 298.15;             // 0.53: the Molecule Lab's temperature (K): the rotational shares and line strengths
     int rotIso = 4;                // 0.53: HCl's isotope (molecule::rot::Iso; 4 the natural mix)
+    int spinMix = 0;               // 0.97.0: ortho and para, 0 kept as when warm, 1 in balance (molecule::rot::SpinMix)
     double fieldT = 0;             // 0.54.0: the Atom Lab's magnetic field (T; 0: off, no Zeeman tables)
     int zKind = -1, zLine = -1;    //         which levels it acts on (AtomLab::zeemanKind) and the line shown split (index into zeeman::labLines)
 };

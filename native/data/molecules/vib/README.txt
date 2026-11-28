@@ -60,3 +60,15 @@ hcl_lines/ (0.53)
   D. H. Rank, D. P. Eastman, B. S. Rao and T. A. Wiggins, "Rotational and vibrational constants of the HCl35 and DCl35 molecules", J. Opt. Soc. Am.
   52, 1 (1962), the PDF as received (diverdi.colostate.edu course references, 14 Nov 2026), and rank1962_table3.txt: its Table III (H35Cl 1-0 band,
   observed and calculated lines), read from the PDF's text layer and checked against the page image (how: the file's head).
+
+Newer dissociation energies (0.97.0; the outside review of 28 Nov 2026, second, part 3). In the sources repo at data/molecules/vib/dissociation/:
+holsch_2019_arxiv1902.09471.pdf (+ .txt.gz, pdftotext -layout)
+    Saved as received on 28 Nov 2026 from https://arxiv.org/pdf/1902.09471v1 (N. Hölsch et al., "Benchmarking theory with an improved measurement of the
+    ionization and dissociation energies of H2", 2019). Table II note a: the dissociation energy of para-H2 (N = 0), 36 118.069 62(37) cm-1 (Altmann et al.,
+    PRL 120, 043204 (2018), as corrected there); line (9): ortho-H2 (N = 1), 35 999.582 834(11) cm-1. The lab's H2 D0 is the para value (from J = 0).
+atct_v1.228_2026-11-28.html
+    Saved as received on 28 Nov 2026 from https://atct.anl.gov/Thermochemical%20Data/version%201.228/index.php (Active Thermochemical Tables, B. Ruscic and
+    D. H. Bross, ver. 1.228, Argonne, 2026). No terms of use are stated on the page. Used: the 0 K enthalpies of formation (kJ/mol, 95 % limits) of
+    N (g) 470.655 +- 0.021, O (g) 246.843 +- 0.0021, H (g) 216.034 (+- < 0.0005), Cl (g) 119.621 +- 0.0011, HCl (g) -91.988 +- 0.0062.
+    D0(N2) = 2 dfH(N), D0(O2) = 2 dfH(O), D0(HCl) = dfH(H) + dfH(Cl) - dfH(HCl). Covariances are given only at 298.15 K, so HCl's uncertainty adds the three in quadrature.
+Darwent 1970 (darwent1970_d0.txt) is kept: the test checks that it agrees with ATcT within its printed uncertainty (O2, HCl; N2 has none printed).

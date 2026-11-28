@@ -50,9 +50,16 @@ Vec3 lonLat(double lo, double la) {
     return {std::cos(la) * std::cos(lo), std::cos(la) * std::sin(lo), std::sin(la)};
 }
 
-// 0.50 (review item 4): a star's colour = the colour of a black body at its colour temperature. The temperature from B-V is Ballesteros 2012 (EPL 97, 34008,
-// arXiv:1201.1809, eq. 14; data/stars), the black body under the CIE 1931 2-degree observer to sRGB, largest channel 1, no white mixed in: tools/star_colour.py
-// wrote the table star_colours.inc (B-V in steps of 0.01). Until 0.49.4: an unnamed curve fit for the black body's RGB, then 30 % white.
+// 0.50 (review item 4): a star's colour = the colour of a black body at the temperature Ballesteros 2012 (EPL 97, 34008, arXiv:1201.1809, eq. 14; data/stars)
+// gives for its B-V, the black body under the CIE 1931 2-degree observer to sRGB, largest channel 1, no white mixed in: tools/star_colour.py wrote the table
+// star_colours.inc (B-V in steps of 0.01). Until 0.49.4: an unnamed curve fit for the black body's RGB, then 30 % white.
+// 0.97.0 (outside review of 28 Nov 2026, second, part 2): what that temperature is. The paper states no range of validity for eq. (14) and says it was tuned
+// ("fine tuning") against stars. tools/bv_blackbody.py (Bessell 1990's B and V passbands, the SVO's Vega zero points, Planck's law) shows it is NOT the
+// temperature of a black body with that B-V: B-V = -0.30 gives 16,640 K, while a black body needs about 36,300 K for that colour. Against Pecaut & Mamajek
+// 2013 (E. Mamajek's table, version 2022.04.16: data/stars/eem_dwarf_2022.extract.txt) it is within 1.0 % of Teff for G dwarfs, 1.6 % for K and 3.8 % for F,
+// but far below Teff for B and O stars (B0V: B-V -0.301, Teff 31,400 K, eq. (14) 16,640 K; O5V 41,400 K against 17,528 K). A black body at 16,640 K has
+// B-V -0.129, not -0.301. So a hot star is drawn redder than both its effective temperature and its own B-V would give, and the Black Hole Lab shifts it as that cooler black body (blackhole_view.cpp
+// starSeenBucket). tests/test_orbit.cpp testStarTemperature097 checks these facts. ROADMAP: the measured spectra of hot stars; the owner decides the colours.
 #include "star_colours.inc"
 double bucketBV(int k) { return -0.3 + 2.3 * k / (kSkyColourBuckets - 1); }   // (0.84.0: named; the same steps as before)
 double bvTemperatureK(double bv) { return 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62)); }   // Ballesteros 2012, eq. (14)

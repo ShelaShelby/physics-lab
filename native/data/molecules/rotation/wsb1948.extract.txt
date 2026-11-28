@@ -1,0 +1,71 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/rotation/woolley_scott_brickwedde_1948_jres41_379.txt.gz
+# Reference: H. W. Woolley, R. B. Scott, F. G. Brickwedde, "Compilation of thermal properties of hydrogen in its various isotopic and ortho-para modifications", J. Res. Natl. Bur. Stand. 41, 379-475 (1948), Research Paper RP1932 (the scanned PDF: sha256 79b5211bd4efcec0bdadf44851062421b619c71fafdab36ae1d9d894ada139c9; the original here is its pdftotext -layout text, gzip -9, which is the scan's OCR: the numbers were read on the page images, see wsb1948_table12.txt)
+# URL: https://nvlpubs.nist.gov/nistpubs/jres/041/jresv41n5p379_A1b.pdf
+# Date read: 2026-11-28
+# sha256 of the original: 15fdcc33ef6ec547f2c817a7965732a4cfe255ef15c3bded56443dc50e5505f1
+# Place in the original: eq. 2.18 for H2 (p. 383, PDF page 5); Table 12 "Ortho-para composition at equilibrium" (p. 395, PDF page 17; the OCR breaks the columns, the row for 100 K is above its label); the self conversion of liquid H2 (p. 455, PDF page 78)
+# Used by: native/tests/test_rotation.cpp testOrthoPara (each number of wsb1948_table12.txt must be found here, spaces of the OCR removed); code comments: src/molecule/rotation.h
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin eq. 2.18, H2
+    For H z:
+          Gv = 4405.3 (v+;0 - 125.325(v+ %)2 + 1.9473 (v+ 72)3_ 0.11265(1)+ }2)4
+          B v= 60.8483-3 .06635(v+]f) + 0.068361 (v+ }OZ- 0.0065 (V+}2)'l
+
+          D v= - 0 .046435 + 0.0014904(v+ }f)- 0.000063648(v+ }02                                                    2.18
+
+          F o= 4. 93203 X 10- 5 + 0.02800 X 1O- 5 (v+ 7f)
+          H .= - 6.7217 X 10- 8
+
+ Properties of Hydrogen                                                                                              383
+
+#--- end
+#--- begin Table 12
+           OJ(
+           10 ___ . __ ..........        99.9999          0. 02i7
+                                                                                                                                 (3. 16
+           20 ..................         99.821           1. 998
+           20.39 ...............         99.789
+           23.57 ...............                          3.761
+                                                                                The equilibrium constant J{ex for isotopic exchange
+           30 ..................         97.021           7.864                 in the ideal gas state is independent of P , and
+           33.10 ...............         95.034
+           40 ..•...••........••         88.727         14.784
+                                                                                accordingly the relative equ ilibrium concentra-
+           50 ..................         77. 054        20. 718                 tions of H 2, HD , and D 2 are also independent of
+           60 ..................         65.569         25. 131
+           70 ..................         55.991         28. 162
+                                                                                pressure in the ideal gas state. For this reaction
+           80 . .................        48.537         30. 141                 the /J.E8 of eq 3.3, the difference between twice
+           90 ..................         42.882         31. 395
+                                         38.620         32.1 64
+                                                                                the energy of the ground state of HD minus the
+          100 . . ................
+          120 ..................         32.959         32.916                  sum of the energies of the ground states of H 2
+                                                        33.246
+          150. _P.------_.---.-          28.603
+                                                        33.327
+                                                                                and D 2 , is equal to twice the zero-point vibra-
+          200 ..................         25.974
+          250 ..................         25.264                                 tional energy of HD minus the sum of the zero-
+                                         25.075          33.333
+          298.16 .... . . .. ......
+                                         25.072          33.333
+                                                                                point vibrational energies of H 2 and D z. Using
+          300 . ..... ..... . ......
+          350 . .................        25. 019                                the values given in section III, 1 for the zero point
+          400 ..................         25.005
+                                         25.000
+#--- end
+#--- begin liquid H2 self conversion
+          The velocity constant k2 is much smaller than kl
+          in accord with the small equilibrium proportion                                                 58.4440
+                                                                      Liquid: 10glOP(mm Hg) = 4.7367 -       T
+          of o-H2• At equilibrium, where d[0-H21 /dt is zero,
+          k2/le l = [0-H21/ [p-H21. Values of equilibrium con-                        + 0.02670T.               (7.14 )
+          centr ations are given in table 12. For liquid hydro-
+          gen the velocity constant kl for conversion is               Solid : 10glOP(mm Hg)=5 .1625 - 67.~19
+          0.0114 per hour when concentrations are expressed                           + 0.03102T.               (7.15 )
+          in mole fractions. The value of leI for solid H 2,
+#--- end

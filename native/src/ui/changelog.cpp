@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.97.0", "Molecule Lab: ortho and para hydrogen kept or in balance, newer bond energies; clearer texts on hot stars and the Stark effect",
+     "Molecule Lab: H₂, N₂ and C₂H₂ have a new choice in Controls › Rotation, Ortho and para. Kept as when warm (the default, the most realistic) keeps the two "
+     "spin forms as they were at room temperature, as gas cooled without a catalyst does: hydrogen stays 3 parts ortho to 1 para. In balance is the gas after a "
+     "catalyst has worked. The ladder, the shares, the most populated level, the Rotation card and the Data panel follow it; the balance matches Woolley, Scott "
+     "and Brickwedde's 1948 table. The bond energies are newer: hydrogen's from the 2018 measurement as corrected in 2019, nitrogen's, oxygen's and hydrogen "
+     "chloride's from the Active Thermochemical Tables (2026). Orbit and Black Hole Labs: the guides say that blue B and O stars are drawn as black bodies far "
+     "cooler than their surfaces. Atom Lab: the electric field's limits say where fine structure would change the picture. Texts: the exchange rule for identical "
+     "nuclei, the Absorbance choice, and why a thin ring near the shadow looks dotted."},
     {"0.96.0", "Every lab opens most realistic, Jupiter and Saturn shaded as measured, an absorbance spectrum, the Moon outside 1800 to 2100",
      "Every lab now opens in its Most realistic settings. This happens once, at the first start of this version; your later choices are kept. Orbit Lab: Jupiter and "
      "Saturn are shaded by laws measured from space: Jupiter by Cassini's brightness against the phase angle, Saturn by a law fitted to Pioneer 11. Their edges "

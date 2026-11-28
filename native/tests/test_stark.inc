@@ -246,10 +246,34 @@ static void testStarkLines() {
     }
 }
 
+// 0.97.0 (outside review of 28 Nov 2026, second, part 4), written before the code: the slider's first non-zero step (shell_atom.cpp: top / 1000, top the
+// saddle field of the highest n shown) against Dirac's fine-structure splitting. The splitting from the Dirac formula, E = m c^2 [1 + (Z alpha / (n - k +
+// sqrt(k^2 - (Z alpha)^2)))^2]^(-1/2), k = j + 1/2, typed here with NIST's alpha (CODATA 2022), not from the module. For each n = 2 .. 5 shown as the highest,
+// the largest linear shift (3/2) n (n - 1) F there (the lab's linearAu) is above the splitting of that n. The field where they are equal goes into the limits text.
+static void testStarkFineStructure() {
+    namespace st = atom::stark;
+    const double a = nist::alpha;
+    const auto dirac = [a](int n, double j) { const double k = j + 0.5; return (1 / std::sqrt(1 + std::pow(a / (n - k + std::sqrt(k * k - a * a)), 2)) - 1) / (a * a); };
+    for (int n = 2; n <= 5; n++) {
+        const double split = dirac(n, n - 0.5) - dirac(n, 0.5);
+        const double F1 = st::saddleFieldAu(n, st::reducedMassH()) / 1000;
+        st::Par top; top.n = n; top.n1 = n - 1; top.n2 = 0; top.m = 0;
+        const double shift = st::linearAu(top) * F1;
+        std::printf("  Stark n = %d: first step %.4g au, largest linear shift %.4g Eh, Dirac splitting %.4g Eh, equal at %.4g kV/cm\n", n, F1, shift, split, split / (1.5 * n * (n - 1)) * st::fieldUnitVm() / 1e5);
+        checkTrue("Stark n = " + std::to_string(n) + ": the first step's largest linear shift is above the fine-structure splitting", shift > split);
+        checkTrue("Stark n = " + std::to_string(n) + ": the module's Dirac splitting and crossing field (1e-12)", std::fabs(st::diracFineSplitAu(n) / split - 1) < 1e-12 &&
+                  std::fabs(st::fineCrossFieldAu(n) * 1.5 * n * (n - 1) / split - 1) < 1e-12);
+    }
+    // with n = 5 the highest shown, the n = 2 levels at its first step are below their crossing (the limits text says from which field)
+    checkTrue("Stark: the n = 5 slider's first step is below the n = 2 crossing", st::saddleFieldAu(5, st::reducedMassH()) / 1000 < st::fineCrossFieldAu(2));
+    checkTrue("Stark: the limits text has the fine-structure sentence", st::limitsText().find("the levels shift with the square of the field") != std::string::npos);
+}
+
 static void testStark() {
     testStarkFormulas();
     testStarkWithinN();
     testStarkSturmian();
     testStarkCloud();
     testStarkLines();
+    testStarkFineStructure();
 }

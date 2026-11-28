@@ -109,7 +109,8 @@ struct MoleculeLab {
     double rotAngle = 0;                     // radians
     Molecule rotShown;
     bool rotOn() const { return rotTurning && set.style != Style::Realistic && !vibOn() && !liveOn() && rot::hasRotation(mol()); }
-    rot::Rotor rotor() const { return rot::rotor(mol().id, rotIso); }
+    rot::Rotor rotor() const { rot::Rotor r = rot::rotor(mol().id, rotIso); r.mix = spinMix(); return r; }
+    rot::SpinMix spinMix() const { return set.spinMix == 1 ? rot::SpinMix::Balance : rot::SpinMix::Kept; }   // 0.97.0: the Ortho and para choice (saved in set)
     int rotLevel() const {                   // the level shown: the chosen one, or the most populated (always an allowed one)
         const rot::Rotor r = rotor();
         if (rotJ < 0) return rot::mostPopulated(r, liveK);

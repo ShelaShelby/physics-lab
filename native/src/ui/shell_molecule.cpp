@@ -524,6 +524,24 @@ static std::string pct(double v) {   // a share: 12.3 %, 0.42 %, 3.1e-07
     return b;
 }
 static const char* qName(const molecule::rot::Rotor& r) { return r.nLevels ? "N" : "J"; }
+// 0.97.0 (outside review of 28 Nov 2026, second, part 1): the words that name the ortho and para case shown (molecule/rotation.h SpinMix)
+static std::string spinMixText(const molecule::rot::Rotor& r) {
+    namespace rot = molecule::rot;
+    if (!rot::hasSpinForms(r)) return "";
+    char b[400];
+    if (r.mix == rot::SpinMix::Kept) {
+        std::snprintf(b, sizeof b, "Shown: ortho and para kept as when warm (no catalyst). Even J keep %.3g %% of the molecules and odd J %.3g %% at every temperature, each spread over its own levels.",
+                      100 * rot::formShare(r, 0), 100 * rot::formShare(r, 1));
+        std::string t = b;
+        if (r.id == "H2") {
+            std::snprintf(b, sizeof b, " Without a catalyst the change is slow: in liquid hydrogen the extra ortho takes about %.0f days to halve (Woolley, Scott & Brickwedde 1948).", rot::liquidOrthoHalfHours(0.75) / 24);
+            t += b;
+        }
+        return t;
+    }
+    return std::string("Shown: ortho and para in balance (with a catalyst): every level in one Boltzmann sum.") +
+           (r.id == "H2" ? " The para share matches Woolley, Scott & Brickwedde's 1948 table within 0.005 percentage points." : "");
+}
 static bool hasLines(const molecule::rot::Rotor& r) { return r.dipole; }
 static molecule::rot::Spectrum specOf(const molecule::MoleculeLab& L, const molecule::rot::Rotor& r) {
     namespace rot = molecule::rot;
@@ -561,6 +579,14 @@ static void rotationControls(molecule::MoleculeLab& L, Panel& p, const SectionFn
     }
     std::snprintf(b, sizeof b, "%s above %s = 0; %s of the molecules", cm1(rot::term(r, 0, J), 2).c_str(), q, pct(rot::share(r, J, L.liveK)).c_str());
     pStat(p, "Energy, share", b);
+    if (rot::hasSpinForms(r)) {   // 0.97.0: ortho and para (H2, N2, C2H2)
+        pHeading(p, "Ortho and para");
+        int mx = L.set.spinMix;
+        const std::vector<std::string> on{"molecule.rot.opara.kept", "molecule.rot.opara.balance"};
+        real::markLabels("molecule", "opara", {"Kept as when warm", "In balance"});
+        if (pSegmented(p, "molecule.rot.opara", {"Kept as when warm", "In balance"}, &mx, &on)) { L.set.spinMix = mx; L.rotJ = -1; }
+        pCaption(p, "Kept as when warm: no catalyst, the two spin forms stay as they were at room temperature. In balance: with a catalyst. " + spinMixText(L.rotor()), true);
+    }
     if (mo.id == "HCl") {
         int iso = L.rotIso;
         std::vector<std::string> lab, nm;
@@ -599,8 +625,9 @@ static void rotationControls(molecule::MoleculeLab& L, Panel& p, const SectionFn
     else if (r.D[0] > 0) about = std::string("Levels from the measured Be, αe and D (Huber & Herzberg 1979, NIST WebBook): F = B") + q + "(" + q + "+1) − D[" + q + "(" + q + "+1)]².";
     else about = "Levels of a rigid rotor from the measured ground-state B (NIST CCCBDB): no centrifugal term.";
     if (r.gEven != r.gOdd) {
-        char w[200];
-        if (r.gEven == 0 || r.gOdd == 0) std::snprintf(w, sizeof w, " Only %s %s exist: the two identical spin-0 nuclei allow no other (the Pauli principle).", r.gEven == 0 ? "odd" : "even", q);
+        char w[320];
+        // 0.97.0 (outside review, part 5): was "(the Pauli principle)". Spin-0 nuclei are bosons: the exchange rule (Herzberg 1950, ch. III)
+        if (r.gEven == 0 || r.gOdd == 0) std::snprintf(w, sizeof w, " Only %s %s exist: the two identical nuclei have spin 0, so they are bosons, and the whole state must stay the same when they are swapped. That removes every other level.", r.gEven == 0 ? "odd" : "even", q);
         else std::snprintf(w, sizeof w, " Nuclear spin weights: even %s ×%d, odd ×%d (ortho and para).", q, r.gEven, r.gOdd);
         about += w;
     }
@@ -620,6 +647,7 @@ void moleculeRotationCard(AppState& app, Panel& p) {
     char b[240];
     std::snprintf(b, sizeof b, "%s at %.0f K", r.label.c_str(), L.liveK);
     pCaption(p, b, true);
+    if (rot::hasSpinForms(r)) pCaption(p, spinMixText(r), true);   // 0.97.0: the ortho and para case shown
     // the ladder: the levels to scale on the left, one row per level on the right (its share as a bar), joined by a faint line
     const int j0 = rot::lowestJ(r), best = rot::mostPopulated(r, L.liveK), shown = L.rotLevel();
     int top = std::max({best * 2 + 2, shown + 1, j0 + 5});
@@ -668,7 +696,7 @@ void moleculeRotationCard(AppState& app, Panel& p) {
         if (pSegmented(p, "molecule.rot.measure", {"Line strength", "Absorbance"}, &ms, &mn)) L.rotMeasure = ms;
     }
     const rot::Measure meas = L.rotMeasure == 1 ? rot::Measure::Absorbance : rot::Measure::Strength;
-    const std::vector<rot::Line> lines = rot::lines(mo.id, isoSel, sp, L.liveK, 2e-3, meas);
+    const std::vector<rot::Line> lines = rot::lines(mo.id, isoSel, sp, L.liveK, 2e-3, meas, L.spinMix());
     pHeading(p, sp == rot::Spectrum::Fundamental ? "Fundamental band v 0 → 1 (cm⁻¹)" : "Pure rotation, J → J+1 (cm⁻¹)");
     if (lines.empty()) { pCaption(p, "No line is strong enough to draw at this temperature."); return; }
     double lo = lines.front().nu, hi = lines.back().nu;

@@ -20,3 +20,9 @@ willmer2018_arxiv1804.07788.pdf (+ .txt.gz, its pdftotext -layout text; _abs.htm
     ApJS 236, 47 (2018), arXiv:1804.07788v1). Table 3, row Johnson V: absolute 4.81, apparent -26.76 (Vega system). Used in src/blackhole/light.h
     (kSunV, kSunAbsV); tests/test_blackhole.cpp testTrueLight reads them from willmer2018_arxiv1804.07788.extract.txt (this folder) and checks that the two
     differ by the distance modulus of 1 AU.
+
+Johnson B and V passbands (0.97.0, part 2 of the outside review of 28 Nov 2026, second).
+bessell_1990_pasp102_1181.pdf (sources repo)
+    Saved as received on 28 Nov 2026 from https://articles.adsabs.harvard.edu/pdf/1990PASP..102.1181B (M. S. Bessell, "UBVRI passbands", PASP 102, 1181 (1990)).
+    Table 2, columns B and V, typed into bessell1990_BV.txt here (checked against the SVO's copy, ../stars/README.txt), with the SVO's Vega zero points.
+    Used by tests/test_orbit.cpp testStarTemperature097 and tools/bv_blackbody.py.

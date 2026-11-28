@@ -1,0 +1,41 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/vib/dissociation/holsch_2019_arxiv1902.09471.txt.gz
+# Reference: N. Hölsch, M. Beyer, E. J. Salumbides, K. S. E. Eikema, W. Ubachs, C. Jungen, F. Merkt, "Benchmarking theory with an improved measurement of the ionization and dissociation energies of H2", arXiv:1902.09471v1 (2019) (Phys. Rev. Lett. 122, 103002 (2019) as the job names it; the arXiv record gives no journal reference). The PDF: sha256 f4b0f3903ed218fa084958acaf036ef4c2939c863ed1945a3bc157fb65a3fed6; the original here is its pdftotext -layout text, gzip -9
+# URL: https://arxiv.org/pdf/1902.09471v1
+# Date read: 2026-11-28
+# sha256 of the original: 74354b7eaa1a7bdd6816486fc6bb82dde359256427d16db5b993e14dcc937799
+# Place in the original: the abstract (p. 1); Table II and its note a (p. 5): D0 of ortho-H2 (N = 1) measured, and the dissociation energy of para-H2 (N = 0) of Altmann et al. 2018 as corrected there
+# Used by: native/tests/test_rotation.cpp testMorseMeasured (H2's D0 read from note a); code comments: src/molecule/morse.cpp
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin abstract
+                                                                  ergy D0N =1 of ortho-H2 that has, for the first time, reached a level of uncertainty that is three
+                                                                  times smaller than the contribution of about 1 MHz resulting from the finite size of the proton.
+                                                                  The new result of 35 999.582 834(11) cm−1 is in remarkable agreement with the theoretical result
+                                                                  of 35 999.582 820(26) cm−1 obtained in calculations including high-order relativistic and quantum
+#--- end
+#--- begin Table II and note a
+Table II: Overview of energy intervals used in the determination of the ionization and dissociation energies of H2 . See Fig. 1b
+for the relation between the different intervals.
+                            Energy level interval                            Value (cm−1 )           Uncertainty Reference
+    (1)             EF(v = 0, N = 1) – X(v = 0, N = 1)                       99 109.731 204 9(24)      (73 kHz)      [36]a
+                      +
+    (2)       54p11 (v = 0, S = 0, center) – EF(v = 0, N = 1)                25 209.997 785(10)       (300 kHz)
+    (3) X+ (v + = 0, N + = 1, center) – 54p11 (v + = 0, S = 0, center)           37.509 013(5)        (150 kHz)       [35]
+    (4)                  EIortho (H2 ) = (1)+(2)+(3)                        124 357.238 003(11)       (340 kHz)
+                                      +
+    (5)                           D0N =0 (H+ 2 )                             21 379.350 249 6(6)       (18 kHz)       [32]
+    (6)     X+ (v + = 0, N + = 1, center) – X+ (v + = 0, N + = 0)                58.233 675 097 4(8) (25 Hz)          [33]
+                              N + =1    +
+    (7)                    D0        (H2 ) = (5)-(6)                         21 321.116 574 5(6)       (18 kHz)
+    (8)                               EI (H)                                109 678.771 743 07(10)      (3 kHz)       [31]
+    (9)                   D0N =1 (H2 ) = (4)+(7)-(8)                         35 999.582 834(11)       (340 kHz)
+ a Note that the first two columns of Table II of reference [36] un-
+
+fortunately contain errors. The listed intervals in the first column
+add up to the ionization energy of ortho-H2 instead of the dissocia-
+tion energy of para-H2 , and the values given in the second column
+of the same table for the binding energy of the 54p11 Rydberg
+state and the dissociation energy of para-H2 must be corrected to
+37.509013(10) cm−1 and 36 118.069 62(37) cm−1 , respectively.
+#--- end

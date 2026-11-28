@@ -8,7 +8,7 @@ Star colours and brightness (0.50, Orbit Lab; review items 4 and 5).
 
 ballesteros_2012_arxiv1201.1809.pdf
     Saved as received on 11 Nov 2026 from https://arxiv.org/pdf/1201.1809 (F. J. Ballesteros, "New insights into black bodies", EPL 97, 34008 (2012),
-    arXiv:1201.1809v2). Eq. (14): T = 4600 (1 / (0.92 (B-V) + 1.7) + 1 / (0.92 (B-V) + 0.62)) K, the black-body temperature of a B-V colour.
+    arXiv:1201.1809v2). Eq. (14): T = 4600 (1 / (0.92 (B-V) + 1.7) + 1 / (0.92 (B-V) + 0.62)) K, a temperature for a B-V colour (not the temperature of a black body with that colour: see the 0.97.0 note below).
 colour-science_v0.4.7_cmfs.py
     Saved as received on 11 Nov 2026 from https://raw.githubusercontent.com/colour-science/colour/v0.4.7/colour/colorimetry/datasets/cmfs.py.
     Used: its "CIE 1931 2 Degree Standard Observer" table (DATA_CMFS_STANDARD_OBSERVER), 360-830 nm in 1 nm steps, from CVRL. Spot values
@@ -41,3 +41,16 @@ hygdata_v41.csv (0.73.0)
     on 22 Nov 2026 and now kept in the sources repo (data/stars/hygdata_v41.csv). Used by tools/acen_sky.py: the column "dist" (parsecs) of the row matching each
     of the sky's 2,874 stars (src/orbit/sky_data.inc; matched by place within 0.03 degrees and V cut to 0.1: all 2,874 matched, 55 without a parallax), written to
     src/orbit/sky_dist.inc, so the Orbit Lab can draw the sky seen from Alpha Centauri (src/orbit/alphacen.cpp acenSky).
+
+What Ballesteros's eq. (14) temperature is (0.97.0; the outside review of 28 Nov 2026, second, part 2). The paper states no range for eq. (14) and says it was
+tuned ("After this fine tuning"). It is NOT the temperature of a black body with that B-V: tools/bv_blackbody.py (Bessell 1990's B and V passbands with the
+SVO's Vega zero points, Planck's law) gives 36,300 K for B-V = -0.301, eq. (14) 16,640 K. Saved in the sources repo, data/stars/:
+EEM_dwarf_UBVIJHK_colors_Teff_2026-11-28.txt
+    E. Mamajek, "A Modern Mean Dwarf Stellar Color and Effective Temperature Sequence", version 2022.04.16, from
+    https://www.pas.rochester.edu/~emamajek/EEM_dwarf_UBVIJHK_colors_Teff.txt (the file asks to cite Pecaut & Mamajek 2013). B0V: Teff 31400 K, B-V -0.301.
+    eem_dwarf_2022.extract.txt here has the rows O3V to M0V (tests/test_orbit.cpp testStarTemperature097).
+pecaut_mamajek_2013_arxiv1307.2657.pdf
+    arXiv:1307.2657v1 (ApJS 208, 9). Its Table 4 has B0V at 31500 K and B-V -0.307; the 2022 table above is used.
+svo_generic_bessell_{B,V}_2026-11-28.dat and svo_generic_bessell_{B,V}_page_2026-11-28.html
+    The SVO Filter Profile Service's Generic/Bessell B and V (the same numbers as Bessell 1990 Table 2) and their pages with the Vega zero points
+    (B 6.13268e-9, V 3.62708e-9 erg/cm2/s/A). Typed into ../photometry/bessell1990_BV.txt.

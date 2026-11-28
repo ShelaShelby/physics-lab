@@ -1,0 +1,31 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/vib/dissociation/atct_v1.228_2026-11-28.html
+# Reference: B. Ruscic and D. H. Bross, Active Thermochemical Tables (ATcT) values based on ver. 1.228 of the Thermochemical Network, Argonne National Laboratory, Lemont, Illinois, USA (2026) (the page dates the version 07/26/2026); ATcT after B. Ruscic et al., J. Phys. Chem. A 108, 9979 (2004) and J. Phys. Conf. Ser. 16, 561 (2005). The page as received. It states no terms of use (a DOE Office of Science PuRe data resource), so it is kept in the sources repo.
+# URL: https://atct.anl.gov/Thermochemical%20Data/version%201.228/index.php
+# Date read: 2026-11-28
+# sha256 of the original: 0e41bca4d80cdfa1ef8e8dfbfc427172f1d194b0e507d164d26af6314c46dbbf
+# Place in the original: the heading (version), the rows of H (g), O (g), N (g), Cl (g), HCl (g) (enthalpies of formation at 0 K and 298.15 K, uncertainty, units), the note on uncertainties (95 % confidence)
+# Used by: native/tests/test_rotation.cpp testMorseMeasured (D0 of N2, O2, HCl at 0 K from these rows: 2 dfH(N), 2 dfH(O), dfH(H) + dfH(Cl) - dfH(HCl)); code comments: src/molecule/morse.cpp
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin heading
+<h1><span class='nightsky'>ATcT [<a href='#ref_1'>1</a>, <a href='#ref_2'>2</a>] enthalpies of formation based on version 1.228 of the Thermochemical Network [<a href='#ref_3'>3</a>]</span></h1>
+#--- end
+#--- begin H (g)
+<tr id="s1n1c0 i20 CAS12385-13-6"><td class="bkgName"><span class="Name"> <a href="species/?species_number=20">Hydrogen atom</a></span></td><td class="bkgFormula> <span class="Formula"> <button onclick="copyname('Hydrogen atom');" type="button">H  (g) </button> </span></td><td class="bkgImage"><span class="Name"><img class="lazy" data-original="images/20.png" alt="[H]" style="margin:5px" /></span></td><td class="bkgDHf0"><span class="DHf0">216.034</span></td><td class="bkgDHf298"><span class="DHf298">217.998</span></td><td class="bkgUncert"><span class="Uncert">&plusmn; 0.000</span></td><td class="bkgUnits"><span class="Units">kJ/mol</span></td><td class="bkgMass"><span class="Mass">1.007940 &plusmn;<br />0.000070</span></td><td class="bkgATcTID"><span class="ATcTID">12385-13-6*0</span></td></tr>
+#--- end
+#--- begin O (g)
+<tr id="s8n1c0 i22 CAS17778-80-2"><td class="bkgName"><span class="Name"> <a href="species/?species_number=22">Oxygen atom</a></span></td><td class="bkgFormula> <span class="Formula"> <button onclick="copyname('Oxygen atom');" type="button">O  (g) </button> </span></td><td class="bkgImage"><span class="Name"><img class="lazy" data-original="images/22.png" alt="[O]" style="margin:5px" /></span></td><td class="bkgDHf0"><span class="DHf0">246.843</span></td><td class="bkgDHf298"><span class="DHf298">249.229</span></td><td class="bkgUncert"><span class="Uncert">&plusmn; 0.0021</span></td><td class="bkgUnits"><span class="Units">kJ/mol</span></td><td class="bkgMass"><span class="Mass">15.99940 &plusmn;<br />0.00030</span></td><td class="bkgATcTID"><span class="ATcTID">17778-80-2*0</span></td></tr>
+#--- end
+#--- begin N (g)
+<tr id="s7n1c0 i25 CAS17778-88-0"><td class="bkgName"><span class="Name"> <a href="species/?species_number=25">Nitrogen atom</a></span></td><td class="bkgFormula> <span class="Formula"> <button onclick="copyname('Nitrogen atom');" type="button">N  (g) </button> </span></td><td class="bkgImage"><span class="Name"><img class="lazy" data-original="images/25.png" alt="[N]" style="margin:5px" /></span></td><td class="bkgDHf0"><span class="DHf0">470.655</span></td><td class="bkgDHf298"><span class="DHf298">472.518</span></td><td class="bkgUncert"><span class="Uncert">&plusmn; 0.021</span></td><td class="bkgUnits"><span class="Units">kJ/mol</span></td><td class="bkgMass"><span class="Mass">14.006740 &plusmn;<br />0.000070</span></td><td class="bkgATcTID"><span class="ATcTID">17778-88-0*0</span></td></tr>
+#--- end
+#--- begin Cl (g)
+<tr id="s17n1c0 i30 CAS22537-15-1"><td class="bkgName"><span class="Name"> <a href="species/?species_number=30">Chlorine atom</a></span></td><td class="bkgFormula> <span class="Formula"> <button onclick="copyname('Chlorine atom');" type="button">Cl  (g) </button> </span></td><td class="bkgImage"><span class="Name"><img class="lazy" data-original="images/30.png" alt="[Cl]" style="margin:5px" /></span></td><td class="bkgDHf0"><span class="DHf0">119.621</span></td><td class="bkgDHf298"><span class="DHf298">121.302</span></td><td class="bkgUncert"><span class="Uncert">&plusmn; 0.0011</span></td><td class="bkgUnits"><span class="Units">kJ/mol</span></td><td class="bkgMass"><span class="Mass">35.45270 &plusmn;<br />0.00090</span></td><td class="bkgATcTID"><span class="ATcTID">22537-15-1*0</span></td></tr>
+#--- end
+#--- begin HCl (g)
+<tr id="s1_17n1_1c0 i44 CAS7647-01-0"><td class="bkgName"><span class="Name"> <a href="species/?species_number=44">Hydrogen chloride</a></span></td><td class="bkgFormula> <span class="Formula"> <button onclick="copyname('Hydrogen chloride');" type="button">HCl  (g) </button> </span></td><td class="bkgImage"><span class="Name"><img class="lazy" data-original="images/44.png" alt="Cl" style="margin:5px" /></span></td><td class="bkgDHf0"><span class="DHf0">-91.988</span></td><td class="bkgDHf298"><span class="DHf298">-92.172</span></td><td class="bkgUncert"><span class="Uncert">&plusmn; 0.0062</span></td><td class="bkgUnits"><span class="Units">kJ/mol</span></td><td class="bkgMass"><span class="Mass">36.46064 &plusmn;<br />0.00090</span></td><td class="bkgATcTID"><span class="ATcTID">7647-01-0*0</span></td></tr>
+#--- end
+#--- begin uncertainties
+    The listed uncertainties correspond to estimated 95% confidence limits, as customary in thermochemistry (see, for example, Ruscic [<a href='#ref_6'>6</a>] and Ruscic and Bross[<a href='#ref_7'>7</a>]). <br />
+#--- end

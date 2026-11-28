@@ -1,0 +1,30 @@
+# Typed from H. W. Woolley, R. B. Scott, F. G. Brickwedde, J. Res. Natl. Bur. Stand. 41, 379 (1948), RP1932, read on the page images of the saved scan (sources repo:
+# data/molecules/rotation/woolley_scott_brickwedde_1948_jres41_379.pdf, sha256 79b5211b...; extract: wsb1948.extract.txt). Read 2026-11-28.
+# Table 12, "Ortho-para composition at equilibrium" (p. 395): T (K) and the percentage in the para form for H2 (the D2 column is not used).
+# Their eq. 2.17 (p. 383): F(v,J) = G_v - G_0 + B_v J(J+1) + D_v J^2(J+1)^2 + F_v J^3(J+1)^3 + H_v J^4(J+1)^4 + (H_v J^4(J+1)^4)^2 / (F_v J^3(J+1)^3 - H_v J^4(J+1)^4)
+# Their eq. 2.18 for H2 (x = v + 1/2): B_v = 60.8483 - 3.06635 x + 0.068361 x^2 - 0.0065 x^3; D_v = -0.046435 + 0.0014904 x - 0.000063648 x^2;
+#   F_v = 4.93203e-5 + 0.02800e-5 x; H_v = -6.7217e-8 (cm^-1)
+# p. 455: liquid H2's self conversion -d[o-H2]/dt = k1 [o-H2]^2 - k2 [o-H2][p-H2], k1 = 0.0114 per hour (mole fractions); k2/k1 = [o-H2]/[p-H2] at equilibrium.
+eq218 60.8483 -3.06635 0.068361 -0.0065 -0.046435 0.0014904 -0.000063648 4.93203e-5 0.02800e-5 -6.7217e-8
+k1 0.0114
+10 99.9999
+20 99.821
+20.39 99.789
+30 97.021
+33.10 95.034
+40 88.727
+50 77.054
+60 65.569
+70 55.991
+80 48.537
+90 42.882
+100 38.620
+120 32.959
+150 28.603
+200 25.974
+250 25.264
+298.16 25.075
+300 25.072
+350 25.019
+400 25.005
+500 25.000

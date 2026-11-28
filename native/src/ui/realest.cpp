@@ -41,6 +41,7 @@ void applyMolecule(AppState& app) {
     L.setStyle(m.set.style);
     L.set.realDots = m.set.realDots;
     L.set.realIso = m.set.realIso;
+    L.set.spinMix = m.set.spinMix;             // 0.97.0
     L.vibSize = m.vibSize;
     L.vibAnharm = m.vibAnharm;                 // 0.53.1 (shown in Ball-and-stick and Space-filling)
 }

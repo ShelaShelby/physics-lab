@@ -780,6 +780,74 @@ static void testStarColours050() {
     }
 }
 
+// 0.97.0 (the outside review of 28 Nov 2026, second, part 2): what eq. (14)'s temperature is, against independent references:
+//  - E. Mamajek's dwarf sequence, version 2022.04.16 (Pecaut & Mamajek 2013): each dwarf's B-V and Teff (data/stars/eem_dwarf_2022.extract.txt, read here);
+//  - a black body's own Johnson B-V: Planck's law through Bessell 1990's B and V passbands (Table 2) with the SVO's Vega zero points (data/photometry/bessell1990_BV.txt),
+//    the energy-counter mean, as tools/bv_blackbody.py.
+// Ballesteros 2012 states no range for eq. (14). The checks: for every G and K dwarf eq. (14) is closer to Teff than the temperature of a black body with the
+// same B-V (for F6V-F9V the two are about as close: printed); for B and O dwarfs eq. (14) is below both. The gaps are printed (REPORT), not used as pass limits.
+static double bbBV(double T, const std::vector<std::array<double, 2>>& B, const std::vector<std::array<double, 2>>& V, double zpB, double zpV) {
+    const double h = 6.62607015e-34, c = 299792458.0, k = 1.380649e-23;
+    const auto mean = [&](const std::vector<std::array<double, 2>>& S) {
+        double num = 0, den = 0;
+        for (std::size_t i = 0; i + 1 < S.size(); i++)
+            for (int j = 0; j < 20; j++) {
+                const double l = (S[i][0] + (S[i + 1][0] - S[i][0]) * (j + 0.5) / 20) * 1e-9, s = S[i][1] + (S[i + 1][1] - S[i][1]) * (j + 0.5) / 20;
+                num += 2 * h * c * c / std::pow(l, 5) / std::expm1(h * c / (l * k * T)) * s; den += s;
+            }
+        return num / den;
+    };
+    return -2.5 * std::log10(mean(B) / mean(V)) + 2.5 * std::log10(zpB / zpV);
+}
+static void testStarTemperature097() {
+    std::vector<std::array<double, 2>> B, V;
+    double zpB = 0, zpV = 0;
+    {
+        std::ifstream in(PL_DATA_DIR "/photometry/bessell1990_BV.txt");
+        for (std::string l; std::getline(in, l);) {
+            if (l.empty() || l[0] == '#') continue;
+            std::istringstream w(l); std::string a; w >> a;
+            if (a == "zpB") w >> zpB; else if (a == "zpV") w >> zpV;
+            else { double nm = 0, r = 0; w >> nm >> r; (a == "B" ? B : V).push_back({nm, r}); }
+        }
+    }
+    check(B.size() == 21 && V.size() == 24 && zpB == 6.13268e-9 && zpV == 3.62708e-9, "Bessell 1990 B and V and the SVO zero points read");
+    const auto tOf = [&](double bv) { double lo = 1500, hi = 1e7; for (int i = 0; i < 200; i++) { const double m = std::sqrt(lo * hi); (bbBV(m, B, V, zpB, zpV) > bv ? lo : hi) = m; } return std::sqrt(lo * hi); };
+    struct Row { std::string spt; double teff, bv; };
+    std::vector<Row> rows;
+    {
+        std::ifstream in(PL_DATA_DIR "/stars/eem_dwarf_2022.extract.txt");
+        for (std::string l; std::getline(in, l);) {
+            if (l.empty() || l[0] == '#') continue;
+            std::istringstream w(l); std::string spt, t[8]; w >> spt; for (auto& x : t) w >> x;
+            if (spt.size() < 2 || std::string("OBAFGKM").find(spt[0]) == std::string::npos) continue;
+            rows.push_back({spt, std::atof(t[0].c_str()), std::atof(t[7].c_str())});
+        }
+    }
+    check(rows.size() == 68 && rows.front().spt == "O3V" && rows.back().spt == "M0V", "Mamajek 2022: rows O3V to M0V read (" + std::to_string(rows.size()) + ")");
+    bool closer = true; double worst[3] = {0, 0, 0};
+    for (const Row& r : rows) {
+        const double t14 = bvTemperatureK(r.bv);
+        const int cls = std::string("FGK").find(r.spt[0]);
+        if (cls >= 0 && cls < 3) {
+            const double tb = tOf(r.bv);
+            if (cls > 0) closer = closer && std::fabs(t14 - r.teff) < std::fabs(tb - r.teff);
+            else if (std::fabs(t14 - r.teff) >= std::fabs(tb - r.teff)) std::printf("  %s: eq. (14) %.0f K, black body %.0f K, Teff %.0f K\n", r.spt.c_str(), t14, tb, r.teff);
+            worst[cls] = std::max(worst[cls], std::fabs(t14 / r.teff - 1));
+        }
+    }
+    std::printf("  eq. (14) against Teff, worst: F %.1f %%, G %.1f %%, K %.1f %%\n", 100 * worst[0], 100 * worst[1], 100 * worst[2]);
+    check(closer, "G and K dwarfs: eq. (14) is closer to Teff than a black body with the same B-V");
+    for (const Row& r : rows) {
+        if (r.spt != "B0V" && r.spt != "O5V" && r.spt != "B5V") continue;
+        const double t14 = bvTemperatureK(r.bv), tb = tOf(r.bv);
+        std::printf("  %s: B-V %+.3f, Teff %.0f K, eq. (14) %.0f K, a black body of that B-V %.0f K; the black body at eq. (14)'s T has B-V %+.3f\n", r.spt.c_str(), r.bv, r.teff, t14, tb, bbBV(t14, B, V, zpB, zpV));
+        check(t14 < r.teff && t14 < tb, r.spt + ": eq. (14) is below both Teff and the black body of the same B-V");
+        if (r.spt == "B0V") check(r.teff == 31400 && r.bv == -0.301 && std::lround(t14 / 100) == 166 && std::lround(tb / 1000) == 36,
+                                  "B0V: the app's text numbers (31,400 K, 16,600 K, about 36,000 K) are these");
+    }
+}
+
 // 0.50 (review item 5): one brightness rule for every star. Light ∝ 10^(-0.4 m) (Pogson); drawn integrated light (opacity x area, in pixels) ∝ that light to the power 0.5.
 // Two stars 5 magnitudes apart: light ratio 100, so the drawn ratio is 100^0.5 = 10; and every star's drawn light is exactly opacity x pi r^2 of its disc.
 static void testStarBrightness050() {
@@ -1669,6 +1737,7 @@ int main() {
     testStarBrightness050();
     testStarsExposure086();
     testStarColours050();
+    testStarTemperature097();
     testShading050();
     testVisuals0512();
     testSun0494();

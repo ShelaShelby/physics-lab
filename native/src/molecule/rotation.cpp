@@ -143,6 +143,13 @@ double termG(const Rotor& r, int v) {
 }
 int weight(const Rotor& r, int J) { return J % 2 ? r.gOdd : r.gEven; }
 int lowestJ(const Rotor& r) { return r.gEven == 0 ? 1 : 0; }
+bool hasSpinForms(const Rotor& r) { return r.gEven > 0 && r.gOdd > 0 && r.gEven != r.gOdd; }
+double formShare(const Rotor& r, int parity) {
+    const int g = parity % 2 ? r.gOdd : r.gEven;
+    return r.gEven + r.gOdd > 0 ? static_cast<double>(g) / (r.gEven + r.gOdd) : 0;
+}
+double liquidOrthoHalfHours(double x0) { return x0 > 0 ? (2 / x0 - 1 / x0) / kLiquidH2ConvPerHour : 0; }
+static bool kept(const Rotor& r) { return r.mix == SpinMix::Kept && hasSpinForms(r); }
 
 int risingTop(const Rotor& r, int v) {
     if (r.D[v == 1 ? 1 : 0] <= 0) return 100000;
@@ -151,13 +158,15 @@ int risingTop(const Rotor& r, int v) {
     return J;
 }
 
-// the sum with the energies counted from the lowest allowed level (no underflow when cold); Q_textbook = Q_rel exp(-hc F(j0) / kT)
-Partition partitionRel(const Rotor& r, double T) {
+// the sum with the energies counted from the lowest allowed level (no underflow when cold); Q_textbook = Q_rel exp(-hc F(j0) / kT).
+// parity 0 or 1 (0.97.0): only the even or the odd levels, counted from the lowest of them (one spin form's own sum); -1: all
+static Partition partitionRel(const Rotor& r, double T, int parity = -1) {
     Partition p;
-    const int j0 = lowestJ(r);
+    const int j0 = parity < 0 ? lowestJ(r) : parity;
     const int top = risingTop(r);
     const double f0 = term(r, 0, j0);
     for (int J = j0; J <= top; J++) {
+        if (parity >= 0 && J % 2 != parity) continue;
         const double t = weight(r, J) * (2 * J + 1) * std::exp(-kHcOverK * (term(r, 0, J) - f0) / T);
         p.Q += t;
         p.top = J;
@@ -175,6 +184,13 @@ Partition partition(const Rotor& r, double T) {
 
 double share(const Rotor& r, int J, double T) {
     if (J < 0 || weight(r, J) == 0) return 0;
+    if (kept(r)) {   // 0.97.0: the form keeps its high-temperature share, spread over its own levels
+        const int par = J % 2;
+        if (T <= 0) return J == par ? formShare(r, par) : 0;
+        const Partition p = partitionRel(r, T, par);
+        if (J > p.top) return 0;
+        return formShare(r, par) * weight(r, J) * (2 * J + 1) * std::exp(-kHcOverK * (term(r, 0, J) - term(r, 0, par)) / T) / p.Q;
+    }
     const int j0 = lowestJ(r);
     if (T <= 0) return J == j0 ? 1 : 0;
     const Partition p = partitionRel(r, T);
@@ -184,7 +200,7 @@ double share(const Rotor& r, int J, double T) {
 
 int mostPopulated(const Rotor& r, double T) {
     const int j0 = lowestJ(r);
-    if (T <= 0) return j0;
+    if (T <= 0) return kept(r) ? (formShare(r, 1) > formShare(r, 0) ? 1 : 0) : j0;
     const int top = partition(r, T).top;
     int best = j0; double bs = -1;
     for (int J = j0; J <= top; J++) { const double s = share(r, J, T); if (s > bs) { bs = s; best = J; } }
@@ -205,12 +221,13 @@ bool hasSpectrum(const Rotor& r, Spectrum s) {
 extern const double kC2 = kHcOverK;
 double absorbanceFactor(double nuCm, double T) { return T > 0 ? nuCm * (1 - std::exp(-kC2 * nuCm / T)) : nuCm; }
 
-std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel, Measure meas) {
+std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel, Measure meas, SpinMix mix) {
     std::vector<Line> out;
     std::vector<int> isos{iso};
     if (id == "HCl" && iso == kNatural) isos = {kH35Cl, kH37Cl};
     for (const int is : isos) {
-        const Rotor r = rotor(id, is);
+        Rotor r = rotor(id, is);
+        r.mix = mix;
         if (!hasSpectrum(r, s)) return {};
         const double ab = (id == "HCl" && iso == kNatural) ? r.abundance : 1;
         const int top = std::max(1, partition(r, T > 0 ? T : 1).top);

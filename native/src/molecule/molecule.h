@@ -133,6 +133,7 @@ struct Settings {
     int realIso = 2;             // index into kRealIso
     bool realPot = true;         // colour the surface by the potential (else plain)
     int realShow = 0;            // 0 the cloud and the surface, 1 the cloud only, 2 the surface only
+    int spinMix = 0;             // 0.97.0: ortho and para (rot::SpinMix): 0 kept as when warm (no catalyst), 1 in balance; written as " opara=balance" only when 1
 };
 constexpr int kSettingsVersion = 1;
 std::string saveSettings(const Settings& s);

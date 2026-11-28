@@ -64,6 +64,8 @@ const std::vector<Row>& table() {
         {"molecule", {"iso", "0.0016", "it matched measured molecular surfaces best in Alibakhshi and Schäfer’s 2024 study of 104 molecules, named under these buttons (1.6 % error)."}},
         {"molecule", {"vibsize", "Real size", "the swing as big as it really is in the lowest vibrational level."}},
         {"molecule", {"anharm", "on", "a real bond is not a perfect spring: its rungs close up as it stretches, and at the top it breaks."}},   // 0.53.1
+        // 0.97.0 (outside review of 28 Nov 2026, second, part 1): gas cooled without a catalyst keeps its warm mix of the two spin forms for days (molecule/rotation.h)
+        {"molecule", {"opara", "Kept as when warm", "without a catalyst the two spin forms turn into each other only slowly (in liquid hydrogen the extra ortho takes about 5 days to halve), so a gas cooled from warm keeps its warm mix. In balance needs a catalyst."}},
         // ---- Black Hole Lab (0.55.0) ----
         // 0.77.0 (outside review): was "calculated exactly for a hole that does not spin". Since 0.55.9 a spinning hole's rays are closed forms too (blackhole/spin_sky.h kSpinFineFill, kerr_closed.h)
         {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera held there would see (beside a spinning hole, one carried round with the turning space). Every light path is "
@@ -165,6 +167,7 @@ std::string get(const MoleculeChoices& m, const std::string& k) {
     if (k == "iso") return molecule::kRealIsoText[m.set.realIso < 0 || m.set.realIso > 3 ? 2 : m.set.realIso];
     if (k == "vibsize") return m.vibSize == 0 ? "Real size" : "3 times bigger";
     if (k == "anharm") return onOff(m.vibAnharm);
+    if (k == "opara") return m.set.spinMix == 1 ? "In balance" : "Kept as when warm";
     return "";
 }
 bool set(MoleculeChoices& m, const std::string& k, const std::string& x) {
@@ -179,6 +182,7 @@ bool set(MoleculeChoices& m, const std::string& k, const std::string& x) {
     if (k == "iso") { for (int i = 0; i < 4; i++) if (x == molecule::kRealIsoText[i]) { m.set.realIso = i; return true; } return false; }
     if (k == "vibsize") { if (x == "Real size") m.vibSize = 0; else if (x == "3 times bigger") m.vibSize = 1; else return false; return true; }
     if (k == "anharm") return readOnOff(x, m.vibAnharm);
+    if (k == "opara") { if (x == "Kept as when warm") m.set.spinMix = 0; else if (x == "In balance") m.set.spinMix = 1; else return false; return true; }
     return false;
 }
 

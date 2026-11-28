@@ -378,13 +378,25 @@ double fieldFreeStrength(int nu, int nl) {
     return s;
 }
 
+double diracFineSplitAu(int n) {
+    if (n < 2) return 0;
+    const auto e = [](int nn, double j) { const double k = j + 0.5, d = nn - k + std::sqrt(k * k - kAlpha * kAlpha); return (1 / std::sqrt(1 + kAlpha * kAlpha / (d * d)) - 1) / (kAlpha * kAlpha); };
+    return e(n, n - 0.5) - e(n, 0.5);
+}
+double fineCrossFieldAu(int n) { return n >= 2 ? diracFineSplitAu(n) / (1.5 * n * (n - 1)) : 0; }
+
 std::string limitsText() {
+    char fs[400];
+    const double u = fieldUnitVm() / 1e5;   // kV/cm per atomic unit
+    std::snprintf(fs, sizeof fs, " With fine structure, in fields where the Stark shift is smaller than the fine-structure splitting, the levels shift with the square "
+                  "of the field. The lab leaves this out. The outermost levels of n = 2 reach the splitting at %.2g kV/cm, n = 3 at %.2g, n = 4 at %.2g and n = 5 at %.2g "
+                  "(Dirac): below that field the picture of that n is not right.", fineCrossFieldAu(2) * u, fineCrossFieldAu(3) * u, fineCrossFieldAu(4) * u, fineCrossFieldAu(5) * u);
     return "Hydrogen only, without relativity: no fine structure, no spin, no Lamb shift. The levels are worked out to second order in the field: the linear "
            "shift inside each n (exact there) and the second-order shift from the mixing between different n. Below the saddle-point field F_c = W²/4 of the "
            "highest n shown (W: that level's binding energy) the electron stays bound; above it, it can leave over the saddle of the potential. The lab draws "
            "no ionisation and no level widths, so the field stops at F_c. The nucleus is a point of hydrogen's mass (the reduced mass is kept in the energies). "
            "A parabolic state's cloud is the state the field picks at first order (its shape does not change with the field's size); its lengths include the reduced "
-           "mass, as the lab's other hydrogen clouds do (0.05 % longer than for an infinitely heavy nucleus).";
+           "mass, as the lab's other hydrogen clouds do (0.05 % longer than for an infinitely heavy nucleus)." + std::string(fs);
 }
 
 }  // namespace atom::stark

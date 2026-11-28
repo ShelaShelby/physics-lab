@@ -92,11 +92,16 @@ std::vector<MolLearnSection> moleculeLookSections(const molecule::Molecule& m, m
                  "<b>The ladder</b> in Controls › Rotation › Rotation card shows them to scale, and beside each one the <b>share</b> of the molecules in it at the lab's temperature: "
                  "the weight g, times 2J+1 (the ways the turning axis can point), times e^(−energy/kT). Warmer, the higher levels fill. ") +
                p("<b>The weights</b> come from the nuclei's spins. In H₂ the two protons' spins can point together (ortho, odd J, 3 ways) or opposite (para, even J, 1 way), "
-                 "so hot hydrogen is 3 parts ortho to 1 para. In O₂ and CO₂ the oxygen nuclei have no spin, and the Pauli principle leaves only every other level: O₂ has no even N, CO₂ no odd J.") +
+                 "so hot hydrogen is 3 parts ortho to 1 para. In O₂ and CO₂ the oxygen nuclei have spin 0, so they are bosons: the whole state must stay the same when the two are swapped, "
+                 "and that removes every other level. O₂ has no even N, CO₂ no odd J (Herzberg 1950, ch. III).") +
+               p("<b>Ortho and para</b> (H₂, N₂, C₂H₂) hardly turn into each other without a catalyst. In liquid hydrogen the extra ortho takes about 5 days to halve "
+                 "(Woolley, Scott & Brickwedde 1948). So hydrogen cooled from room temperature keeps its 3 : 1 mix: that is <b>Kept as when warm</b>, the choice in Controls › Rotation. "
+                 "<b>In balance</b> is the gas after a catalyst has worked: cold hydrogen is then almost all para (J = 0).") +
                p("<b>The two branches.</b> Light can change J by exactly one. A molecule with an electric dipole (HCl, HCN) absorbs far-infrared light as it climbs J → J+1: lines 2B apart. "
                  "When HCl also starts to vibrate (v 0 → 1, near 2886 cm⁻¹), J goes up (the <b>R branch</b>, to the right) or down (the <b>P branch</b>, to the left), and there is a gap in the middle "
                  "where J would not change. From the lines' spacing the Data panel works out HCl's bond length.") +
-               muted("Limits: the lines are sticks (no widths), their heights are the transitions' own strengths (no Herman–Wallis correction, not the absorbance), there are no hot bands (v 1 → 2), "
+               muted("Limits: one electronic and vibrational ground state; ortho and para are either kept or in balance, with no conversion over time. "
+                     "The lines are sticks (no widths), their heights are the transitions' own strengths or, with the Absorbance choice, HITRAN's line intensity (no Herman–Wallis correction), there are no hot bands (v 1 → 2), "
                      "the constants go as far as Huber & Herzberg's γe and the change of D with v (the terms beyond, given by Rank, Rao et al. 1965, are left out: the far lines are off by up to "
                      "0.09 cm⁻¹ at R(15) against the measured ones), and the isotopes other than H³⁵Cl have no measured constants here: all of theirs, γe and D's change included, are scaled "
                      "from H³⁵Cl by the Born–Oppenheimer mass rules. A quantum rotor in one level has no turning picture: the picture turns at the classical rate of that energy.");

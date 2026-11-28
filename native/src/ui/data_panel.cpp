@@ -126,6 +126,7 @@ LabContext contextOf(const AppState& app) {
     c.molecule = app.molecule.mol().id;
     c.T = app.molecule.liveK;              // 0.53: the rotation tables' temperature and HCl's isotope
     c.rotIso = app.molecule.rotIso;
+    c.spinMix = app.molecule.set.spinMix;  // 0.97.0
     c.fieldT = app.atom.p.bfield;          // 0.54.0: the Zeeman tables of the line shown split
     c.zKind = app.atom.zeemanKind();
     c.zLine = app.atom.zeemanLine();
@@ -134,7 +135,7 @@ LabContext contextOf(const AppState& app) {
 bool sameContext(const LabContext& a, const LabContext& b) {
     if (a.lab != b.lab) return false;
     if (a.lab == 1) return a.Z == b.Z && a.N == b.N && a.fieldT == b.fieldT && a.zKind == b.zKind && a.zLine == b.zLine;
-    if (a.lab == 2) return a.molecule == b.molecule && a.T == b.T && a.rotIso == b.rotIso;
+    if (a.lab == 2) return a.molecule == b.molecule && a.T == b.T && a.rotIso == b.rotIso && a.spinMix == b.spinMix;
     return true;
 }
 bool numericCol(int c) { return c >= 0 && c < static_cast<int>(D.table.cols.size()) && !D.table.cols[std::size_t(c)].isText(); }
