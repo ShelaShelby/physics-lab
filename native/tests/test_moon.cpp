@@ -25,6 +25,10 @@ static const double kTable[kRows][8] =
 #include "reference/moon_table.inc"
 ;
 // Python port of the same series (tools/make_elp_data.py), same terms as orbit/elp_data.inc: { JD, x, y, z (m) }. Checks the C++ port, not the theory.
+// 0.96.0: the Moon from Horizons outside 1800-2100 (1600-1795, 2100 daily after ELP's span, 2105-2300; tools/make_moon_outside_ref.py)
+static const double kMoonOutside[444][5] =
+#include "reference/moon_outside_table.inc"
+;
 static const double kPyCheck[][4] =
 #include "reference/moon_elp_pycheck.inc"
 ;
@@ -250,6 +254,56 @@ static void testSplitSeries() {
     check("all terms: the shortened call with every term is the full function, bit for bit", length(moonGeocentricElp(2451545.0, 100000) - moonGeocentricElp(2451545.0)) == 0);
 }
 
+// 0.96.0 (outside review of 28 Nov 2026, part E): outside 1800 to 1 Jan 2100 the Moon is on a precessing Kepler ellipse fitted to ELP2000-82B over 1800-2100
+// (orbit/moon_elp.h moonGeocentricEllipse; the fit: native/tools/fit_moon_ellipse.py). Checked against ELP every 0.25 day over the fit's span (the worst
+// errors the app quotes must be the measured maxima), against Horizons' 170 rows (within the ellipse's worst plus ELP's), and its sidereal period against
+// Horizons' header (27.321582 d, as testSiderealPeriod).
+static void testEllipse() {
+    double wa = 0, wk = 0;
+    int n = 0;
+    for (double jd = kMoonElpFirstJD; jd <= kMoonElpLastJD; jd += 0.25, n++) {
+        const Vec3 e = moonGeocentricElp(jd), m = moonGeocentricEllipse(jd);
+        wa = std::max(wa, angleBetween(e, m) * 180 / units::kPi);
+        wk = std::max(wk, length(e - m) / 1e3);
+    }
+    std::printf("ellipse against ELP, %d dates 1800-2100 every 0.25 d: worst %.6f deg, %.3f km\n", n, wa, wk);
+    check("ellipse: the worst errors quoted in moon_elp.h (deg and km, used on the Moon's card) are the measured maxima (to 1e-3 relative)",
+          wa <= kMoonEllipseWorstDeg && wa > kMoonEllipseWorstDeg * 0.999 && wk <= kMoonEllipseWorstKm && wk > kMoonEllipseWorstKm * 0.999);
+    double ha = 0, hk = 0;
+    for (int r = 0; r < kRows; r++) {
+        const Vec3 m = moonGeocentricEllipse(kTable[r][1]);
+        ha = std::max(ha, angleBetween(m, moonRow(r)) * 180 / units::kPi);
+        hk = std::max(hk, length(m - moonRow(r)) / 1e3);
+    }
+    std::printf("ellipse against Horizons, 170 rows: worst %.4f deg, %.1f km\n", ha, hk);
+    check("ellipse: within its quoted worst plus ELP's own of JPL Horizons at all 170 rows", ha <= kMoonEllipseWorstDeg + kMoonElpWorstArcsec / 3600 && hk <= kMoonEllipseWorstKm + kMoonElpWorstKm);
+    check("ellipse: far better than a made-up angle (a random one is 90 deg off on average)", ha < 3);
+    // outside 1800-2100, where the app uses it: against Horizons (DE441) 1600-1795, through 2100 after ELP's span, 2105-2300
+    const char* oname[3] = {"1600-1795 every 5 years", "2100 daily after 1 Jan 12:00", "2105-2300 every 5 years"};
+    double oa = 0, ok = 0;
+    for (int g = 0; g < 3; g++) {
+        double ga = 0, gk = 0;
+        for (const auto& row : kMoonOutside) {
+            if (static_cast<int>(row[0]) != g) continue;
+            const Vec3 h{row[2], row[3], row[4]}, m = moonGeocentricEllipse(row[1]);
+            ga = std::max(ga, angleBetween(m, h) * 180 / units::kPi); gk = std::max(gk, length(m - h) / 1e3);
+        }
+        std::printf("ellipse against Horizons %-30s worst %.4f deg, %.1f km\n", oname[g], ga, gk);
+        oa = std::max(oa, ga); ok = std::max(ok, gk);
+    }
+    check("ellipse: the worst errors against Horizons outside 1800-2100 quoted in moon_elp.h (on the Moon's card) are the measured maxima of the 444 rows (to 1e-3 relative)",
+          oa <= kMoonEllipseOutsideDeg && oa > kMoonEllipseOutsideDeg * 0.999 && ok <= kMoonEllipseOutsideKm && ok > kMoonEllipseOutsideKm * 0.999);
+    check("ellipse: the table's first and last rows are 1600-01-01 and 2300-01-01 12:00 TDB, 444 rows", kMoonOutside[0][1] == 2305448.0 && kMoonOutside[443][1] == 2561118.0);
+    const double P = 2 * units::kPi / kMoonEllipse.Ldot;
+    std::printf("ellipse: sidereal period 2 pi / Ldot = %.6f d (Horizons 27.321582 d)\n", P);
+    check("ellipse: its sidereal period is Horizons' 27.321582 d within the guard used for ELP's mean", std::fabs(P - 27.321582) < kGuardPeriodMeanDays);
+    // continuous: no jump between neighbouring minutes anywhere in 1000 years either side (the Kepler solve converges)
+    double jump = 0;
+    for (double jd = kMoonElpFirstJD - 365250; jd < kMoonElpLastJD + 365250; jd += 9.7)
+        jump = std::max(jump, length(moonGeocentricEllipse(jd + 1.0 / 1440) - moonGeocentricEllipse(jd)) / 1e3);
+    check("ellipse: under 70 km between neighbouring minutes 800 to 3100 (the Moon moves about 61 km a minute)", jump < 70);
+}
+
 int main() {
     testData();
     testPortMatchesPython();
@@ -258,6 +312,7 @@ int main() {
     testSiderealPeriod();
     testPhases();
     testSplitSeries();
+    testEllipse();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

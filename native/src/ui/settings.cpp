@@ -33,6 +33,8 @@
 #include "ui/changelog.h"
 #include "ui/journey_dates.h"
 #include "ui/orbit_panel.h"
+#include "ui/realest.h"
+#include "app/realistic.h"
 
 namespace ui {
 
@@ -65,8 +67,8 @@ const char* const kNewUiAtomView = "Cloud 3D";   // the New UI's first-ever Atom
 
 // Atom Lab back to how it starts: every setting at its default and a fresh atom;
 void putBackAtomDefaults(AppState& app) {
-    app.atom.p = atom::AtomParams::appDefaults();
-    app.atom.p.view = kNewUiAtomView;    // (stage 5g: the New UI's starting view)
+    app.atom.p = realistic::freshAtom();   // 0.96.0: the Most realistic list (app/realistic.h); its view is Cloud 3D, the New UI's starting view (stage 5g)
+    app.atom.p.view = kNewUiAtomView;
     app.atom.restart();
     app.atomLearn = 0;
 }
@@ -74,8 +76,8 @@ void putBackAtomDefaults(AppState& app) {
 // Orbit Lab back to how it starts: today's Solar System, the starting view and every setting at its default
 void putBackDefaults(AppState& app) {
     journeyStop(app);
-    app.set = orbit::ViewSettings{};
-    app.set.tspeed = units::kTspeedDefault;               // Defaults puts the Time speed, zoom and switches back itself (ViewSettings{} above; resetToToday keeps the user's)
+    app.set = realistic::freshOrbit();                    // 0.96.0: the Most realistic list (app/realistic.h; was ViewSettings{})
+    app.set.tspeed = units::kTspeedDefault;               // Defaults puts the Time speed, zoom and switches back itself (resetToToday keeps the user's)
     app.view = orbit::OrbitView{};
     app.dateNote.clear();
     app.learnJump.clear();
@@ -100,15 +102,16 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     p.atom = {{"scale", a.scale}, {"zoom", num(a.zoom)}, {"qstyle", a.qstyle}, {"detail", a.detail}, {"style", a.style}, {"Z", std::to_string(a.Z)},
               {"N", std::to_string(a.N)}, {"view", a.view}, {"ostyle", a.ostyle}, {"orb", a.orb}, {"pAx", a.pAx}, {"dAx", a.dAx}, {"fAx", a.fAx},
               {"cutAxis", a.cutAxis}, {"cstyle", a.cstyle}, {"cdens", a.cdens}, {"outline", a.outline}, {"phase", a.phase}, {"super", a.super}, {"orb2", a.orb2}, {"pAx2", a.pAx2}, {"dAx2", a.dAx2}, {"fAx2", a.fAx2}, {"mix", num(a.mix)}, {"cut", num(a.cut)}, {"n", std::to_string(a.n)}, {"speed", std::to_string(a.speed)}};
-    if (a.dirac != "On") p.atom["dirac"] = a.dirac;           // saved only when not the default (0.49.3: On is the default; it was Off)
-    if (a.elec != "All") p.atom["elec"] = a.elec;   // 0.46: All is the default (was One)
-    if (a.mrel != "Relativistic") p.atom["mrel"] = a.mrel;    // 0.41: saved only when not the default             // 0.39: saved only when not the default (older settings files stay byte for byte)
-    if (a.show != "Whole atom") p.atom["show"] = a.show;
-    if (a.rscale != "True scale") p.atom["rscale"] = a.rscale;
-    if (a.hrel != "Auto") p.atom["hrel"] = a.hrel;           // 0.49.3: saved only when not the default
-    if (a.hj != "l + 1/2") p.atom["hj"] = a.hj;
-    if (a.sdots != "True share") p.atom["sdots"] = a.sdots;   // 0.91.0: saved only when not the default
-    if (a.vdots != "Easier to see") p.atom["vdots"] = a.vdots;   // 0.54.1: saved only when not the default   // 0.49.3: True scale is the default (was Shells enlarged)
+    const atom::AtomParams F = realistic::freshAtom();       // 0.96.0: "the default" below is the Most realistic list's value (a file without the key opens with it)
+    if (a.dirac != F.dirac) p.atom["dirac"] = a.dirac;           // saved only when not the default (0.49.3: On is the default; it was Off)
+    if (a.elec != F.elec) p.atom["elec"] = a.elec;   // 0.46: All is the default (was One)
+    if (a.mrel != F.mrel) p.atom["mrel"] = a.mrel;    // 0.41: saved only when not the default             // 0.39: saved only when not the default (older settings files stay byte for byte)
+    if (a.show != F.show) p.atom["show"] = a.show;
+    if (a.rscale != F.rscale) p.atom["rscale"] = a.rscale;
+    if (a.hrel != F.hrel) p.atom["hrel"] = a.hrel;           // 0.49.3: saved only when not the default
+    if (a.hj != F.hj) p.atom["hj"] = a.hj;
+    if (a.sdots != F.sdots) p.atom["sdots"] = a.sdots;   // 0.91.0: saved only when not the default
+    if (a.vdots != F.vdots) p.atom["vdots"] = a.vdots;   // 0.54.1: saved only when not the default   // 0.49.3: True scale is the default (was Shells enlarged)
     p.atomMore = app.atom.moreStored;
     if (app.visited[molecule::kLabIndex] || !p.molecule.empty()) p.molecule = molecule::saveSettings(app.molecule.set);   // (only once the lab was opened: older settings files stay as they were)
     if (app.visited[blackhole::kLabIndex] || !p.blackhole.empty()) blackhole::saveSettings(app.blackhole, p.blackhole);    // 0.55.0 (the same rule)
@@ -147,7 +150,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
         if (p.orbit.count("sky") && p.orbit.at("sky") == kSky[i]) v.sky = orbit::SkyMode(i);
         if (p.orbit.count("cons") && p.orbit.at("cons") == kCons[i]) v.cons = orbit::ConsMode(i);
     }
-    atom::AtomParams a = atom::AtomParams::appDefaults();
+    atom::AtomParams a = realistic::freshAtom();   // 0.96.0: a key the file does not have opens at the Most realistic list's value (was appDefaults())
     for (const char* k : {"scale", "qstyle", "detail", "style", "view", "ostyle", "orb", "pAx", "dAx", "fAx", "cutAxis", "cstyle", "cdens", "outline", "dirac", "phase", "super", "orb2", "pAx2", "dAx2", "fAx2"}) {
         const auto it = p.atom.find(k);
         if (it == p.atom.end()) continue;
@@ -179,8 +182,11 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
     app.atom.p = a;
     app.atom.moreStored = p.atomMore;
     app.atom.restart();
-    app.molecule.set = molecule::loadSettings(p.molecule);
-    app.blackhole = blackhole::loadSettings(p.blackhole);   // 0.55.0
+    const realistic::MoleculeChoices fm = realistic::freshMolecule();   // 0.96.0: the bases are the Most realistic list (a missing key keeps its value)
+    app.molecule.set = molecule::loadSettings(p.molecule, fm.set);
+    app.molecule.vibSize = fm.vibSize;                      // (not saved: every start opens them as the list)
+    app.molecule.vibAnharm = fm.vibAnharm;
+    app.blackhole = blackhole::loadSettings(p.blackhole, realistic::freshBlackHole());   // 0.55.0
     app.lab = app::labIndex(p.lab);
     fmt::setImperial(p.units == "imperial");
 }
@@ -247,7 +253,13 @@ void loadSettings(AppState& app) {
         std::fclose(f);
     }
     app.prefs = app::loadPrefs(text);
+    app.set = realistic::freshOrbit();                      // 0.96.0: the Orbit Lab's keys the file does not have open at the Most realistic list's value
     prefsToLabs(app, app.prefs);
+    // 0.96.0 (the owner, 28 Nov 2026): one time only, every lab's saved choices are set to Most realistic (a first start too); after that the user's are kept
+    if (app.prefs.realest.empty()) {
+        real::applyAll(app);
+        app.prefs.realest = realistic::kSwitchVersion;
+    }
     labsToPrefs(app, app.prefs);
     g_written = app::savePrefs(app.prefs);
 }
@@ -519,7 +531,7 @@ void defaultsPopups(AppState& app) {
                           "centre of our galaxy, gravity bending light, our sky behind. Your units choice stays.", blackhole::kDistDefault, blackhole::kFovDefault);
             ImGui::TextWrapped("%s", t);
             ImGui::Spacing();
-            if (ui::Button("Yes, put them back")) { app.blackhole = blackhole::settingsDefaults(); ImGui::CloseCurrentPopup(); }
+            if (ui::Button("Yes, put them back")) { app.blackhole = realistic::freshBlackHole(); ImGui::CloseCurrentPopup(); }   // 0.96.0: the Most realistic list
             ImGui::SameLine();
             if (ui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();

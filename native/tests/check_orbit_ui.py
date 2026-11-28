@@ -107,6 +107,13 @@ def compare_cpu(tool, work, r, name, args, minpx=5000):
     check(n > minpx and bad <= 0.01 * n, f"{name}: GPU against CPU, {bad} of {n} pixels differ by more than 8 levels (at most 1 %; largest {worst})")
     print(f"planets {name}: {bad} of {n} pixels over 8 levels, largest {worst}")
 
+def flat_settings(work):
+    # 0.96.0: the 2D view, through a settings file (a fresh start opens in 3D, the Most realistic choice). realest= marks the one-time switch as done; each run reads it
+    # (the app writes the file back, with the same view)
+    flat = os.path.join(work, "flat_settings.txt")
+    with open(flat, "w", encoding="utf-8") as fh: fh.write("realest=0.96.0\norbit.view3D=0\n")
+    return flat
+
 def part_planets(binary, work):
     # 0.77.0 (outside review item 1): each map is scaled to its body's measured geometric albedo (render/planet_maps.h mapAlbedo) in kPlanetFS. The GPU's
     # picture of the ball against the CPU twin (render/shading.h albedoScaled, ellipsoid.h; tests/planet_picture.cpp): at most 1 % of the pixels inside
@@ -117,7 +124,10 @@ def part_planets(binary, work):
     check(os.path.exists(tool), "the CPU twin planet_picture is built next to the app")
     if not os.path.exists(tool):
         return
-    balls(binary, work, tool, [(sel, zoom, {}) for sel, zoom in (("Jupiter", "3.4"), ("Mars", "4.5"), ("moon:Earth", "6"), ("moon:Jupiter:1", "7"), ("Pluto", "6"), ("Earth", "4.5"))])
+    # (0.96.0, corrected on purpose: a fresh start opens in 3D now, the Most realistic choice. These balls keep the 2D view they were chosen in: in 3D at zoom 6 the Moon
+    # fills the window and the Controls panel and its card stand over 3 % of it. REPORT 0.96.0)
+    flat = flat_settings(work)
+    balls(binary, work, tool, [(sel, zoom, {"PL_SETTINGS": flat}) for sel, zoom in (("Jupiter", "3.4"), ("Mars", "4.5"), ("moon:Earth", "6"), ("moon:Jupiter:1", "7"), ("Pluto", "6"), ("Earth", "4.5"))])
 
 def part_review085(binary, work):
     # 0.85.0 (outside review R1-R3, PLAN_REVIEW.md): the GPU against the CPU twin (tests/planet_picture.cpp), at most 1 % of the pixels over 8 levels:
@@ -128,8 +138,12 @@ def part_review085(binary, work):
     check(os.path.exists(tool), "the CPU twin planet_picture is built next to the app")
     if not os.path.exists(tool):
         return
+    flat = flat_settings(work)
     balls(binary, work, tool, [("Earth", "4.5", {"PL_TRUELIGHT": "1", "tag": "true_Earth"}), ("Jupiter", "3.4", {"PL_TRUELIGHT": "1", "tag": "true_Jupiter"}),
                                ("Neptune", "3.9", {"PL_TRUELIGHT": "1", "tag": "true_Neptune"}),
+                               # 0.96.0 (part C): Jupiter's and Saturn's own laws (render/giant_photometry.h): Saturn in 3D (the rings in front of the ball are left out by the
+                               # twin), Jupiter in 2D (the Sun in the picture's plane: phase near 90 deg, where Mayorga's factor is furthest from 1)
+                               ("Saturn", "3.4", {"PL_TRUELIGHT": "1", "tag": "true_Saturn"}), ("Jupiter", "3.4", {"PL_SETTINGS": flat, "tag": "flat_Jupiter"}),
                                ("Earth", "4.5", {"PL_DATE": "2024-04-08", "PL_TIME": "18:18", "PL_PAUSED": "1", "tag": "eclipse_Earth"})])
     r = run_app(binary, work, "planets_sun", {"PL_NEWUI": "on", "PL_SELECT": "Sun", "PL_ZOOM": "2.6", "PL_LOG_PLANET": "1", "PL_SKYOFF": "1", "PL_DATE": "2024-05-10",
                                               "PL_TIME": "00:00", "PL_PAUSED": "1"}, frames=40)
@@ -226,7 +240,7 @@ def balls(binary, work, tool, cases):
         rows = r.out.splitlines()
         lines = [rows[i].split() + rows[i + 1].split()[1:] for i in range(len(rows) - 1) if rows[i].startswith("PLPLANET ") and rows[i + 1].startswith("PLPLANETX")]
         # the selected body: the biggest ball drawn in the last frame with this body's map
-        want = {"Jupiter": 5, "Mars": 4, "moon:Earth": 3, "moon:Jupiter:1": 11, "Pluto": 9, "Earth": 2, "Neptune": 8}[sel]
+        want = {"Jupiter": 5, "Saturn": 6, "Mars": 4, "moon:Earth": 3, "moon:Jupiter:1": 11, "Pluto": 9, "Earth": 2, "Neptune": 8}[sel]
         mine = [l for l in lines[len(lines) * 3 // 4:] if int(l[1]) == want and 0 <= float(l[2]) < 1280 and 0 <= float(l[3]) < 800]
         mine.sort(key=lambda l: float(l[4]))
         check(bool(mine), f"{tag}: the app logged its ball ({len(lines)} PLPLANET lines)")
@@ -238,6 +252,10 @@ def balls(binary, work, tool, cases):
             check(abs(float(f[26]) - 1) < 1e-5, f"{tag}: the followed body's sunlight factor is 1 (the exposure is set for it): {f[26]}")
         if tag.startswith("eclipse_"):
             check(int(f[21]) > 0, f"{tag}: the Moon is among the bodies that can eclipse the Sun there ({f[21]})")
+        if sel in ("Jupiter", "Saturn"):   # (0.96.0: the phase angle the giant's law was drawn at, acos(L.z))
+            import math
+            l = [float(f[4]), float(f[5]), float(f[6])]
+            print(f"planets {tag}: phase angle {math.degrees(math.acos(l[2] / math.sqrt(sum(x * x for x in l)))):.1f} deg")
         compare_cpu(tool, work, r, tag, f)
 
 def part_airedge(binary, work):

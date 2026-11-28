@@ -166,15 +166,23 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         }
         if (fast) c.lines.push_back("Goes round " + (lps >= 100 ? fmt::commas(lps) : fmt::fixed(lps, 0)) + " times a second at this Time speed: too fast to see, so the whole orbit is lit");
         if (b->name == "Earth" && sel.moon == 0) {    // 0.10.4 stage 2: Earth's Moon is the real one (ELP2000-82B); 0.46.3: in Simple too
-            if (sys.realMoon()) {
+            if (sys.moonPlaced()) {   // 0.96.0: ELP2000-82B inside 1800-2100, the ellipse fitted to it outside
                 const MoonPhase p = moonPhase(sys.moonGeocentric(), b->pos * -1.0);   // Sun (at the origin) seen from Earth
                 c.lines.push_back(std::string("Phase now: ") + p.name + ", " + std::to_string(static_cast<int>(std::lround(100 * p.fraction))) + "% lit");
                 c.lines.push_back("It is " + fmt::fixed(p.elongationDeg, 0) + "° from the Sun in the sky. The lit part is (1 + cos i) / 2 with i the angle Sun–Moon–Earth seen from the Moon (the exact phase angle, not the elongation)");
                 c.lines.push_back("Distance from " + b->name + " right now: " + fmt::km(length(sys.moonGeocentric()) / kKm) + " (the one above is the semi-major axis)");
-                c.lines.push_back("Real position and phase: ELP2000-82B, a 1988 theory; within " + fmt::fixed(kMoonElpWorstKm, 1) + " km of JPL Horizons at worst at the dates checked (1800 to 1 Jan 2100)");
-                for (auto& l : wrapWords("The four main phases (new, first quarter, full, last quarter) are exact; the names in between (crescent, gibbous) use this app’s own cut-offs: 2%, 40%, 60% and 98% lit", 56)) c.lines.push_back(l);
+                if (sys.realMoon()) {
+                    c.lines.push_back("Real position and phase: ELP2000-82B, a 1988 theory; within " + fmt::fixed(kMoonElpWorstKm, 1) + " km of JPL Horizons at worst at the dates checked (1800 to 1 Jan 2100)");
+                    for (auto& l : wrapWords("The four main phases (new, first quarter, full, last quarter) are exact; the names in between (crescent, gibbous) use this app’s own cut-offs: 2%, 40%, 60% and 98% lit", 56)) c.lines.push_back(l);
+                } else {
+                    // 0.96.0 (outside review of 28 Nov 2026, part E): the ellipse fitted to ELP2000-82B over 1800-2100 (orbit/moon_elp.h), with its measured worst error (tests/test_moon.cpp)
+                    for (auto& l : wrapWords("Outside 1800 to 1 Jan 2100 the Moon is on a turning ellipse fitted to ELP2000-82B over 1800 to 2100: fixed size, shape and tilt, with its closest point and its crossing of Earth’s orbit plane turning at their mean rates. "
+                                             "Over 1800 to 2100 it is within " + fmt::fixed(kMoonEllipseWorstDeg, 1) + "° (direction seen from Earth) and " + fmt::km(kMoonEllipseWorstKm) + " of ELP2000-82B at worst. "
+                                             "Against JPL Horizons at 444 dates (1600 to 1795, through 2100, 2105 to 2300) it is within " + fmt::fixed(kMoonEllipseOutsideDeg, 1) + "° and " + fmt::km(kMoonEllipseOutsideKm) + "; further away it is not checked. "
+                                             "So the phase is only roughly right here, and no eclipses are drawn", 56)) c.lines.push_back(l);
+                }
             } else
-                c.lines.push_back("Outside 1800 to 1 Jan 2100 the real Moon (ELP2000-82B) is not used: this Moon is on a simple Kepler ellipse with a made-up starting angle, and has no phase here");
+                c.lines.push_back("The Moon’s place is not worked out yet: no phase here");
         }
         return true;
     }

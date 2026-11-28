@@ -12,16 +12,12 @@ namespace orbit {
 
 using namespace units;
 
-// A made-up but fixed starting angle for each moon, from its name.
-static double hashPhase(const char* name) {
-    int h = 7;
-    for (const unsigned char* c = reinterpret_cast<const unsigned char*>(name); *c; ++c) h = (h * 31 + *c) % 6283;
-    return h / 1000.0;
-}
-
+// 0.96.0 (outside review of 28 Nov 2026, part E): no made-up starting angles any more (until 0.95.0 hashPhase, a number from the moon's name). Every moon has a sourced
+// place at every date: Earth's Moon from ELP2000-82B inside 1800-2100 and the ellipse fitted to it outside (moon_elp.h), the 13 others from Horizons fits inside and JPL's
+// mean elements outside (moon_sats.h). The Kepler angle below is only the drawing's fallback if neither were set; it starts at 0.
 static void attachMoons(Body& b) {
     for (std::size_t i = 0; i < kMoonCount; i++)
-        if (b.name == kMoons[i].planet) b.moons.push_back({&kMoons[i], hashPhase(kMoons[i].name)});
+        if (b.name == kMoons[i].planet) b.moons.push_back({&kMoons[i], 0.0});
 }
 
 // A planet's position and velocity from its JPL elements on Julian day `jd`.
@@ -63,7 +59,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
     sunTrail.clear();
     nextId_ = 0;
     t = 0;
-    moonValid_ = false;                                  // Real: applyReal sets it again below
+    moonValid_ = moonElp_ = false;                       // Real: applyReal sets it again below
     crashed = escaped = 0;
     epochMs = unixMs;
     const double jd = timescale::tdbFromUT(unixMs / 86400000.0 + 2440587.5);   // Julian day (0.46.3: in TDB, the JPL data's time scale; the date is UT)
@@ -171,11 +167,12 @@ void SolarSystem::shiftEarthSimple(double jd) {
 }
 
 void SolarSystem::updateMoon(double jd) {
-    moonValid_ = jd >= kMoonElpFirstJD && jd <= kMoonElpLastJD;
-    if (!moonValid_) return;
-    moonGeo_ = moonGeocentricElp(jd);
+    moonElp_ = jd >= kMoonElpFirstJD && jd <= kMoonElpLastJD;
+    moonValid_ = true;                                   // 0.96.0: outside ELP's span the ellipse fitted to it (moon_elp.h)
+    Vec3 (*const at)(double) = moonElp_ ? static_cast<Vec3 (*)(double)>(&moonGeocentricElp) : &moonGeocentricEllipse;
+    moonGeo_ = at(jd);
     const double h = 1.0 / 48;                           // half an hour: the direction of motion for the orbit plane
-    const Vec3 dv = moonGeocentricElp(jd + h) - moonGeocentricElp(jd - h);
+    const Vec3 dv = at(jd + h) - at(jd - h);
     const Vec3 nrm = cross(moonGeo_, dv);
     moonNormal_ = nrm * (1.0 / length(nrm));
 }

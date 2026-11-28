@@ -404,19 +404,21 @@ Table zeemanShift(const LabContext& c) {
         }
     t.cols = {B, sc, sm, sl, st};
     if (singlet) {
-        // the slope is (g_u M_u - g_l M_l) mu_B / hc: in LS a singlet level's g is 1 exactly; where NIST lists a measured g the lab uses it (zeeman.h) and says so here
+        // the slope is (g_u M_u - g_l M_l) mu_B / hc: in LS a singlet level's g is g_L = 1 - m_e / m_nuc (0.96.0, zeeman.h orbitalG; until 0.95.0 1 exactly); where NIST lists a measured g
+        // the lab uses it (zeeman.h) and says so here
         bool measured = false;
         const auto gOf = [&](const z::Term& t, int J2) {
             for (std::size_t k = 0; k < t.J2.size(); k++)
-                if (t.J2[k] == J2 && t.mode == z::Mode::Linear && k < t.gLin.size()) { if (t.gMeasured[k] && J2 > 0) { measured = true; return t.gLin[k]; } return 1.0; }
-            return 1.0;
+                if (t.J2[k] == J2 && t.mode == z::Mode::Linear && k < t.gLin.size()) { if (t.gMeasured[k] && J2 > 0) { measured = true; return t.gLin[k]; } return t.gL; }
+            return t.gL;
         };
         const double gU = gOf(r.line.up, r.line.upJ2), gL = gOf(r.line.lo, r.line.loJ2);
         const double slope = 100 * (gU * Mu / 2.0 - gL * Ml / 2.0) * z::lorentzCmPerT();
         Preset p;
         p.label = "e/m from the normal Zeeman triplet";
         p.x = 0; p.y = 2; p.model = Model::Line; p.useSigma = false;
-        p.expect = "A straight line through 0: Δσ = e B / (4π m_e c), so e/m = 4π c × slope. Expected slope " + fmt("%.9g", slope) + " m⁻¹/T, e/m = " + fmt("%.9g", 4 * atom::kPi * atom::kC * slope) +
+        p.expect = "A straight line through 0: Δσ = g_L e B / (4π m_e c), so e/m = 4π c × slope / g_L, with g_L = 1 − m_e/M = " + fmt("%.9f", r.line.up.gL) +
+                   " (the nucleus's motion, M the nucleus's mass). Expected slope " + fmt("%.9g", slope) + " m⁻¹/T, e/m = " + fmt("%.9g", 4 * atom::kPi * atom::kC * slope / r.line.up.gL) +
                    " C/kg" + (measured ? " (NIST's measured g of the levels, upper " + fmt("%.6g", gU) + ", is in it: the level is not pure LS, so the slope is not exactly e/(4π m c))" : "") +
                    "; CODATA 2022: μB/hc = 46.686 447 719(15) m⁻¹ T⁻¹, e/m_e = 1.758 820 008 38(55) × 10¹¹ C/kg. "
                    "The points are made by this app's own formula, so the fit checks the method, not nature: a real experiment measures the shift (Zeeman 1896; Lorentz's theory gave e/m before the electron was named).";

@@ -3,6 +3,10 @@
 A record of the owner's decisions, one or two lines each. Sessions do not have to read it: CLAUDE.md holds the rules in force (23 Nov 2026).
 A line marked "Superseded" is kept for the record only. Older wording is in git history.
 
+## 28 Nov 2026
+- Every lab opens in its Most realistic settings (28 Nov 2026). Existing settings switch once, at the first start of 0.96.0; later choices are kept.
+- The outside review of 28 Nov 2026 is done in order, parts A to G (job 0.96.0).
+
 ## 25 Nov 2026
 - All problems found by the outside review of 25 Nov 2026 are to be fixed. Where a fix needs a source, the source is found first (research job 0.84.1, native/PLAN_REVIEW.md).
 - In the realistic choice the planets are shown as they really are: true dimming with distance.
@@ -55,7 +59,7 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
   masses and distance from Akeson et al. 2021; (5) our Sun in their sky as the last build step; (6) the planets' unknown tilt drawn at the star's equator (47°,
   Klein 2021), labelled "assumed".
 - Real planets start from the JPL Horizons state of 1 January 2026 12:00 TDB; the IAU astronomical unit, 149,597,870,700 m exactly (3 Oct 2026).
-- Planet physics Real stays an option (default Simple) until the owner has tried it on the PC (3 Oct 2026). In Real, relativity (1PN) is on by default (5 Nov 2026).
+- Superseded on 28 Nov 2026 (every lab opens in its Most realistic settings, so Planet physics opens Real). Planet physics Real stays an option (default Simple) until the owner has tried it on the PC (3 Oct 2026). In Real, relativity (1PN) is on by default (5 Nov 2026).
 - The Moon in Real mode comes from ELP2000-82B, checked against Horizons (3 Oct 2026).
 - "Reset to today" keeps the zoom, the Moons/Dwarfs/Comets/Belts switches and Time speed; it resets the selection and Follow.
 - The Milky Way is ESA's Gaia all-sky colour map (5 Nov 2026). Planet maps: NASA/USGS where one exists, Hubble OPAL for Saturn, Uranus and Neptune (the owner

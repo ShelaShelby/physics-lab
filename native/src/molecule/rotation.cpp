@@ -202,7 +202,10 @@ bool hasSpectrum(const Rotor& r, Spectrum s) {
     return r.id == "HCl";
 }
 
-std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel) {
+extern const double kC2 = kHcOverK;
+double absorbanceFactor(double nuCm, double T) { return T > 0 ? nuCm * (1 - std::exp(-kC2 * nuCm / T)) : nuCm; }
+
+std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel, Measure meas) {
     std::vector<Line> out;
     std::vector<int> isos{iso};
     if (id == "HCl" && iso == kNatural) isos = {kH35Cl, kH37Cl};
@@ -232,6 +235,7 @@ std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, do
             }
         }
     }
+    if (meas == Measure::Absorbance) for (Line& l : out) l.strength *= absorbanceFactor(l.nu, T);   // 0.96.0: HITRAN's line intensity (rotation.h, Measure)
     double top = 0;
     for (const Line& l : out) top = std::max(top, l.strength);
     if (top <= 0) return {};

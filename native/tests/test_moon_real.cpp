@@ -241,13 +241,17 @@ static void testFallbackAndSimple() {
         check("simple: after stepping, Earth is again d mu / (1 + mu) from the barycentre", std::fabs(length(simple.bodies[earthIndex(simple)].pos - simple.embPosition()) -
                                                                                                    length(simple.moonPosition() - simple.bodies[earthIndex(simple)].pos) * mu / (1 + mu)) < 1);
     }
-    // Real, outside the span of ELP (before 1800 / after 2100): Earth is the barycentre, no real Moon, the card says so
+    // Real, outside the span of ELP (before 1800 / after 2100): no ELP Moon, the card says so. 0.96.0 (part E): the Moon is on the ellipse fitted to ELP (moon_elp.h), so Earth is
+    // drawn off the barycentre by mu / (1 + mu) of that vector and a phase is shown (until 0.95.0 these two checks said Earth is exactly the barycentre and no phase is shown)
     SolarSystem sys;
     sys.setRealPlanets(true);
     loadReal(sys, 2378497.0 - 400);
     const int ie = earthIndex(sys);
+    const double muAll = kRealGMMoon / kRealGMEarthAlone;
     check("fallback: before 1800-01-01 12:00 the Moon is not the real one", !sys.realMoon());
-    check("fallback: ... and Earth is exactly the N-body barycentre", length(sys.bodies[ie].pos - sys.embPosition()) == 0);
+    check("fallback: ... the Moon is on the fitted ellipse and Earth is mu / (1 + mu) of its vector from the N-body barycentre, on the far side",
+          sys.moonPlaced() && muAll > 0 && length(sys.moonGeocentric() - moonGeocentricEllipse(sys.julianDayTDB())) < 1.0 &&
+          length(sys.bodies[ie].pos - (sys.embPosition() - sys.moonGeocentric() * (muAll / (1 + muAll)))) < 1.0);
     CardOptions opt;
     Card c;
     Selection sel{Selection::Moon, sys.bodies[ie].id, 0};
@@ -255,7 +259,7 @@ static void testFallbackAndSimple() {
     std::string all;
     for (auto& l : c.lines) all += l + "\n";
     check("fallback: the card says the real Moon is not used outside 1800 to 1 Jan 2100", all.find("Outside 1800 to 1 Jan 2100") != std::string::npos);
-    check("fallback: no phase is shown outside the span", all.find("Phase now") == std::string::npos);
+    check("fallback: a phase is shown, from the fitted ellipse, and the card says it is only roughly right", all.find("Phase now") != std::string::npos && all.find("roughly right") != std::string::npos);
     loadReal(sys, 2461043.91990);
     Card c2;
     check("card: real Moon card exists", cardText(sys, Selection{Selection::Moon, sys.bodies[earthIndex(sys)].id, 0}, opt, c2));

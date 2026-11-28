@@ -518,8 +518,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         r.xr = std::cos(E) - m.e; r.yr = std::sqrt(1 - m.e * m.e) * std::sin(E); r.sgn = m.retrograde ? -1 : 1;
         // 0.10.4 stage 2 (0.46.3: in Simple too): Earth's Moon is at its real direction and phase (ELP2000-82B). It is drawn at the same exaggerated distance as any moon (dW, the label
         // "Orbit drawn about N× too wide" is unchanged), scaled by the Moon's real distance over its mean one (so perigee and apogee show, and at true scale it is the real distance); the ring is the Moon's
-        // instantaneous orbit plane (geocentric position x velocity) through the Moon, so the Moon is always on it. Outside 1800-2100 it is on its Kepler ellipse, as moons without data are.
-        r.realM = sys.realMoon() && b.name == "Earth" && j == 0;
+        // instantaneous orbit plane (geocentric position x velocity) through the Moon, so the Moon is always on it. Outside 1800-2100 (0.96.0) the same, on the precessing ellipse fitted to ELP (sys.moonPlaced()).
+        r.realM = sys.moonPlaced() && b.name == "Earth" && j == 0;
         r.dW2 = r.dW;
         if (r.realM) { const Vec3 g = sys.moonGeocentric(); r.rh = g * (1 / length(g)); r.ph = cross(sys.moonOrbitNormal(), r.rh); r.dW2 = r.dW * length(g) / r.aM; }
         // 0.27: the 13 big moons at their real places (orbit/moon_sats.h, fitted to JPL Horizons), drawn as our real Moon: same direction, the drawn distance
@@ -1363,7 +1363,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     render::Renderer2D::PlanetLight pl;   // 0.51.2: Earth's shadow (lunar eclipses), at the real places
                     pl.sunAng = sunAngAt(b.pos);
                     pl.k = static_cast<float>(lightAt(b.pos));       // 0.85.0: the planet's distance (the moon's own differs by under 0.3 %)
-                    if (realM) addOcc(pl, scr(sys.moonGeocentric() * -1.0, m.radiusKm * kKm), b.radius / (m.radiusKm * kKm));
+                    if (realM && sys.realMoon()) addOcc(pl, scr(sys.moonGeocentric() * -1.0, m.radiusKm * kKm), b.radius / (m.radiusKm * kKm));
                     R.planet(mp.first, mp.second, mr, hexColor(marks::kMoon), sun.x, sun.y, sun.z, K, render::Map::Moon, nullptr, 0, 1.0, polarRatio("Moon"), true, &pl);   // 0.50: McEwen's lunar law
                 } else if (realS && mr > 3 && R.hasMap(render::mapForBody(m.name))) {
                     // 0.50 (review item 10): a moon with a global map (USGS mosaics, black and white: assets/maps/README.md), turned by its IAU rotation model

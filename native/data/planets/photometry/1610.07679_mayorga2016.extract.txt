@@ -1,0 +1,51 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/planets/photometry/1610.07679_mayorga2016.txt.gz
+# Reference: L. C. Mayorga, J. Jackiewicz, K. Rages, R. A. West, B. Knowles, N. Lewis, M. S. Marley, "Jupiter's phase variations from Cassini: a testbed for future direct-imaging missions", Astron. J. 152, 209 (2016), doi:10.3847/0004-6256/152/6/209, arXiv:1610.07679; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1610.07679
+# Date read: 2026-11-28 (saved 2026-11-25)
+# sha256 of the original: 54c8b10b21fd9cacf6784acdb765a3c88f7a64621f3ceecdaaf7f217a5458055
+# Place in the original: Table 1 (effective wavelengths), section 4 (the fits' range, x = alpha/180), Table 2 (the 5th-order polynomial coefficients)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/tests/test_orbit.cpp testGiantPhotometry; code comments: src/render/giant_photometry.h
+#--- begin Table 1
+                          Filter                  WAC                      NAC
+
+                                      λeff (nm) # of images λeff (nm) # of images
+
+                          VIO               420            658       ···          ···
+
+                          BL1               463            201       455          841
+
+                          GRN               568            701       569          839
+
+                          RED               647            622       649          556
+
+                          CB2               752            680       750          837
+
+                          CB3               939            421       938          289
+#--- end
+#--- begin Section 4, the fits' range
+of the data, the fits break down and are untrustworthy beyond ∼ 130◦ due to the lack of data to
+
+constrain that region. The table of coefficients of the best fit 5th order polynomial for each filter is
+
+shown in Table 2, where x = α/180. We show the coefficients to the third decimal place to ensure
+
+that in the range of 0–135 degrees (x =0–0.75), where the fits are trustworthy, the computed curve
+#--- end
+#--- begin Table 2
+             Filters    []     +      [ ]x +    [ ] x2 +     [ ] x3 +     [ ] x4 +    [ ] x5
+
+             VIO       1.000        -1.815     0.940        -2.399        4.990      -2.715
+
+             BL1       1.000        -1.311     -2.382       5.893        -4.046      0.846
+
+             GRN       1.000        -1.507     -0.363       -0.062        2.809      -1.876
+
+             RED       1.000        -0.882     -3.923       8.142        -5.776      1.439
+
+             CB2       1.000        -1.121     -1.720       1.776         1.757      -1.691
+
+             CB3       1.000        -0.413     -6.932      11.388        -3.261      -1.783
+#--- end

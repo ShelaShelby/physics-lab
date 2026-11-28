@@ -44,6 +44,15 @@ def parse(line):
             d[k] = v
     return d
 
+# 0.96.0 (corrected on purpose, REPORT 0.96.0): every lab now opens in its Most realistic settings (the owner, 28 Nov 2026). The old panel's saved runs started from the
+# choices a fresh start had up to 0.95.0 (orbit::ViewSettings{}), so the new UI's runs start from them too, through a settings file (a fresh copy for each run: the app
+# writes its file back). realest= marks the one-time switch as done, so the file's choices are kept.
+BARE = "realest=0.96.0\norbit.view3D=0\norbit.physics=Simple\norbit.gr=1\norbit.gr29=1\norbit.wobble=1\norbit.truelight=0\norbit.sky=soft\n"
+def bare(work, name, env):
+    path = os.path.join(work, name + "_settings.txt")
+    with open(path, "w", encoding="utf-8") as f: f.write(BARE)
+    return dict(env, PL_SETTINGS=path)
+
 def main():
     binary, work = sys.argv[1], sys.argv[2]
     os.makedirs(work, exist_ok=True)
@@ -67,7 +76,7 @@ def main():
         if newui == "off":      # the old side panel: its saved run (tests/reference/old_ui_runs.json, 0.16 stage 1b)
             runs[name] = old_run("shell_state", "state_old", {"PL_SCRIPT": script, "PL_SHOT_DIR": shots[name]}, frames=112, size="1000x2800")
         else:
-            runs[name] = run_app(binary, work, "state_" + name, {"PL_SCRIPT": script, "PL_SHOT_DIR": shots[name]}, frames=150, size="1000x2800")   # (the Controls panel scrolls a control in before a click: a longer script)
+            runs[name] = run_app(binary, work, "state_" + name, bare(work, "state_" + name, {"PL_SCRIPT": script, "PL_SHOT_DIR": shots[name]}), frames=150, size="1000x2800")   # (the Controls panel scrolls a control in before a click: a longer script)
         check(not runs[name].scripted_missing(), f"{name}: every scripted click found its control: {runs[name].scripted_missing()}")
         check(len(runs[name].states) == 1, f"{name}: one state line was printed")
         if newui == "on":
@@ -104,7 +113,7 @@ def main():
             if newui == "off":
                 runs2[name] = old_run("shell_state", f"state2_old_{what}", dict(env, PL_SCRIPT=script), frames=120, size="1000x2800")
             else:
-                runs2[name] = run_app(binary, work, "state2_" + name, dict(env, PL_SCRIPT=script), frames=135, size="1000x2800")
+                runs2[name] = run_app(binary, work, "state2_" + name, bare(work, "state2_" + name + "_" + what.replace(" ", "_"), dict(env, PL_SCRIPT=script)), frames=135, size="1000x2800")
             check(not runs2[name].scripted_missing(), f"{what}, {name}: every scripted click found its control: {runs2[name].scripted_missing()}")
             check(len(runs2[name].states) == 1, f"{what}, {name}: one state line was printed")
         if all(runs2[n].states for n in runs2):

@@ -1,0 +1,56 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/jumps/steck/steck_sodium_d_line_2.3.4.txt.gz
+# Reference: D. A. Steck, "Sodium D Line Data", revision 2.3.4, 8 August 2025 (Open Publication License), text of the PDF made with pdftotext -layout (gzip -9 -n);
+#   the PDF itself (sha256 db0d61a214be709a70c46709ab5e0bc0a8b2221b984de5eef9d80a8596911cf6) is not stored
+# URL: https://steck.us/alkalidata/sodiumnumbers.pdf
+# Date read: 2026-11-28
+# sha256 of the original: 1b9a30e3c352a2d3d3b18c5d072741c5f3af0f6ca52cb5dae61f0016abf396aa
+# Place in the original: the revision line; section 3.2, Eqs. (19) and (21) (g_L = 1 - m_e/m_nuc and the Lande g_J with g_L and g_S, both citing Bethe & Salpeter [29]);
+#   Table 6 (g_S, g_L of 23Na, the measured g_J of 3S1/2, 3P1/2, 3P3/2 from [24]); references [24] and [29]
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/tests/test_zeeman.inc (the reduced-mass g_L, 0.96.0); code comments: src/atom/zeeman.h, zeeman.cpp
+#--- begin revision
+This is revision 2.3.4, 8 August 2025.
+#--- end
+#--- begin Eq. (19) g_L
+value given is the CODATA recommended value. The value for gL is approximately 1, but to account for the finite
+nuclear mass, the quoted value is given by
+                                                                 me
+                                                     gL = 1 −        ,                                                (19)
+                                                               mnuc
+which is correct to lowest order in me /mnuc , where me is the electron mass and mnuc is the nuclear mass [29].
+#--- end
+#--- begin Eq. (21) g_J
+Here, the Landé factor gJ is given by [29]
+
+                            J(J + 1) − S(S + 1) + L(L + 1)      J(J + 1) + S(S + 1) − L(L + 1)
+                  gJ = gL                                  + gS
+                                      2J(J + 1)                           2J(J + 1)                            (21)
+                         J(J + 1) + S(S + 1) − L(L + 1)
+                     ≃1+                                ,
+                                   2J(J + 1)
+#--- end
+#--- begin Table 6 g rows
+            Table 6: Sodium D Transition Magnetic and Electric Field Interaction Parameters.
+      Electron spin g-factor                  gS                  2.002 319 304 362 2(15)                    [47]
+      Electron orbital g-factor                      gL                          0.999 976 13
+                                                 gJ (3 S1/2 )
+                                                      2
+                                                                               2.002 296 00(70)              [24]
+      Fine structure Landé g-factor              gJ (3 P1/2 )
+                                                     2
+                                                                                 0.665 81(12)                [24]
+                                                 gJ (3 P3/2 )
+                                                     2
+                                                                                 1.334 20(20)                [24]
+      Nuclear g-factor                               gI                     −0.000 804 610 80(80)            [24]
+#--- end
+#--- begin reference 24
+[24] E. Arimondo, M. Inguscio, and P. Violino, ‘‘Experimental determinations of the hyperfine structure in the
+     alkali atoms,’’ Reviews of Modern Physics 49, 31 (1977).
+#--- end
+#--- begin reference 29
+[29] Hans A. Bethe and Edwin E. Salpeter, Quantum Mechanics of One- and Two-Electron Atoms (Springer-
+     Verlag, Berlin, 1957).
+#--- end

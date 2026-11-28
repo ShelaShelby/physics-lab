@@ -449,6 +449,10 @@ std::string saveSettings(const Settings& s) {
 Settings loadSettings(const std::string& text) {
     Settings s;
     s.cam = defaultCamera(get(s.mol).id);
+    return loadSettings(text, s);
+}
+Settings loadSettings(const std::string& text, const Settings& base) {
+    Settings s = base;
     std::istringstream in(text);
     std::string tok;
     if (!(in >> tok) || tok != "v" + std::to_string(kSettingsVersion)) return s;   // another version (or nothing): the defaults

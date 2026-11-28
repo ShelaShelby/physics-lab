@@ -1,6 +1,7 @@
 // Belts: the asteroid belt, Jupiter's Trojans, the Kuiper belt and the Oort cloud.
-// 0.27: the asteroid belt, the Trojans and the Kuiper belt are 3,000 real asteroids (JPL Small-Body Database, asteroid_data.inc); the Oort cloud
-// (never seen) is 3,000 made-up dots from a fixed random seed, so they always look the same.
+// 0.27: the asteroid belt, the Trojans and the Kuiper belt are 3,000 real asteroids (JPL Small-Body Database, asteroid_data.inc). The Oort cloud
+// (never seen) is 3,000 dots, not objects. Since 0.85.0 their distances are a sample of a published model of the cloud (Vokrouhlicky, Nesvorny & Dones 2019:
+// oortModelInverse below) and their directions are spread evenly. A fixed random seed keeps them in the same places. Until 0.84.1 the distances were made up.
 //
 // Each rock (except in the Oort cloud) moves on its own fixed Kepler ellipse round the Sun.
 // Float32Array, so both versions place every rock in the same spot.

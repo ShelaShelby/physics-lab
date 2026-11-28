@@ -4,8 +4,9 @@
 //
 // The model (the app says what it leaves out: limitsText):
 //  - Inside ONE LS term (L and S fixed) with all its J levels at their measured energies E_J (NIST ASD; the one-electron atom: the lab's Dirac levels with the
-//    Lamb shift, dirac.h), the field B along z adds mu_B B (L_z + g_s S_z), g_s = |g_e| (CODATA 2022, atom_core.h kGe). In the |J M> basis of the term this is
-//    H = E_J delta_JJ' + mu_B B [M delta_JJ' + (g_s - 1) <J M| S_z |J' M>], since L_z + g_s S_z = J_z + (g_s - 1) S_z. M is kept, so H splits into one small block
+//    Lamb shift, dirac.h), the field B along z adds mu_B B (g_L L_z + g_s S_z), g_s = |g_e| (CODATA 2022, atom_core.h kGe). In the |J M> basis of the term this is
+//    H = E_J delta_JJ' + mu_B B [g_L M delta_JJ' + (g_s - g_L) <J M| S_z |J' M>], since g_L L_z + g_s S_z = g_L J_z + (g_s - g_L) S_z (0.96.0: g_L = 1 - m_e/m_nuc, the
+//    nucleus's motion, Steck / Bethe & Salpeter; until 0.95.0 g_L = 1). M is kept, so H splits into one small block
 //    per M, diagonalised exactly (no switch between weak- and strong-field formulas). <J M| S_z |J' M> = sum over M_S of <L M-M_S S M_S|J M> <L M-M_S S M_S|J' M> M_S,
 //    with the exact Clebsch-Gordan coefficients of threej.h. Textbooks: H. A. Bethe & E. E. Salpeter, "Quantum Mechanics of One- and Two-Electron Atoms" (1957),
 //    the Zeeman-effect sections (weak, strong and intermediate fields); E. U. Condon & G. H. Shortley, "The Theory of Atomic Spectra" (1935), the Zeeman-effect chapter.
@@ -29,11 +30,19 @@ namespace atom::zeeman {
 
 double lorentzCmPerT();                 // the Lorentz unit mu_B B / (h c) per tesla, cm^-1/T, from CODATA 2022 mu_B, h and c (atom_core.h)
 double gsCodata();                      // |g_e| = 2 (1 + a_e), CODATA 2022
-double landeLS(int L, int S2, int J2, double gs);   // Lande g_J of an LS level (J2 = 2J > 0; J = 0: 0)
+// Lande g_J of an LS level (J2 = 2J > 0; J = 0: 0), with the orbital g-factor gL (0.96.0):
+//   g_J = gL [J(J+1) - S(S+1) + L(L+1)] / (2J(J+1)) + gs [J(J+1) + S(S+1) - L(L+1)] / (2J(J+1))
+// (D. A. Steck, "Sodium D Line Data", rev. 2.3.4 (2025), Eq. (21), citing Bethe & Salpeter 1957; extract native/data/jumps/steck/steck_sodium_d_line_2.3.4.extract.txt).
+// gL = 1 is the form used until 0.95.0, 1 + (gs - 1) [J(J+1) + S(S+1) - L(L+1)] / (2J(J+1)).
+double landeLS(int L, int S2, int J2, double gs, double gL = 1.0);
+// 0.96.0: the electron's orbital g-factor with the nucleus's motion, gL = 1 - m_e / m_nuc (Steck Eq. (19), "correct to lowest order in m_e/m_nuc"), m_nuc of the nucleus
+// with Z protons and N neutrons (atom_core.h nuclearMassMe: AME2020 binding). Hydrogen: 1 - 5.4e-4; sodium-23: 0.99997613 (Steck's Table 6, tests/test_zeeman.inc).
+double orbitalG(int Z, int N);
 
 enum class Mode { Matrix, Linear, None };
 struct Term {
     int L = 0, S2 = 0;                  // S2 = 2S
+    double gL = 1;                      // 0.96.0: the orbital g-factor, 1 - m_e / m_nuc of the lab's isotope (orbitalG); the matrix is mu_B B (gL L_z + gs S_z)
     std::vector<int> J2;                // the term's J levels in the lab, lowest J first
     std::vector<double> cm;             // their field-free energies, cm^-1
     std::vector<double> gLin;           // Linear mode: the g each level splits with

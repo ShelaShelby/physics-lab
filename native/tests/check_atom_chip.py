@@ -51,7 +51,9 @@ def classic_part(binary, work, scene):
             fails += 1
             print("FAIL", what)
     B = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": scene,
-         "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT_FRAME": "30"}   # (0.80.1: by frame, not by the clock: ROADMAP fix)
+         "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "0.5", "PL_BENCH_SHOT_FRAME": "30"}   # (0.80.1: by frame, not by the clock: ROADMAP fix)
+    # 0.96.0: measured 0.5 s, not 2.0 s. The check reads only the picture of frame 30 and the Paths, and the 2.0 s window drew about 125 frames after it
+    # (classicsideglow reached the 300 s part limit on GitHub in 0.95.0; 41-46 s a run here, 14-15 s now). The checks are the same.
     runs = {}
     def one(tag, extra):
         d = os.path.join(work, "classic_" + tag); os.makedirs(d, exist_ok=True)
@@ -136,9 +138,12 @@ def stark_part(binary, work):
         if not ok:
             fails += 1
             print("FAIL", what)
-    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "48", "PL_ATOM_BENCHSTOP": "150"}
-    card = run_app(binary, work, "stark_card", env, frames=320, size="1280x800")
-    cpu = run_app(binary, work, "stark_cpu", dict(env, PL_ATOM_CARDFAIL="1"), frames=320, size="1280x800")
+    # 0.96.0: the picture is taken once the still cloud has all its dots (PL_ATOM_SETTLE: full for 10 frames from frame 160), at most frame 3000. It was taken at
+    # frame 320: the cloud fills by the clock, and on GitHub (0.95.0) the card's picture held about half the cloud then (14,133 lit pixels, 29,278 here).
+    # The limit is the same.
+    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "48", "PL_ATOM_BENCHSTOP": "150", "PL_ATOM_SETTLE": "160:10"}
+    card = run_app(binary, work, "stark_card", env, frames=3000, size="1280x800")
+    cpu = run_app(binary, work, "stark_cpu", dict(env, PL_ATOM_CARDFAIL="1"), frames=3000, size="1280x800")
     st = [ln for ln in card.out.splitlines() if ln.startswith("PLATOMCARDCASE stark")]
     check("PLATOMCARD slice state=1" in card.out and len(st) == 3, f"stark: the Slice's programs pass their check with the 3 Stark planes ({st})")
     check("PLATOMCARD slice state=1" not in cpu.out, "stark: the processor's run keeps the processor's dots (its check made to fail)")

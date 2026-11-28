@@ -1,0 +1,57 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/planets/photometry/1511.04415_dyudina2016.txt.gz
+# Reference: U. Dyudina, X. Zhang, L. Li, P. Kopparla, A. P. Ingersoll, L. Dones, A. Verbiscer, Y. L. Yung, "Reflected light curves, spherical and Bond albedos of Jupiter- and Saturn-like exoplanets", Astrophys. J. 822, 76 (2016), doi:10.3847/0004-637X/822/2/76, arXiv:1511.04415; text of the PDF (pdftotext -layout)
+# URL: https://arxiv.org/pdf/1511.04415
+# Date read: 2026-11-28 (saved 2026-11-25)
+# sha256 of the original: 2b81de548dbb0c03a15bc7f9de6526f3ac59b1e29c0e938b5e5d063477779845
+# Place in the original: Equation (1), Equations (2) and (3), Table 2 (Pioneer red and Cassini CB3 rows), Equation (4), Table 3, Table 4 (rows Lambertian, Saturn, Jupiter red solid, CB3 solid)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/tests/test_orbit.cpp testGiantPhotometry; code comments: src/render/giant_photometry.h
+#--- begin Equation (1)
+                             I(α, µ0, µ)/F = µ0 · P (AHG , g1 , g2 , f, α).                 (1)
+#--- end
+#--- begin Equation (2)
+                 P (AHG , g1, g2 , f, α) = AHG · (f PHG (g1 , α) + (1 − f )PHG (g2 , α))    (2)
+#--- end
+#--- begin Equation (3)
+                                                 (1 − g 2 )
+                            PHG (g, α) ≡                           ,                        (3)
+                                         (1 + g 2 + 2g · cos α)3/2
+#--- end
+#--- begin Table 2 header and Pioneer red solid
+   Spacecraft       Year       Filter    Wavelength      Linestyle   AHG     g1      g2     f
+ Pioneers 10,11   1973,1974     red     0.595-0.72 µm      solid      2     0.80   -0.38   0.90
+#--- end
+#--- begin Table 2 Cassini CB3 solid
+     Cassini      2000-2001     CB3       0.938 µm         solid     1.07   0.60   -0.30   0.80
+#--- end
+#--- begin Equation (4)
+                                                          B
+                                        A         µ · µ0
+                                  I/F =                         ,                         (4)
+                                        µ         µ + µ0
+
+#--- end
+#--- begin Table 3
+               Phase angle α        0◦     30◦     60◦      90◦ 120◦    150◦   180◦
+              A (red, 0.64 µm)     1.69    1.59    1.45     1.34 1.37   2.23   3.09
+              B (red, 0.64 µm)     1.48    1.48    1.46     1.42 1.36   1.34   1.31
+              A (blue, 0.44 µm)    0.63    0.59    0.56     0.56 1.69   1.86   3.03
+              B (blue, 0.44 µm)    1.11    1.11    1.15     1.18 1.20   1.41   1.63
+
+Table 3: Coefficients for the Barkstrom function for Saturn, from Dones et al. (1993), and
+#--- end
+#--- begin Table 4 rows
+                                                        Geometric     Spherical    AS /Ag    C
+                                                        albedo Ag     albedo AS
+                     Lambertian                           0.667          1.00       1.50    1.00
+        Rayleigh semi-infinite s.s. albedo = 1            0.676          0.94       1.40    0.93
+      Saturn 0.44 (0.39-0.5)µm (Pioneer blue)             0.274          0.39       1.44    0.96
+      Saturn 0.64 (0.59-0.72)µm (Pioneer red)             0.483          0.67       1.39    0.92
+   Jupiter 0.64 (0.59-0.72)µm (Pioneer red) solid         0.549          0.56       1.02    0.68
+                       dashed                             0.508          0.48       0.95    0.63
+#--- end
+#--- begin Table 4 CB3 solid
+ Jupiter atm. window 0.938 µm (Cassini CB3) solid         0.466          0.57       1.23    0.82
+#--- end

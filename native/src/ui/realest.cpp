@@ -1,90 +1,28 @@
 #include "ui/realest.h"
 
+#include "app/realistic.h"
+
 #include <cstring>
 #include <vector>
 
 #include "atom/atom_tools.h"
 #include "molecule/molecule.h"
 #include "molecule/molecule_view.h"
-#include "orbit/real_errors.h"
 #include "ui/orbit_panel.h"
 #include "ui/shell_widgets.h"
 
 namespace ui::real {
 
-namespace {
-
-std::string commas(long v) { std::string s = std::to_string(v); for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<std::size_t>(i), ","); return s; }
-
-struct Row { const char* lab; Pick p; };
-const std::vector<Row>& table() {
-    static const std::vector<Row> t = {
-        // ---- Orbit Lab ----
-        {"orbit", {"view", "3D", "space has three dimensions; 2D shows the Solar System from above, flattened."}},
-        {"orbit", {"sizes", "True scale", "the Sun and the planets as big as they really are, compared with their distances."}},
-        {"orbit", {"physics", "Real", "the Sun and the planets pull on each other (Newton's gravity), started from NASA/JPL Horizons' positions. Simple moves each planet alone on a fixed orbit."}},
-        // 0.29: on is the realistic choice (with the accurate integrator it brings every inner planet closer to JPL: orbit/real_errors.h, tests/test_jpl.cpp)
-        {"orbit", {"gr", "on", "Einstein's correction to the Sun's gravity is real: with it, Mercury stays within " + commas(orbit::kRealErrKmRelOn[0]) + " km of NASA/JPL Horizons over "
-                                "1800 to 2100 (" + commas(orbit::kRealErrKmRelOff[0]) + " km without it)."}},
-        // 0.85.0 (outside review, R1): the true dimming with distance (the owner's decision of 25 Nov 2026)
-        {"orbit", {"light", "True sunlight", "the sunlight on each body falls with the square of its distance from the Sun; Even lights every body as if it were at Earth's distance."}},
-        {"orbit", {"wobble", "off", "the Sun's path round the centre of mass at its real size (less than 2.3 Sun radii)."}},
-        {"orbit", {"moons", "on", "they are there in the real Solar System."}},
-        {"orbit", {"dwarfs", "on", "they are there in the real Solar System."}},
-        {"orbit", {"comets", "on", "they are there in the real Solar System."}},
-        {"orbit", {"belts", "on", "they are there in the real Solar System."}},
-        {"orbit", {"far", "on", "the nearest stars, the star clusters, the Voyager probes and the centre of the Galaxy are really there."}},
-        // 0.77.0 (outside review): was "real stars do not get brighter as you zoom out", but Full brightens too (orbit_view.cpp: 0.45 to 1 of the stars' level, Soft 0.16 to 0.76)
-        // 0.86.0: with True sunlight (the realistic Lighting above) the stars are on the camera's exposure (orbit/star_light.h); Full and Soft are then the same
-        {"orbit", {"sky", "Full", "with True sunlight each star is drawn by its true light on the camera's exposure, as the planets are. With Even lighting both choices squeeze the stars' brightness range and brighten as you zoom out, which real stars do not."}},
-        {"orbit", {"cons", "Off", "constellation lines and names are drawn by people; they are not in the sky."}},
-        // ---- Atom Lab (the keys and values of ui/atom_panel.cpp atomChoices; "picture" is the View selector). 0.86.0: the values from atom/atom_tools.h realisticValue ----
-        {"atom", {"picture", atom::realisticValue("picture"), "the electron is a cloud of probability in three dimensions. The Orbit picture is Bohr's 1913 model (electrons on circles), which quantum mechanics replaced."}},
-        {"atom", {"ostyle", atom::realisticValue("ostyle"), "a real nucleus, with quarks when you zoom in; Bohr 1913 is his simple drawing."}},
-        {"atom", {"scale", atom::realisticValue("scale"), "every atom at the same scale, so their sizes compare truly; Auto stretches each one to fill the picture."}},
-        {"atom", {"qstyle", atom::realisticValue("qstyle"), "a quark has no definite place inside a proton: Accurate draws where its quarks and gluons carry the momentum, fast ones near the centre, from measured data; Simple's balls and tubes are a model."}},   // 0.44
-        {"atom", {"detail", atom::realisticValue("detail"), "a real proton or neutron holds short-lived quark-antiquark pairs as well as its three valence quarks and the gluons."}},
-        {"atom", {"style", atom::realisticValue("style"), "the measured charge density of the nucleus (what electron scattering sees); Nucleons is a model."}},
-        {"atom", {"cstyle", atom::realisticValue("cstyle"), "the soft dots add up into a smooth density, as the probability is; Classic shows separate hard dots."}},
-        {"atom", {"cdens", atom::realisticValue("cdens"), "the most dots show the same probability most smoothly (the physics is the same)."}},
-        {"atom", {"phase", atom::realisticValue("phase"), "the wave has a phase, not only a sign; the wheel shows every phase, Sign shows only + and −."}},
-        {"atom", {"dirac", atom::realisticValue("dirac"), "real spectral lines are split by relativity (fine structure); the Dirac levels show it."}},
-        {"atom", {"elec", atom::realisticValue("elec"), "a real atom has all its electrons (the neutral atom, Dirac-Hartree-Fock); Hydrogen-like removes every electron but one."}},   // 0.40: was missing, so Most realistic left Electrons on One
-        {"atom", {"rscale", atom::realisticValue("rscale"), "every electron at its real distance from the nucleus; Shells enlarged spreads the inner shells out so they can be seen."}},   // 0.46 (review A1): was missing, so Most realistic left the shells enlarged
-        {"atom", {"hrel", atom::realisticValue("hrel"), "a real one-electron ion obeys Dirac's equation: its cloud is the Dirac state (n, l, j) at every Z, not the non-relativistic orbital."}},   // 0.49.3
-        {"atom", {"vdots", atom::realisticValue("vdots"), "each electron gets its true share of the dots, so the outer electron is 1 in Z of them; Easier to see draws it denser so it and its jumps stand out."}},   // 0.54.1
-        {"atom", {"sdots", atom::realisticValue("sdots"), "the Slice gives each electron its true share of the dots; Outer electron alone shows one electron's cloud without the core."}},   // 0.91.0
-        {"atom", {"mrel", atom::realisticValue("mrel"), "real electrons obey Dirac's equation: heavy atoms have smaller s and p shells and larger d and f than the non-relativistic picture."}},   // 0.41
-        // ---- Molecule Lab ----
-        {"molecule", {"style", "Density", "the electron density calculated from quantum mechanics (B3LYP); Ball-and-stick and Space-filling are models."}},
-        {"molecule", {"dots", "100,000", "the most dots show the same density most smoothly (the physics is the same)."}},
-        {"molecule", {"iso", "0.0016", "it matched measured molecular surfaces best in Alibakhshi and Schäfer’s 2024 study of 104 molecules, named under these buttons (1.6 % error)."}},
-        {"molecule", {"vibsize", "Real size", "the swing as big as it really is in the lowest vibrational level."}},
-        {"molecule", {"anharm", "on", "a real bond is not a perfect spring: its rungs close up as it stretches, and at the top it breaks."}},   // 0.53.1
-        // ---- Black Hole Lab (0.55.0) ----
-        // 0.77.0 (outside review): was "calculated exactly for a hole that does not spin". Since 0.55.9 a spinning hole's rays are closed forms too (blackhole/spin_sky.h kSpinFineFill, kerr_closed.h)
-        {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera held there would see (beside a spinning hole, one carried round with the turning space). Every light path is "
-                                     "calculated exactly from Einstein's equations, by closed formulas for a hole that spins or not, on a fine table of rays the picture is read from."}},
-        // 0.77.0 (outside review): the moving gas's clump and patches (0.79.0: streaks) are models (their place, size, strength and start are chosen, not measured): best left off
-        {"blackhole", {"gasclump", "off", "a model: its orbit, size, brightness and start are chosen, not measured. No telescope has seen the face of such a disc."}},
-        {"blackhole", {"gaspattern", "off", "a model from computer simulations: where the streaks are and their strength are chosen, not measured."}},
-        {"blackhole", {"look", "Real", "the disc as the standard thin-disc model gives it, with the colour and brightness shifts of the gas's speed and gravity; Film copies the film's stated choices, made for the story, not for accuracy."}},   // 0.55.3
-        {"blackhole", {"sky", "Our sky", "a real black hole has a sky of stars behind it; ours, seen from Earth, is the only whole sky we have a map of."}},
-        {"blackhole", {"skybeside", "True brightness", "the stars at their measured brightness on the disc's own scale: beside a bright disc they are far too faint to show, as they would be."}},   // 0.55.4
-        {"blackhole", {"light", "What an eye sees", "the picture an eye would see, its visible light; All light shows the light of all wavelengths, mostly ultraviolet here, which no eye sees."}},   // 0.58.0
-        {"blackhole", {"glare", "As an eye sees it", "a light this bright scatters inside the eye and veils its surroundings; drawn for an average eye by the CIE's glare equation."}},   // 0.55.4
-    };
-    return t;
-}
-
-}  // namespace
-
+// 0.96.0: the list itself is app/realistic.h (below the UI), so each lab's fresh settings come from the same rows
 const Pick* find(const char* lab, const std::string& key) {
-    for (const Row& r : table()) if (std::strcmp(r.lab, lab) == 0 && key == r.p.key) return &r.p;
-    return nullptr;
+    static thread_local Pick out;
+    const realistic::Pick* p = realistic::find(lab, key);
+    if (!p) return nullptr;
+    out = Pick{p->key, p->value.c_str(), p->why};
+    return &out;
 }
 void mark(const char* lab, const std::string& key, const std::string& value, int part) {
-    const Pick* p = find(lab, key);
+    const realistic::Pick* p = realistic::find(lab, key);
     if (p && value == p->value) sh::markReal(part, p->why);
 }
 
@@ -94,37 +32,26 @@ void markLabels(const char* lab, const std::string& key, const std::initializer_
 }
 void markCheck(const char* lab, const std::string& key) { mark(lab, key, "on", 1); mark(lab, key, "off", 0); }
 
-void applyOrbit(AppState& app) {
-    orbit::ViewSettings& s = app.set;
-    s.view3D = true; s.trueScale = true; s.realPlanets = true; s.relativity = true; s.exaggerateWobble = false; s.trueLight = true;
-    s.moons = s.dwarfs = s.comets = s.belts = s.far = true;
-    s.sky = orbit::SkyMode::Full; s.cons = orbit::ConsMode::Off;
-}
-void applyAtom(AppState& app) { atom::applyRealistic(app.atom); }   // 0.86.0: the values live in atom/atom_tools.h (tested there: no made-up picture, R5)
+void applyOrbit(AppState& app) { realistic::apply(app.set); }
+void applyAtom(AppState& app) { atom::applyRealistic(app.atom); }   // 0.86.0: the values live in atom/atom_tools.h (tested there: no made-up picture, R5); setParam remakes the cloud
 void applyMolecule(AppState& app) {
     molecule::MoleculeLab& L = app.molecule;
-    L.setStyle(molecule::Style::Realistic);
-    L.set.realDots = molecule::kRealDots[3];
-    L.set.realIso = 1;                         // kRealIso[1] = 0.0016
-    L.vibSize = 0;
-    L.vibAnharm = true;                        // 0.53.1 (shown in Ball-and-stick and Space-filling)
+    realistic::MoleculeChoices m{L.set, L.vibSize, L.vibAnharm};
+    realistic::apply(m);
+    L.setStyle(m.set.style);
+    L.set.realDots = m.set.realDots;
+    L.set.realIso = m.set.realIso;
+    L.vibSize = m.vibSize;
+    L.vibAnharm = m.vibAnharm;                 // 0.53.1 (shown in Ball-and-stick and Space-filling)
 }
-void applyBlackHole(AppState& app) {
-    app.blackhole.bend = true;
-    app.blackhole.skyOurs = true;
-    app.blackhole.look = blackhole::Look::Real;                          // 0.55.3
-    app.blackhole.trueSky = true;                                        // 0.55.4: the stars at their true brightness beside the disc
-    app.blackhole.glare = true;                                          //         and the eye's glare (both drawn only with the disc on)
-    app.blackhole.allLight = false;                                      // 0.58.0: what an eye sees
-    app.blackhole.gasClump = false;                                      // 0.77.0: the clump and the patches are models, not measured
-    app.blackhole.gasPattern = false;
-}
+void applyBlackHole(AppState& app) { realistic::apply(app.blackhole); }
 void applyLab(AppState& app) {
     if (app.lab == 0) applyOrbit(app);
     else if (app.lab == molecule::kLabIndex) applyMolecule(app);
     else if (app.lab == blackhole::kLabIndex) applyBlackHole(app);
     else applyAtom(app);
 }
+void applyAll(AppState& app) { applyOrbit(app); applyAtom(app); applyMolecule(app); applyBlackHole(app); }
 const char* buttonCaption() { return "Sets every choice closest to reality at once. A dot marks that choice in each setting (a ring by a box: best left unticked); point at it to see why."; }
 
 }  // namespace ui::real

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.95.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.96.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -213,6 +213,12 @@ target_include_directories(blackhole_core PUBLIC src)
 target_link_libraries(blackhole_core PUBLIC orbit_core)   # the night sky's projection (orbit/sky.h skyDirection) and the constants of orbit/units.h
 target_compile_options(blackhole_core PRIVATE ${PL_WARNINGS})
 
+# 0.96.0: the "Most realistic" list (app/realistic.h), below the UI: the labs' fresh settings, the button and the marks read it (the owner, 28 Nov 2026)
+add_library(realistic_core STATIC src/app/realistic.cpp)
+target_include_directories(realistic_core PUBLIC src)
+target_link_libraries(realistic_core PUBLIC orbit_core atom_core molecule_core blackhole_core)
+target_compile_options(realistic_core PRIVATE ${PL_WARNINGS})
+
 # 0.26: the picture maps (assets/maps/*.jpg: planet surfaces and the Gaia sky, sources in assets/maps/README.md), built into the program as the fonts are,
 # and read with stb_image (third_party/stb_image.h, v2.30, public domain / MIT)
 file(GLOB PL_MAP_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/maps/*.jpg)
@@ -291,7 +297,7 @@ if(PL_BUILD_TESTS)
   target_link_libraries(molecule_xyz PRIVATE molecule_core)
   add_executable(app_tests tests/test_app.cpp)
   target_include_directories(app_tests PRIVATE tests)
-  target_link_libraries(app_tests PRIVATE app_core atom_core blackhole_core)   # (0.55.0: the About page's Black Hole Lab numbers against presets.h)
+  target_link_libraries(app_tests PRIVATE app_core atom_core blackhole_core realistic_core)   # (0.55.0: the About page's Black Hole Lab numbers against presets.h)
   target_compile_options(app_tests PRIVATE ${PL_WARNINGS})
   target_compile_definitions(app_tests PRIVATE PL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")   # 0.14 stage 2: the bundled font and its licence are checked
   add_test(NAME app_settings COMMAND app_tests)
@@ -580,7 +586,7 @@ if(PL_BUILD_APP)
     src/ui/benchmark.cpp
     src/ui/sysinfo.cpp
     src/ui/power.cpp)
-  target_link_libraries(PhysicsLab PRIVATE analysis_core orbit_core atom_core app_core molecule_core blackhole_core maps_core imgui SDL3::SDL3-static)
+  target_link_libraries(PhysicsLab PRIVATE analysis_core orbit_core atom_core app_core molecule_core blackhole_core realistic_core maps_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   target_include_directories(PhysicsLab PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
   if(WIN32)
@@ -662,7 +668,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 900 COST 340)
       # ui_blackhole_sky: the Black Hole Lab's sky per pixel and the card's light paths against the double-precision reference, and no white-outs against the processor's settled picture
       add_test(NAME ui_blackhole_sky COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole_sky
-               check_blackhole.py:sky check_blackhole.py:precisioncard check_blackhole.py:whiteout)
+               check_blackhole.py:sky check_blackhole.py:skyfull check_blackhole.py:precisioncard check_blackhole.py:whiteout)
       set_tests_properties(ui_blackhole_sky PROPERTIES TIMEOUT 900 COST 371)
     endif()
   endif()

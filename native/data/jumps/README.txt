@@ -41,3 +41,5 @@ sources/  measured data outside NIST ASD and the method papers, saved as receive
                                        Comput. Phys. Commun. 238, 232 (2019), arXiv:1805.11265 (abstract page).
 Not reachable on 9 Nov 2026 (not used): Weber et al., Phys. Rev. Research 4, 043053 (2022) (einsteinium levels; HTTP 403); the 2026 EPJ D paper
 "Progress toward identifying atomic transitions in lawrencium" (doi 10.1140/epjd/s10053-026-01198-9; HTTP 429, then a stub page).
+steck/steck_sodium_d_line_2.3.4.extract.txt  (0.96.0) the lines tests/test_zeeman.inc reads from D. A. Steck, "Sodium D Line Data" rev. 2.3.4 (its text is in the private
+    sources repo at data/jumps/steck/): the orbital g-factor g_L = 1 - m_e/m_nuc, the Lande g_J with g_L and g_S, and Table 6's g values of sodium.

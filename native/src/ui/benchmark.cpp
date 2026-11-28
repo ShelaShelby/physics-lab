@@ -1,3 +1,5 @@
+#include "app/realistic.h"
+#include "ui/realest.h"
 #include "ui/benchmark.h"
 #include "orbit/sunspots.h"
 #include "orbit/sun_photo.h"
@@ -169,6 +171,18 @@ void orbitTrueLightStars(AppState& app) {
     for (const orbit::Body& b : app.sys.bodies) if (b.id == id) R = b.radius;
     const double W = app.canvasW > 0 ? app.canvasW : 1280, H = app.canvasH > 0 ? app.canvasH : 800;
     const double cap = R > 0 ? std::log10(orbit::focalFor(H) / (1.5 * R) * 34 * units::kSimLength / std::min(W, H)) : kNeptuneZoom;
+    setZoom(app, zoomOr(cap - 1e-9));               // (PL_BENCH_ZOOM: another zoom, for the trials)
+}
+// 0.96.0: orbit.jupiter_limb: Jupiter from the closest zoom the camera may come (1.5 radii, as orbitTrueLightStars), True sunlight: the ball fills the picture and
+// every pixel goes through Jupiter's own law (render/giant_photometry.h)
+void orbitJupiterLimb(AppState& app) {
+    orbitClose(app, "Jupiter", 3.4);
+    app.set.trueLight = true;
+    const int id = bodyId(app, "Jupiter");
+    double R = 0;
+    for (const orbit::Body& b : app.sys.bodies) if (b.id == id) R = b.radius;
+    const double W = app.canvasW > 0 ? app.canvasW : 1280, H = app.canvasH > 0 ? app.canvasH : 800;
+    const double cap = R > 0 ? std::log10(orbit::focalFor(H) / (1.5 * R) * 34 * units::kSimLength / std::min(W, H)) : 3.4;
     setZoom(app, zoomOr(cap - 1e-9));               // (PL_BENCH_ZOOM: another zoom, for the trials)
 }
 // 0.75.0: Saturn from the closest zoom the camera may come (1.5 radii: orbit_view.cpp zoomCapFor), every extra on, time stopped (orbit.flyby)
@@ -758,6 +772,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitTrueLight: orbitTrueLight(app); b.scenePhase = 0; break;   // 0.85.0
         case K::OrbitSunEdge: orbitSunClose(app); b.scenePhase = 0; break;
         case K::OrbitSunSurface: orbitSunSurface(app); break;   // 0.94.0
+        case K::OrbitJupiterLimb: orbitJupiterLimb(app); break;   // 0.96.0
         case K::OrbitOortRegion: orbitOortRegion(app); break;
         case K::OrbitTrueLightStars: orbitTrueLightStars(app); break;   // 0.86.0
         case K::OrbitPorkchop:                                               // 0.92.0: the Data panel open on the transfer planner, Earth to Mars, the largest grid
@@ -852,7 +867,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
         case K::OrbitPorkchop:                                                   // 0.92.0: the departure window dragged back and forth (a triangle wave over 5.7 s), a new grid each frame
             celestialBenchPorkchop(app, 0.35 * u);
             break;
-        case K::OrbitOortRegion: case K::OrbitTrueLightStars: case K::OrbitSunSurface:
+        case K::OrbitOortRegion: case K::OrbitTrueLightStars: case K::OrbitSunSurface: case K::OrbitJupiterLimb:
         case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds: case K::OrbitCometTails:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
@@ -1117,7 +1132,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
     switch (t.kind) {
         case K::Atom: return atom::benchShortText(app.atom);
         case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitEarthClouds: case K::OrbitSky: case K::OrbitFlyby: case K::OrbitCometTails:
-        case K::OrbitTrueLight: case K::OrbitSunEdge: case K::OrbitOortRegion: case K::OrbitTrueLightStars: case K::OrbitSunSurface:
+        case K::OrbitTrueLight: case K::OrbitSunEdge: case K::OrbitOortRegion: case K::OrbitTrueLightStars: case K::OrbitSunSurface: case K::OrbitJupiterLimb:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
             return z;
         case K::OrbitAlphaCen:
@@ -1190,7 +1205,7 @@ struct WaitDef { const char* id; const char* name; const char* what; int tries =
 int waitTries(int w);
 const std::vector<WaitDef>& waitDefs() {
     static const std::vector<WaitDef> v = {
-        {"response.lab_switch.orbit_atom", "From the Orbit Lab to the Atom Lab", "each lab at its defaults; the time to the new lab's first finished picture"},
+        {"response.lab_switch.orbit_atom", "From the Orbit Lab to the Atom Lab", "each lab at its defaults, the Most realistic settings a first start opens with (0.96.0); the time to the new lab's first finished picture (the Molecule Lab's: its Density cloud and surface made)"},
         {"response.lab_switch.atom_molecule", "From the Atom Lab to the Molecule Lab", ""},
         {"response.lab_switch.molecule_blackhole", "From the Molecule Lab to the Black Hole Lab", ""},
         {"response.lab_switch.blackhole_orbit", "From the Black Hole Lab to the Orbit Lab", ""},
@@ -1244,6 +1259,18 @@ void labsToDefaults(AppState& app) {
     app.blackhole = blackhole::settingsDefaults();
 }
 
+// 0.96.0: every lab at the settings a first start opens with, the Most realistic list (app/realistic.h; the owner, 28 Nov 2026). The lab switches (the
+// first-start waits) start from it. The scenes and the rests keep labsToDefaults' bare defaults: their numbers stay comparable with earlier runs.
+void labsToRealistic(AppState& app) {
+    labsToDefaults(app);
+    app.set = realistic::freshOrbit();
+    app.atom.p = realistic::freshAtom();
+    app.atom.restart();
+    app.atom.hold = true;
+    real::applyMolecule(app);
+    app.blackhole = realistic::freshBlackHole();
+}
+
 void waitPrepare(AppState& app, int w, int t) {
     const std::string id = waitDefs()[std::size_t(w)].id;
     atom::AtomLab& L = app.atom;
@@ -1252,6 +1279,7 @@ void waitPrepare(AppState& app, int w, int t) {
         L.setParam("Z", double(Z)); L.restart(); L.hold = true;
     };
     static const char* const mols[4] = {"H2O", "C6H6", "CH3OH", "C2H4"};
+    if (id.rfind("response.lab_switch.", 0) == 0) labsToRealistic(app);
     if (id.rfind("response.lab_switch.", 0) == 0) app.lab = id == "response.lab_switch.orbit_atom" ? 0 : id == "response.lab_switch.atom_molecule" ? 1 : id == "response.lab_switch.molecule_blackhole" ? molecule::kLabIndex : blackhole::kLabIndex;
     else if (id == "response.atom_element") { app.lab = 1; atomAll(6, "Ultra"); }
     else if (id == "response.atom_density") { app.lab = 1; atomAll(atom::heaviestAll(), "Normal"); }

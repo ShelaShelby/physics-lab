@@ -57,9 +57,6 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "blackhole.dolly_spin", BenchKind::BlackHoleDolly, -1, "Black Hole Lab, the wheel moving the camera in and out at spin 0.9",
             "A feeding hole spinning at 0.9, the disc on, Real: the wheel turned a notch every 0.06 s, the camera moving in eased steps with the glide from 1000 "
             "GM/c\xC2\xB2 (the farthest) to 2.2 (the closest) and back, over and over. Every step needs new light paths.");
-        add(true, "blackhole.over_poles", BenchKind::BlackHoleOverPoles, -1, "Black Hole Lab, dragged over both poles at the top spin",
-            "A feeding hole at spin 0.99 (the control's top), the disc on, Real, the starting view: dragged up and down from the pitch limit near one pole to the "
-            "other and back (0.01 to pi - 0.01 rad from the axis) at 1.2 rad a second, through the disc's plane.");
         add(true, "blackhole.everything", BenchKind::BlackHoleEverything, -1, "Black Hole Lab, every heavy option at once, turning",
             "A feeding hole at spin 0.99, Real, the disc out to 2000 GM/c\xC2\xB2, the streaks and the clump at the fastest rate (10^7), the camera at 2.2 GM/c\xC2\xB2 "
             "(the closest) with a 360\xC2\xB0 view (the widest), the eye's glare (heavier here than All light, REPORT 0.83.0), turning 0.15 rad a second.");
@@ -102,6 +99,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "orbit.sun_surface", BenchKind::OrbitSunSurface, -1, "Orbit Lab, the Sun's surface at the closest zoom, turning, time running",
             "The Sun in 3D at true scale from the closest the camera may come (1.5 radii), 10 May 2024 (7 groups filled, region 3664 the darkest), the "
             "granulation in every pixel (NASA's photo held off), time at 1 minute a second, the camera turning 0.5 rad a second as a drag does.");
+        // 0.96.0 (outside review of 28 Nov 2026, part C): Jupiter's own edge and phase law in every pixel of its ball (kPlanetFS uGiant, render/giant_photometry.h)
+        add(true, "orbit.jupiter_limb", BenchKind::OrbitJupiterLimb, -1, "Orbit Lab, Jupiter filling the view with its own edge and phase law, turning",
+            "Jupiter followed in 3D at true scale from the closest the camera may come (1.5 radii: the ball fills the picture, every pixel through the law), True "
+            "sunlight, time stopped: the camera turns 0.5 rad a second and tilts, so the phase angle and the law's factors change every frame.");
         // ---- All scenes: the scenes that run with room to spare (0.83.0: moved from the Hard list, ids and set-ups the same), then the easy ones and the old processor twins ----
         // 0.91.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026: 1 % low 684.4 fps in bench_0.85.2, at least 1.5 x 255 Hz) to make room for atom.slice_dense
         // 0.92.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.porkchop and its wait: 1 % low 524.3 and 406.2 fps in bench_0.85.2, over 1.5 x 255 Hz
@@ -110,6 +111,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         // 0.95.0: moved here from the Hard list to make room for blackhole.thick_spin within the owner's 4.9 minutes: the same hole, distance and view (circled
         // and dragged through the plane, so its camera stops at the disc's surface too)
         // 0.84.0: the held camera's own shift drawn ray by ray (blackhole.extreme reaches the same view but drags the spin for 40 % of its time and turns by setting the angles)
+        // 0.96.0: moved here from the Hard list by the owner's rule (DECISIONS.md, 24 Nov 2026) to make room for orbit.jupiter_limb: 1 % low 639.3 fps in bench_0.85.2, over 1.5 x 255 Hz
+        add(false, "blackhole.over_poles", BenchKind::BlackHoleOverPoles, -1, "Black Hole Lab, dragged over both poles at the top spin",
+            "A feeding hole at spin 0.99 (the control's top), the disc on, Real, the starting view: dragged up and down from the pitch limit near one pole to the "
+            "other and back (0.01 to pi - 0.01 rad from the axis) at 1.2 rad a second, through the disc's plane.");
         add(false, "blackhole.close_spin", BenchKind::BlackHoleCloseSpin, -1, "Black Hole Lab, circling at the closest distance and the top spin",
             "A feeding hole at spin 0.99 (the top), the disc on, Real, the camera at 2.2 GM/c\xC2\xB2 (the closest) with a 360\xC2\xB0 view (the widest): dragged round 2 rad "
             "a second and up or down for 0.6 s, then let go to glide 0.6 s, over and over. Each ray's colour and light carry the camera's own shift.");

@@ -19,7 +19,8 @@
 //   - Lines. Pure rotation J -> J + 1 (only a molecule with a permanent dipole: HCl, HCN): nu = F(J+1) - F(J) in v = 0. HCl's fundamental band v = 0 -> 1:
 //     R(J) = nu0 + F_1(J+1) - F_0(J), P(J) = nu0 + F_1(J-1) - F_0(J), nu0 = G(1) - G(0) from the lab's measured ladder (vibration.h). A line's relative strength:
 //     the lower level's share times the Honl-London factor over 2J+1 (R and pure rotation: (J+1)/(2J+1), P: J/(2J+1)), scaled so the strongest line of the shown
-//     spectrum is 1. That is the transition's own strength, not the absorbance (which also has the factor nu (1 - exp(-hc nu / kT))); sticks, no line widths, no
+//     spectrum is 1. That is the transition's own strength, not the absorbance (which also has the factor nu (1 - exp(-hc nu / kT)): 0.96.0, Measure::Absorbance
+//     below, HITRAN's spectral line intensity); sticks, no line widths, no
 //     Herman-Wallis correction (the strengths' change with m), no hot bands (v = 1 -> 2), no terms of the series beyond footnotes 29 and 30 (the page names more
 //     in Rank, Rao et al. 1965, not saved). Against Rank et al. 1962's 31 measured H35Cl lines the worst gap is in REPORT 0.54.1 and tests/test_rotation.cpp.
 //   - Isotopes of HCl: H35Cl measured; H37Cl, D35Cl, D37Cl scaled from it by the Born-Oppenheimer mass rules of Dunham's Y_kl ~ mu^-(k/2 + l): we ~ mu^-1/2,
@@ -96,14 +97,21 @@ struct Line {
     int m = 0;                 // R: J + 1, P: -J, pure rotation: J + 1
     int vLo = 0, vHi = 0, jLo = 0, jHi = 0;
     double nu = 0;             // cm^-1
-    double strength = 0;       // relative (the strongest line of the list is 1)
+    double strength = 0;       // relative (the strongest line of the list is 1); with Measure::Absorbance the relative absorbance
     int iso = 0;               // which isotope (natural mix: both chlorines)
     std::string name() const;  // "R(3)", "P(2)", "J 2 → 3"
 };
 enum class Spectrum { PureRotation = 0, Fundamental = 1 };
 bool hasSpectrum(const Rotor& r, Spectrum s);      // pure rotation: a dipole; fundamental: HCl only
+// 0.96.0 (outside review of 28 Nov 2026, part D): what a line's height is. Strength: the transition's own (the lower level's share times the Honl-London factor
+// over 2J+1). Absorbance: HITRAN's spectral line intensity, S = I_a A / (8 pi c nu^2) g' exp(-c2 E''/T) (1 - exp(-c2 nu/T)) / Q with the electric dipole's
+// g'A = 64 pi^4 nu^3 g'' R / (3h) (hitran.org/docs/definitions-and-units, saved: data/molecules/hitran/hitran_definitions_2026-11-28.html), which is the
+// strength times nu (1 - exp(-c2 nu / T)): the integrated absorption, the area of the line in a measured spectrum. Both scaled so the strongest line is 1.
+enum class Measure { Strength = 0, Absorbance = 1 };
+extern const double kC2;                           // the second radiation constant hc/k, cm K (CODATA 2022; HITRAN: 1.4387769)
+double absorbanceFactor(double nuCm, double T);    // nu (1 - exp(-c2 nu / T)); T <= 0: nu
 // The lines of one molecule (iso: kNatural gives both chlorines, each weighted by its abundance), sorted by wavenumber; lines below minRel of the strongest are left out
-std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel = 1e-3);
+std::vector<Line> lines(const std::string& id, int iso, Spectrum s, double T, double minRel = 1e-3, Measure meas = Measure::Strength);
 
 // H35Cl's measured fundamental lines (Rank, Eastman, Rao & Wiggins, J. Opt. Soc. Am. 52, 1 (1962), Table III, observed): R(0..15), P(1..15)
 struct MeasuredLine { char branch; int J; double nu; };

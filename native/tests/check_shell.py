@@ -159,7 +159,9 @@ def part_gpuhelper(binary, work):
 
 # 0.76.0: ui_smoke, the short check every job runs: the app starts, each of the four labs opens and draws a frame that is not empty with zero Vulkan validation
 # errors, the app ends with exit code 0.
-SMOKE_LABS = {"orbit": {}, "atom": {"PL_ATOM": "1"}, "molecule": {"PL_MOLECULE": "H2O"}, "blackhole": {"PL_BLACKHOLE": "1"}}
+# 0.96.0: the Atom Lab opens in Most realistic (the owner, 28 Nov 2026), so at the Fixed scale hydrogen is a cloud of a few pixels (1.3 % of the samples off the
+# background, under the 8 % rule; uranium too). The smoke zooms in 16 times (zoom 1.2), as a user would. The rule is the same.
+SMOKE_LABS = {"orbit": {}, "atom": {"PL_ATOM": "1", "PL_ATOM_SET": "zoom=1.2"}, "molecule": {"PL_MOLECULE": "H2O"}, "blackhole": {"PL_BLACKHOLE": "1"}}
 SMOKE_LABS = {k: dict(v, PL_VK_VALIDATION="1") for k, v in SMOKE_LABS.items()}   # (the validation layers on: each lab's drawing with zero errors)
 
 def part_smoke(binary, work):

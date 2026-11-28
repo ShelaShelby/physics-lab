@@ -392,6 +392,8 @@ uniform vec3 uSpace;         // 0.50: the colour of empty space (sRGB); a lit ba
 uniform int uClouds;         // 0.77.0: 1 = the map's alpha is Earth's cloud cover (render/shading.h cloudsOver)
 uniform float uAlbedoK;      // 0.77.0: the map's brightness factor (render/planet_maps.h mapAlbedo; 1 for a plain colour)
 uniform int uLunar;          // 0.50: 1 = the Moon: McEwen's lunar photometric function instead of Lambert (render/shading.h mcewenLunar)
+uniform int uGiant;          // 0.96.0: 1 = Jupiter (lit times uGiantP per channel), 2 = Saturn (the Barkstrom law, uGiantP = A, B, scale); render/giant_photometry.h
+uniform vec3 uGiantP;
 uniform float uLightK;       // 0.85.0 (R1): the sunlight factor (1 au / d)^2 times the exposure (orbit/true_light.h); 1 = even lighting
 uniform vec3 uLimb[6];       // 0.85.0 (R2): the Sun's edge, Neckel & Labs 1994: coefficient n of mu^n for r, g, b, each channel summing to 1 (render/sun_limb.h)
 uniform vec3 uSunC;          // 0.85.0 (uMode 4): the Sun's disc centre, linear sRGB, brightest channel 1
@@ -575,6 +577,11 @@ void main() {
         float ci = dot(n, L), ce = n.z, phi = degrees(acos(clamp(L.z, -1.0, 1.0)));
         float g = exp(-phi / 60.0);
         lit = (ci > 0.0 && ce > 0.0) ? (1.0 - g) * ci + g * 2.0 * ci / (ci + ce) : 0.0;
+    }
+    if (uGiant == 1) c *= uGiantP;   // 0.96.0: Jupiter, I/F = mu0 P_c(alpha) (Dyudina et al. 2016 Eq. 1; P_c from Mayorga et al. 2016): render/giant_photometry.h giantLit
+    if (uGiant == 2) {               // 0.96.0: Saturn, the Barkstrom law (Dyudina et al. 2016 Eq. 4, Table 3 red), times (2/3) / Ag(0): giantLit
+        float mu0 = dot(n, L), mu = n.z;
+        lit = (mu0 > 0.0 && mu > 0.0) ? uGiantP.z * uGiantP.x * pow(mu0, uGiantP.y) * pow(mu, uGiantP.y - 1.0) / pow(mu + mu0, uGiantP.y) : 0.0;
     }
     if (uRingN > 0 && lit > 0.0) {   // the rings' shadow: the ray to the Sun crosses the ring plane (the equator, b.z = 0) through a band of optical depth tau
         vec3 Lp = uK * L;

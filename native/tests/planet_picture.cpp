@@ -17,6 +17,7 @@
 #include <vector>
 #include "render/ellipsoid.h"
 #include "render/planet_maps.h"
+#include "render/giant_photometry.h"
 #include "render/shading.h"
 #include "render/sun_limb.h"
 #include "render/sun_surface.h"
@@ -158,10 +159,17 @@ int main(int argc, char** argv) {
     const double sunAng = f[27];
     const double* ring = f.data() + 28;
     const double* occ = ring + 3 * nring;
+    double ringMin = 1e9, ringMax = 0;
+    for (int q = 0; q < nring; q++) { ringMin = std::min(ringMin, ring[3 * q]); ringMax = std::max(ringMax, ring[3 * q + 1]); }
     const double space[3] = {f[23], f[24], f[25]};
     double L[3] = {f[4], -f[5], f[6]};
     const double ll = std::sqrt(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]);
     for (double& c : L) c /= ll;
+    // 0.96.0: Jupiter's and Saturn's laws, from the same L the shader gets (Renderer2D::planet: giantLight of the PLPLANET light, given as floats to the shader)
+    const double lLen = std::sqrt(f[4] * f[4] + f[5] * f[5] + f[6] * f[6]);
+    const render::GiantLight giant = (map == render::Map::Jupiter || map == render::Map::Saturn) ? render::giantLight(map == render::Map::Jupiter ? 1 : 2, lLen > 0 ? f[6] / lLen : 1.0) : render::GiantLight{};
+    render::GiantLight giantF = giant;
+    for (double& p : giantF.p) p = static_cast<float>(p);
     render::MapImage im;
     if (!render::decodeMap(map, im)) { std::fprintf(stderr, "no map %d\n", static_cast<int>(map)); return 1; }
     const auto lv = mips(map, im);
@@ -182,6 +190,15 @@ int main(int argc, char** argv) {
             render::EllipsoidHit hit, hx, hy;
             uvAt(px, py, u, v, hit);
             if (!hit.hit || hit.d > 0.95) continue;
+            if (nring > 0) {   // 0.96.0: a pixel where the rings pass in front of the ball is not compared (the rings are drawn over the ball by their own shader, not by this twin)
+                double D[3];
+                for (int q = 0; q < 3; q++) D[q] = K[3 * q + 2];   // the line of sight towards the viewer, in the body's frame (kPlanetFS: uK * (0, 0, 1))
+                if (std::fabs(D[2]) > 1e-9) {
+                    const double t = -hit.b[2] / D[2];
+                    const double rho = std::hypot(hit.b[0] + t * D[0], hit.b[1] + t * D[1]), m = 2.0 / R;   // (2 pixels of margin for the rings' smooth edges)
+                    if (t > 0 && rho >= ringMin - m && rho <= ringMax + m) continue;
+                }
+            }
             uvAt(px + 1, py, ux, vx, hx);
             uvAt(px, py + 1, uy, vy, hy);
             double dux = ux - u, duy = uy - u;
@@ -200,6 +217,8 @@ int main(int argc, char** argv) {
                 const double phi = std::acos(std::clamp(L[2], -1.0, 1.0)) * 180 / 3.14159265358979323846;
                 lit = render::mcewenLunar(hit.n[0] * L[0] + hit.n[1] * L[1] + hit.n[2] * L[2], hit.n[2], phi);
             }
+            if (giant.kind == 1) for (int q = 0; q < 3; q++) c[q] *= giantF.p[q];   // 0.96.0: kPlanetFS's uGiant step (the shader's float numbers)
+            if (giant.kind == 2) lit = render::giantLit(giantF, 0, hit.n[0] * L[0] + hit.n[1] * L[1] + hit.n[2] * L[2], hit.n[2]);
             if (nring > 0 && lit > 0) {   // the rings' shadow (kPlanetFS: the ray to the Sun through the ring plane, b.z = 0, exp(-tau / mu0))
                 double Lp[3];
                 for (int q = 0; q < 3; q++) Lp[q] = K[3 * q] * L[0] + K[3 * q + 1] * L[1] + K[3 * q + 2] * L[2];

@@ -721,8 +721,11 @@ static void testZeemanTables() {
         std::vector<double> x, y;
         for (std::size_t r = 0; r < t.rows(); r++) { x.push_back(t.cols[std::size_t(p.x)].v[r]); y.push_back(t.cols[std::size_t(p.y)].v[r]); }
         const FitResult f = fitModel(p.model, x, y);
-        check("Zeeman e/m: the slope is CODATA's mu_B/hc 46.686 447 719 m^-1 T^-1", f.ok && rel(f.p[1], 46.686447719, 1e-9));
-        check("Zeeman e/m: 4 pi c x slope = CODATA's e/m_e 1.758 820 008 38e11 C/kg", f.ok && rel(4 * atom::kPi * atom::kC * f.p[1], 1.75882000838e11, 1e-9));
+        // 0.96.0: the slope carries the orbital g-factor g_L = 1 - m_e / m_nuc of cadmium-114 (zeeman.h orbitalG, Steck Eq. (19)); until 0.95.0 it was CODATA's mu_B/hc itself
+        const double gL = atom::zeeman::orbitalG(48, atom::defaultN(48));
+        check("Zeeman e/m: g_L of cadmium is 1 - m_e / m_nuc (about 1 - 4.8e-6)", std::fabs(1 - gL - 1 / atom::nuclearMassMe(48, atom::defaultN(48))) < 1e-15 && 1 - gL > 4e-6 && 1 - gL < 6e-6);
+        check("Zeeman e/m: the slope is g_L times CODATA's mu_B/hc 46.686 447 719 m^-1 T^-1", f.ok && rel(f.p[1], gL * 46.686447719, 1e-9));
+        check("Zeeman e/m: 4 pi c x slope / g_L = CODATA's e/m_e 1.758 820 008 38e11 C/kg", f.ok && rel(4 * atom::kPi * atom::kC * f.p[1] / gL, 1.75882000838e11, 1e-9));
         check("Zeeman e/m: the line goes through 0", f.ok && std::fabs(f.p[0]) < 1e-9);
     }
 }

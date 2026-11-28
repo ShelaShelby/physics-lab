@@ -22,6 +22,8 @@
 
 #include "app/app_data.h"
 #include "app/prefs.h"
+#include "app/realistic.h"
+#include "atom/atom_tools.h"
 #include "app/shot.h"
 #include "app/fps.h"
 #include "app/bench.h"
@@ -1144,17 +1146,17 @@ static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
     // 0.83.0 (on purpose, the owner's rule of 24 Nov 2026): 23 scenes whose 1 % low in his 0.82.0 run was at least 1.5 x 255 Hz moved to All scenes; 9 new hard
     // scenes (atom.bfield_drag dropped: a field change remakes nothing heavy). REPORT 0.83.0.
-    checkTrue("benchmark lists (on purpose, 0.95.0: blackhole.thick_spin in, blackhole.close_spin to All scenes, 29 and 74; 0.94.0: orbit.sun_surface in, blackhole.moving_gas to All scenes by the 1.5 x refresh rule, 29 and 73; 0.93.0: atom.stark_drag in, blackhole.edge_on to All scenes by the 1.5 x refresh rule, 29 and 72; 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 74 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 74 && int(v.size()) == 74);
+    checkTrue("benchmark lists (on purpose, 0.96.0: orbit.jupiter_limb in, blackhole.over_poles to All scenes by the 1.5 x refresh rule, 29 and 75; 0.95.0: blackhole.thick_spin in, blackhole.close_spin to All scenes, 29 and 74; 0.94.0: orbit.sun_surface in, blackhole.moving_gas to All scenes by the 1.5 x refresh rule, 29 and 73; 0.93.0: atom.stark_drag in, blackhole.edge_on to All scenes by the 1.5 x refresh rule, 29 and 72; 0.92.0: orbit.porkchop in, orbit.sun_edge and orbit.oort_region to All scenes by the 1.5 x refresh rule, 29 and 71; 0.91.0: atom.slice_dense in, molecule.live_hot to All scenes, 30 and 70; 0.86.0: orbit.true_light_stars in place of blackhole.film_soft; 0.85.0: orbit.true_light, orbit.sun_edge, orbit.oort_region added to the Hard list; 0.84.0: 27 and 66): 29 Hard scenes first, 75 in All", app::kBenchHardScenes == 29 && app::kBenchAllScenes == 75 && int(v.size()) == 75);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[74] = {
+    static const char* const ids[75] = {
         // the Hard list (0.83.0): the 17 kept, in the owner's order, then the new ones a to j of the job (f dropped)
         "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.circle_spin",   // 0.94.0: blackhole.moving_gas to All scenes
         "atom.nucleus_zoom", "atom.nucleon", "molecule.vib_density", "atom.slice_dirac_drag", "atom.jump_all", "ui.settings_open", "atom.side_all_glow", "orbit.real_fast",
         "orbit.heaviest", "atom.all_enlarged",
-        "blackhole.dolly_spin", "blackhole.over_poles", "blackhole.everything", "orbit.saturn_real_fast", "atom.emit_all", "atom.slice_dense",   // 0.91.0: atom.slice_dense in molecule.live_hot's place (moved to All scenes by the 1.5 x rule)
+        "blackhole.dolly_spin", "blackhole.everything", "orbit.saturn_real_fast", "atom.emit_all", "atom.slice_dense",   // 0.96.0: blackhole.over_poles to All scenes. 0.91.0: atom.slice_dense in molecule.live_hot's place (moved to All scenes by the 1.5 x rule)
         "atom.stark_drag",                                                       // 0.93.0 (blackhole.edge_on went to All scenes by the 1.5 x rule)
         "ui.settings_over_blackhole", "ui.resize_blackhole",
         "blackhole.thick_spin",                                                  // 0.95.0 (in blackhole.close_spin's place)
@@ -1162,6 +1164,8 @@ static void testBenchSceneNumbers() {
         "orbit.true_light_stars",                                                // 0.86.0 (in place of blackhole.film_soft, removed with its drawing: R6)
         "orbit.porkchop",                                                        // 0.92.0
         "orbit.sun_surface",                                                     // 0.94.0 (blackhole.moving_gas went to All scenes by the 1.5 x rule)
+        "orbit.jupiter_limb",                                                    // 0.96.0 (blackhole.over_poles went to All scenes by the 1.5 x rule)
+        "blackhole.over_poles",                                                  // 0.96.0: moved to All scenes (1 % low 639.3 fps in bench_0.85.2)
         "blackhole.close_spin",                                                  // 0.95.0: moved to All scenes (blackhole.thick_spin has its view, at the disc's surface)
         "blackhole.moving_gas",                                                  // 0.94.0: moved to All scenes (1 % low 650.9 fps in bench_0.85.2)
         "blackhole.edge_on",                                                     // 0.93.0: moved to All scenes (1 % low 435.8 fps in bench_0.85.2)
@@ -2484,7 +2488,58 @@ static void testKeptGroups() {
     checkTrue("the groups' epoch changes exactly when the cloud or the Phase colours changed (new dots alone keep it)", wrongEpoch == 0 && kept > 0 && made > 2);
 }
 
+// 0.96.0 (the owner, 28 Nov 2026): every lab opens in its Most realistic settings. The fresh settings of each lab equal the list (app/realistic.h), key by
+// key; a saved file without a key keeps the list's value; the one-time switch is remembered. On 0.95.0 the Orbit Lab opened in 2D, Simple, Even light and
+// the wobble enlarged, the Atom Lab at Auto scale, + Gluons, High, Sign, Auto, Easier to see, the Molecule Lab in Ball-and-stick at 60,000 dots, 0.002, 3 times
+// bigger, harmonic, and the Black Hole Lab with the sky Shown and the clump and the streaks on.
+static void testRealisticDefaults() {
+    const orbit::ViewSettings o = realistic::freshOrbit();
+    const atom::AtomParams a = realistic::freshAtom();
+    const realistic::MoleculeChoices m = realistic::freshMolecule();
+    const blackhole::Settings b = realistic::freshBlackHole();
+    int rows[4] = {0, 0, 0, 0};
+    for (const realistic::Row& r : realistic::table()) {
+        const std::string lab = r.lab, key = r.p.key;
+        const std::string got = lab == "orbit" ? realistic::get(o, key) : lab == "atom" ? realistic::get(a, key) : lab == "molecule" ? realistic::get(m, key) : realistic::get(b, key);
+        checkStr("0.96.0: a fresh " + lab + " lab has " + key + " at its Most realistic value", got, r.p.value);
+        rows[lab == "orbit" ? 0 : lab == "atom" ? 1 : lab == "molecule" ? 2 : 3]++;
+    }
+    checkTrue("0.96.0: the list has rows for all four labs (13 Orbit, 16 Atom, 5 Molecule, 8 Black Hole)", rows[0] == 13 && rows[1] == 16 && rows[2] == 5 && rows[3] == 8);
+    // the Atom Lab's own list (atom/atom_tools.h, what its Most realistic button presses) is the same list
+    for (const char* k : {"picture", "ostyle", "scale", "qstyle", "detail", "style", "cstyle", "cdens", "phase", "dirac", "elec", "rscale", "mrel", "hrel", "vdots", "sdots"})
+        checkStr(std::string("0.96.0: the Atom Lab's realisticValue(") + k + ") is the list's", atom::realisticValue(k) ? atom::realisticValue(k) : "(none)", realistic::find("atom", k) ? realistic::find("atom", k)->value : "(missing)");
+    // the specific values the owner named (28 Nov 2026)
+    checkTrue("0.96.0: Orbit opens in 3D, Real physics, True sunlight, the Sun's wobble at its real size", o.view3D && o.realPlanets && o.trueLight && !o.exaggerateWobble);
+    checkTrue("0.96.0: Molecule opens in Density, vibrations at real size, the anharmonic bond", m.set.style == molecule::Style::Realistic && m.vibSize == 0 && m.vibAnharm);
+    checkTrue("0.96.0: Black Hole opens with the sky beside the disc on the disc's exposure", b.trueSky);
+    // set and get agree for every value a row names, and an unknown value changes nothing
+    { orbit::ViewSettings v; checkTrue("0.96.0: an unknown value is refused and changes nothing", !realistic::set(v, "view", "4D") && !v.view3D); }
+    // a saved file without the key keeps the list's value (the loaders take the fresh settings as their base)
+    {
+        std::map<std::string, std::string> in;
+        blackhole::saveSettings(b, in);
+        in.erase("skybeside"); in.erase("gasclump"); in.erase("gaspattern");
+        const blackhole::Settings l = blackhole::loadSettings(in, realistic::freshBlackHole());
+        checkTrue("0.96.0: a Black Hole file without skybeside, gasclump, gaspattern keeps True brightness and both models off", l.trueSky && !l.gasClump && !l.gasPattern);
+        checkTrue("0.96.0: a Black Hole file with nothing in it opens as the list", blackhole::loadSettings({}, realistic::freshBlackHole()) == realistic::freshBlackHole());
+    }
+    {
+        const molecule::Settings l = molecule::loadSettings("v1 mol=CO2", realistic::freshMolecule().set);
+        checkTrue("0.96.0: a Molecule line without style, rdots, riso keeps Density, 100,000, 0.0016", l.style == molecule::Style::Realistic && l.realDots == 100000 && l.realIso == 1 && l.mol == molecule::findId("CO2"));
+        const molecule::Settings e = molecule::loadSettings("", realistic::freshMolecule().set);
+        checkTrue("0.96.0: no Molecule line opens as the list", e.style == molecule::Style::Realistic && e.realDots == 100000 && e.realIso == 1);
+        checkTrue("0.96.0: the bare loader keeps its old base (Ball-and-stick)", molecule::loadSettings("").style == molecule::Style::BallStick);
+    }
+    // the one-time switch: remembered in the file, absent from a file of 0.95.0
+    {
+        app::Prefs p; p.realest = realistic::kSwitchVersion;
+        checkStr("0.96.0: the one-time switch is written and read back", app::loadPrefs(app::savePrefs(p)).realest, "0.96.0");
+        checkStr("0.96.0: a file without it (0.95.0) has not had the switch", app::loadPrefs("theme=paper\n").realest, "");
+    }
+}
+
 int main() {
+    testRealisticDefaults();
     testLookContrast();
     testRoundTrip();
     testBadLines();

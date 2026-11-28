@@ -4614,6 +4614,7 @@ int main() {
     testZeemanLimits();
     testZeemanStrengths();
     testZeemanMeasuredG();
+    testZeemanReducedMass();
     testZeemanOneElectron();
     // guard 0.00920 = the worst MEASURED difference of the sampled <r> from the exact value at the full ring, 0.00910 (96 seeded labs: 12 orbitals x 8 seeds; 0.37, independent dots), + 1 %; 96 of 96
     // were within 1 %, mean 0.0025. (0.36's Metropolis chain: worst 0.17702, 95 of 96 within 10 %, mean 0.0311; its guard was 0.1788.)

@@ -38,7 +38,8 @@ std::string savePrefs(const Prefs& p) {
       << "motion=" << clean(p.motion) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
     if (!p.shellPanels.empty()) o << "shellpanels=" << clean(p.shellPanels) << "\n";
     if (p.fps == "on") o << "fps=on\n";                                                   // 0.22 stage 6: only written when on
-    if (p.facts != "on") o << "facts=" << clean(p.facts) << "\n";                       // 0.15 stage 4: only written when it is off, so a file from stage 3 is unchanged
+    if (p.facts != "on") o << "facts=" << clean(p.facts) << "\n";
+    if (!p.realest.empty()) o << "realest=" << clean(p.realest) << "\n";       // 0.96.0: only once the switch was done                       // 0.15 stage 4: only written when it is off, so a file from stage 3 is unchanged
     if (!p.recent.empty()) o << "recent=" << clean(p.recent) << "\n";
     if (p.atomMore) o << "atomMore=" << (*p.atomMore ? 1 : 0) << "\n";
     if (p.window) o << "window=" << p.window->w << "," << p.window->h << "," << (p.window->hasPos ? std::to_string(p.window->x) : "-") << ","
@@ -86,6 +87,7 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "molecule") p.molecule = v;
         else if (k == "fps") { if (v == "on" || v == "off") p.fps = v; }
         else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
+        else if (k == "realest") p.realest = v;
         else if (k == "recent") p.recent = v;
         else if (k == "gpupaths") p.gpuPaths = v;
         else if (k == "gpusky") p.gpuSky = v;                                  // 0.56.0                              // 0.55.7 (read by app/gpu_guard.h, which checks it)

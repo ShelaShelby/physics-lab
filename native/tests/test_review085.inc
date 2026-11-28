@@ -98,10 +98,12 @@ static void testReview085() {
         check(orbit::lightFactor(30.07, 1.0, false) == 1.0, "R1: even lighting (the non-realistic choice) leaves every body at 1");
         check(orbit::exposureReadout("Neptune", 30.07, "Earth", 1.0) == "Exposure set for Neptune (30.1 au). Earth gets 900 times more sunlight.", "R1: the readout, Neptune followed: " + orbit::exposureReadout("Neptune", 30.07, "Earth", 1.0));
         check(orbit::exposureReadout("Earth", 1.0, "Neptune", 30.07).find("Neptune gets 900 times less sunlight") != std::string::npos, "R1: the readout, Earth followed");
-        // (d) Most realistic sets the true dimming (ui/realest.cpp is in the app, not in this test program: its text)
-        const std::string re = readFile(kSrc + "/ui/realest.cpp");
-        const std::size_t ap = re.find("void applyOrbit(");
-        check(ap != std::string::npos && re.find("s.trueLight = true", ap) < re.find("}", ap), "R1 (d): Most realistic (applyOrbit) sets True sunlight");
+        // (d) Most realistic sets the true dimming (0.96.0: the list moved from ui/realest.cpp to app/realistic.cpp, which this test program does not link: its text.
+        // Corrected on purpose, the same two facts: the list's row, and that its value sets s.trueLight. REPORT 0.96.0)
+        const std::string re = readFile(kSrc + "/app/realistic.cpp");
+        const std::size_t ap = re.find("bool set(orbit::ViewSettings& v");
+        check(ap != std::string::npos && re.find("if (k == \"light\") return pick2(x, \"True sunlight\", \"Even (not realistic)\", v.trueLight);", ap) < re.find("\n}", ap),
+              "R1 (d): Most realistic (the list's set) sets True sunlight");
         check(re.find("{\"orbit\", {\"light\", \"True sunlight\"") != std::string::npos, "R1: the realistic choice's dot marks True sunlight");
         // the shaders carry the factor: the planet, the lit ball (the light's length) and the rings
         check(std::string(render::kPlanetFS).find("* sunF * uLightK") != std::string::npos, "R1: kPlanetFS multiplies the light by uLightK");

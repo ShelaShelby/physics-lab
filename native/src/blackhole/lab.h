@@ -153,7 +153,8 @@ void stepDistance(Settings& s, CameraMotion& m, double notches, bool reduceMotio
 void stopMotion(CameraMotion& m);          // Reset view, Escape, the benchmark: no coasting, no eased step (the view stays where it is)
 void cameraTick(Settings& s, CameraMotion& m, double dt, bool reduceMotion);
 bool cameraMoving(const CameraMotion& m);  // coasting or in an eased step
-Settings loadSettings(const std::map<std::string, std::string>& in);    // unknown keys and bad values are ignored
+Settings loadSettings(const std::map<std::string, std::string>& in);
+Settings loadSettings(const std::map<std::string, std::string>& in, const Settings& base);   // 0.96.0: a key the file does not have keeps base's value (the app: app/realistic.h freshBlackHole)    // unknown keys and bad values are ignored
 
 // The log sliders: position 0..1 <-> value
 double distToSlider(double dist);

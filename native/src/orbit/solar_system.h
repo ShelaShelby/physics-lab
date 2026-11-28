@@ -115,15 +115,18 @@ public:
     // The real Moon (0.10.4 stage 2; Real planet physics only). In Real the N-body body "Earth" is the Earth-Moon barycentre (EMB: its GM is Earth + Moon, its start state JPL's EMB). So Earth
     // itself is drawn at EMB - g * mu / (1 + mu) and the Moon is at EMB + g / (1 + mu), where g is the ELP2000-82B vector from Earth to the Moon (orbit/moon_elp.h) and mu = GM_Moon / GM_Earth
     // (JPL astrodynamic parameters, orbit/nbody.h). Earth's velocity (and so its orbit numbers on the card) stays the barycentre's. Earth's trail follows the barycentre.
-    // Outside 1800 to 1 Jan 2100 12:00 TDB realMoon() is false: the Moon falls back to its Kepler ellipse, Earth to the barycentre.
+    // Outside 1800 to 1 Jan 2100 12:00 TDB realMoon() is false. Since 0.96.0 the Moon there is on a precessing ellipse fitted to ELP2000-82B (moon_elp.h moonGeocentricEllipse),
+    // within 2.4 deg of ELP's direction over 1800-2100: moonPlaced() is true, moonGeocentric() and the rest give that ellipse, and Earth is drawn off the barycentre as inside.
+    // Eclipses are drawn only where realMoon() is true (the ellipse is too rough for them). Before 0.96.0 the Moon there started at a made-up angle and Earth was at the barycentre.
     // 0.46.3: the Moon's place (ELP2000-82B) is the real one in Simple too (it does not depend on the planet physics). 0.52.1: in Simple too Earth is drawn off the barycentre
     // (the JPL elements' Earth-Moon barycentre), EMB - g mu / (1 + mu), the shift kept out of the leapfrog's state (shiftEarthSimple).
-    bool realMoon() const { return moonValid_; }
+    bool realMoon() const { return moonValid_ && moonElp_; }
+    bool moonPlaced() const { return moonValid_; }         // 0.96.0: the Moon's vector is set, from ELP (realMoon()) or from the fitted ellipse
     bool earthOffBary() const { return moonValid_ && !moonFast_; }   // (0.52.1: Simple too)
-    Vec3 moonGeocentric() const { return moonGeo_; }       // ELP vector Earth -> Moon at the date shown, m (valid when realMoon())
-    Vec3 moonPosition() const;                             // the Moon's true place, from the Sun's centre (m), valid when realMoon()
+    Vec3 moonGeocentric() const { return moonGeo_; }       // vector Earth -> Moon at the date shown, m (valid when moonPlaced(): ELP when realMoon(), else the ellipse)
+    Vec3 moonPosition() const;                             // the Moon's place from the Sun's centre (m), valid when moonPlaced()
     Vec3 embPosition() const { return emb_; }              // the Earth-Moon barycentre from the Sun's centre (m; 0.52.1: Simple too)
-    Vec3 moonOrbitNormal() const { return moonNormal_; }   // unit normal of the Moon's instantaneous orbit plane (geocentric position x velocity, ELP), valid when realMoon()
+    Vec3 moonOrbitNormal() const { return moonNormal_; }   // unit normal of the Moon's instantaneous orbit plane (geocentric position x velocity), valid when moonPlaced()
     // True while the Time speed makes the Moon go round more than kMoonFastLaps times a real second (the drawing then lights the whole orbit instead of drawing the Moon, as for every
     // moon); Earth is then held at the barycentre, because its 4,300-5,000 km wobble at that rate would only flicker. Set by step().
     bool moonFast() const { return moonFast_; }
@@ -146,8 +149,9 @@ private:
     bool gr_ = false;
     Vec3 sunBary_;                         // Real: the Sun's position from the barycentre (m), as the N-body clock has it
     Vec3 emb_, moonGeo_, moonNormal_;      // Real: the Earth-Moon barycentre (m, from the Sun), the ELP vector Earth -> Moon (m), the Moon's orbit-plane normal
-    bool moonValid_ = false;               // the date is inside the span of ELP2000-82B (0.46.3: in Simple too)
-    void updateMoon(double jdTDB);         // ELP2000-82B at jdTDB: moonValid_, moonGeo_, moonNormal_
+    bool moonValid_ = false;               // moonGeo_ is set (0.46.3: in Simple too; 0.96.0: at any date)
+    bool moonElp_ = false;                 // 0.96.0: the date is inside the span of ELP2000-82B (else the fitted ellipse)
+    void updateMoon(double jdTDB);         // ELP2000-82B (or outside its span the fitted ellipse) at jdTDB: moonValid_, moonElp_, moonGeo_, moonNormal_
     bool moonFast_ = false;
     void shiftEarthSimple(double jdTDB);
     NBodyClock nb_;

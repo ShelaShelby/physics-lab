@@ -98,7 +98,7 @@ void linear(Term& t, const std::vector<double>& measured) {
     t.gLin.clear(); t.gMeasured.clear();
     for (std::size_t k = 0; k < t.J2.size(); k++) {
         const bool m = k < measured.size() && std::isfinite(measured[k]);
-        t.gLin.push_back(m ? measured[k] : landeLS(t.L, t.S2, t.J2[k], gsCodata()));
+        t.gLin.push_back(m ? measured[k] : landeLS(t.L, t.S2, t.J2[k], gsCodata(), t.gL));
         t.gMeasured.push_back(m);
     }
 }
@@ -118,11 +118,12 @@ void decide(Term& t, const std::vector<double>& measured) {
 
 double lorentzCmPerT() { return kMuBJT / (kPlanckJs * kC) / 100; }
 double gsCodata() { return -kGe; }
-double landeLS(int L, int S2, int J2, double gs) {
+double landeLS(int L, int S2, int J2, double gs, double gL) {
     if (J2 == 0) return 0;
     const double J = J2 / 2.0, S = S2 / 2.0;
-    return 1 + (gs - 1) * (J * (J + 1) + S * (S + 1) - L * (L + 1.0)) / (2 * J * (J + 1));
+    return gL + (gs - gL) * (J * (J + 1) + S * (S + 1) - L * (L + 1.0)) / (2 * J * (J + 1));   // = gL (orbital share) + gs (spin share): the two shares add to 1
 }
+double orbitalG(int Z, int N) { return 1 - 1 / nuclearMassMe(Z, N); }
 
 bool parseLS(const std::string& t, int& L, int& S2) {
     std::size_t i = 0;
@@ -153,7 +154,7 @@ std::string measuredGRef(int Z, int n, int l, int J2, const std::string& conf, c
 
 Term termOneElectron(int Z, int N, int n, int l) {
     Term t;
-    t.L = l; t.S2 = 1;
+    t.L = l; t.S2 = 1; t.gL = orbitalG(Z, N);
     t.name = orbName(n, l) + " " + termName(l, 1, l % 2 == 1);
     for (int J2 = std::abs(2 * l - 1); J2 <= 2 * l + 1; J2 += 2) { t.J2.push_back(J2); t.cm.push_back(diracQedEV(Z, N, n, l, J2) * cmPerEV()); }
     decide(t, {});
@@ -161,7 +162,7 @@ Term termOneElectron(int Z, int N, int n, int l) {
 }
 Term termAlkali(int Z, int n, int l) {
     Term t;
-    t.L = l; t.S2 = 1;
+    t.L = l; t.S2 = 1; t.gL = orbitalG(Z, defaultN(Z));
     t.name = orbName(n, l) + " " + termName(l, 1, l % 2 == 1);
     std::vector<AlkLevel> lv = alkaliLevels(Z);
     std::sort(lv.begin(), lv.end(), [](const AlkLevel& a, const AlkLevel& b) { return a.j2 < b.j2; });
@@ -176,6 +177,7 @@ Term termLevel(int Z, int level) {
     const std::vector<JLevel>& lv = jumpLevels(Z);
     if (level < 0 || level >= static_cast<int>(lv.size())) { t.mode = Mode::None; t.why = "No such level."; return t; }
     const JLevel& me = lv[std::size_t(level)];
+    t.gL = orbitalG(Z, defaultN(Z));
     t.name = confPretty(me.conf) + " " + termPretty(me.term);
     if (!parseLS(me.term, t.L, t.S2)) {
         t.mode = Mode::None;
@@ -216,12 +218,12 @@ std::vector<Sub> sublevels(const Term& t, double B, double gs) {
             for (std::size_t j = 0; j < n; j++) {
                 const int Ja = t.J2[idx[i]], Jb = t.J2[idx[j]];
                 if (t.mode == Mode::Linear) {   // its own g: NIST's measured one, else the LS value with this g_s
-                    const double g = t.gMeasured[idx[i]] ? t.gLin[idx[i]] : landeLS(t.L, t.S2, Ja, gs);
+                    const double g = t.gMeasured[idx[i]] ? t.gLin[idx[i]] : landeLS(t.L, t.S2, Ja, gs, t.gL);
                     if (i == j) H[i][i] = t.cm[idx[i]] - mean + b * g * (M2 / 2.0);
                     continue;
                 }
-                H[i][j] = b * (gs - 1) * szElement(t.L, t.S2, Ja, Jb, M2);
-                if (i == j) H[i][i] += t.cm[idx[i]] - mean + b * (M2 / 2.0);
+                H[i][j] = b * (gs - t.gL) * szElement(t.L, t.S2, Ja, Jb, M2);   // 0.96.0: gL J_z + (gs - gL) S_z
+                if (i == j) H[i][i] += t.cm[idx[i]] - mean + b * t.gL * (M2 / 2.0);
             }
         std::vector<double> w;
         jacobi(H, w, V);
@@ -427,7 +429,7 @@ std::string regimeText(const Line& L, double B) {
 std::string usedText(const Line& L) {
     const auto one = [](const Term& t, int J2) {
         if (t.mode == Mode::None) return t.why;
-        if (t.mode == Mode::Matrix) return t.name + ": all its J levels in one matrix (Landé g " + fmt("%.5f", landeLS(t.L, t.S2, J2, gsCodata())) + " in weak fields).";
+        if (t.mode == Mode::Matrix) return t.name + ": all its J levels in one matrix (Landé g " + fmt("%.5f", landeLS(t.L, t.S2, J2, gsCodata(), t.gL)) + " in weak fields).";
         const std::size_t k = indexOf(t, J2);
         if (J2 == 0) return t.why + " J = 0: one state, not shifted.";
         const double g = k < t.gLin.size() ? t.gLin[k] : kNaN;
@@ -445,7 +447,8 @@ double hyperfineFieldT(int Z, int N, int kind) {
 }
 std::string limitsText(int Z, int N, int kind) {
     std::string s = "Limits: one LS term at a time (no mixing with other terms; in heavy atoms such as mercury the terms are mixed, hence the gap between the LS g and the measured g); "
-                    "no diamagnetic (B²) term; the nucleus's own magnetic moment left out; no hyperfine structure: ";
+                    "no diamagnetic (B²) term; the nucleus's own magnetic moment left out; the nucleus's motion only to lowest order (the orbit's g is 1 − mₑ/M, M the nucleus's mass); "
+                    "no other small corrections to g (bound-state QED, relativistic terms); no hyperfine structure: ";
     const double Bh = hyperfineFieldT(Z, N, kind);
     if (std::isfinite(Bh)) {
         const double dE = hfs::splittingEV(Z, N, 1, 0, 1);

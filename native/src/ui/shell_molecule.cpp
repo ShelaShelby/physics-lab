@@ -662,7 +662,13 @@ void moleculeRotationCard(AppState& app, Panel& p) {
     }
     const rot::Spectrum sp = specOf(L, r);
     const int isoSel = mo.id == "HCl" ? L.rotIso : 0;
-    const std::vector<rot::Line> lines = rot::lines(mo.id, isoSel, sp, L.liveK, 2e-3);
+    {   // 0.96.0 (part D): the lines' heights, the transition's strength or the absorbance (rotation.h Measure)
+        int ms = L.rotMeasure;
+        const std::vector<std::string> mn{"molecule.rot.measure.strength", "molecule.rot.measure.absorbance"};
+        if (pSegmented(p, "molecule.rot.measure", {"Line strength", "Absorbance"}, &ms, &mn)) L.rotMeasure = ms;
+    }
+    const rot::Measure meas = L.rotMeasure == 1 ? rot::Measure::Absorbance : rot::Measure::Strength;
+    const std::vector<rot::Line> lines = rot::lines(mo.id, isoSel, sp, L.liveK, 2e-3, meas);
     pHeading(p, sp == rot::Spectrum::Fundamental ? "Fundamental band v 0 → 1 (cm⁻¹)" : "Pure rotation, J → J+1 (cm⁻¹)");
     if (lines.empty()) { pCaption(p, "No line is strong enough to draw at this temperature."); return; }
     double lo = lines.front().nu, hi = lines.back().nu;
@@ -714,7 +720,7 @@ void moleculeRotationCard(AppState& app, Panel& p) {
         else std::snprintf(b, sizeof b, "%s  ·  %.3f cm⁻¹  ·  from v = 0, J = %d to v = 1, J = %d", l.name().c_str(), l.nu, l.jLo, l.jHi);
         std::string t = b;
         if (mo.id == "HCl") t += std::string("  ·  ") + rot::isoName(l.iso);
-        std::snprintf(b, sizeof b, "  ·  strength %.2f", l.strength);
+        std::snprintf(b, sizeof b, meas == rot::Measure::Absorbance ? "  ·  absorbance %.2f" : "  ·  strength %.2f", l.strength);
         t += b;
         if (mo.id == "HCl" && l.iso == rot::kH35Cl && sp == rot::Spectrum::Fundamental) {
             const double meas = rot::measuredHClLine(l.branch, l.J);
@@ -724,14 +730,19 @@ void moleculeRotationCard(AppState& app, Panel& p) {
     } else pCaption(p, "Point at a line (or tap it) for its name, wavenumber and levels.");
     if (shellLogOn()) {   // (for the automatic checks: the strongest line's place on screen, so a check can point at it)
         std::size_t st = 0; for (std::size_t i = 0; i < lines.size(); i++) if (lines[i].strength > lines[st].strength) st = i;
-        char a[200]; std::snprintf(a, sizeof a, "rotcard lines=%zu hover=%s strong=%s x=%.1f y=%.1f", lines.size(), act >= 0 ? lines[std::size_t(act)].name().c_str() : "-", lines[st].name().c_str(), X(lines[st].nu), base - 6);
+        const auto nm = [](std::string s) { std::replace(s.begin(), s.end(), ' ', '_'); return s; };   // (0.96.0: "J 3 → 4" as one word in the note)
+        char a[220]; std::snprintf(a, sizeof a, "rotcard lines=%zu hover=%s strong=%s x=%.1f y=%.1f meas=%d", lines.size(), act >= 0 ? nm(lines[std::size_t(act)].name()).c_str() : "-", nm(lines[st].name()).c_str(), X(lines[st].nu), base - 6, L.rotMeasure);
         auditNote(a);
     }
     std::string cap;
     if (sp == rot::Spectrum::Fundamental) cap = "R branch (J → J+1) right of the band origin (dashed), P branch (J → J−1) left; no line at the origin: J must change by one. ";
     else cap = "Each line is a jump J → J+1; the lines are 2B apart. ";
     if (mo.id == "HCl" && L.rotIso == rot::kNatural) cap += "Darker: H³⁵Cl; lighter: H³⁷Cl. ";
-    cap += "Heights: the lower level's share × the Hönl–London factor. Limits: Rotation guide.";
+    if (meas == rot::Measure::Absorbance)   // 0.96.0 (part D)
+        cap += "Heights: the absorbance, the line's area in a measured spectrum: the lower level's share × the Hönl–London factor × ν(1 − e^(−hcν/kT)) "
+               "(HITRAN's line intensity; the last factor takes off the light the upper level gives back). Sticks: no line widths, no Herman–Wallis change of the "
+               "strengths along the band, no hot bands (v = 1 → 2). Limits: Rotation guide.";
+    else cap += "Heights: the lower level's share × the Hönl–London factor (the transition's own strength; Absorbance also weighs each line by ν(1 − e^(−hcν/kT))). Limits: Rotation guide.";
     pCaption(p, cap, true);
 }
 

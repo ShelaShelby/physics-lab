@@ -1,0 +1,23 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/hitran/hitran_definitions_2026-11-28.html
+# Reference: HITRANonline, "Documentation: Units and definitions" (Harvard-Smithsonian Center for Astrophysics), the page as received
+# URL: https://hitran.org/docs/definitions-and-units/
+# Date read: 2026-11-28
+# sha256 of the original: 1599c1ef8da87cc4646bd2979826658ea1ac83d7d270fa02a07dad1bcb5375fc
+# Place in the original: the constants (c_2), the spectral line intensity S_ij (its equation and the words after it), the electric-dipole Einstein A
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: native/tests/test_rotation.cpp (the absorbance's factor); code comments: src/molecule/rotation.h, rotation.cpp
+#--- begin c_2
+$c_2 = 1.4387769 \; \mathrm{cm\,K}$
+#--- end
+#--- begin the spectral line intensity
+\begin{equation}
+S_{ij} = I_\mathrm{a}\frac{A_{ji}}{8 \pi c \nu_{ij}^2}\frac{g'e^{-c_2E''/T}\left( 1 - e^{-c_2\nu_{ij}/T} \right)}{Q(T)} \label{eqn-line-intensity}
+\end{equation}
+
+where $A_{ji}\;(\mathrm{s^{-1}})$ is the Einstein coefficient for spontaneous emission, $g'$ is the upper state statistical weight, and $E''=E_i$ is the lower state energy ($\mathrm{cm^{-1}}$) (see discussion of these parameters below).</p>
+#--- end
+#--- begin electric dipole A
+<h4>Electric dipole</h4>$$g'A_{ji} = \frac{64\pi^4}{3h}\nu_{ij}^3g''\mathfrak{R}_{ij}$$
+#--- end

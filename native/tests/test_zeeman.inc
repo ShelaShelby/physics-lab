@@ -56,7 +56,9 @@ static void testZeemanWeakPatterns() {
         if (!r) continue;
         std::vector<int> q; std::vector<double> s;
         const std::vector<double> sl = weakSlopes(r->line, z::gsCodata(), &q, &s);
-        checkTrue(std::string("Zeeman: ") + atom::name(Z) + " singlet line: the normal triplet -1, 0, +1 (Lorentz units)", sameSet(sl, {-1, 0, 1}, 1e-12));
+        // 0.96.0: with the orbital g-factor g_L = 1 - m_e / m_nuc (testZeemanReducedMass) the triplet is -g_L, 0, +g_L (until 0.95.0 exactly -1, 0, +1)
+        const double gLs = r->line.up.gL;
+        checkTrue(std::string("Zeeman: ") + atom::name(Z) + " singlet line: the normal triplet -g_L, 0, +g_L (Lorentz units)", sameSet(sl, {-gLs, 0, gLs}, 1e-12) && gLs == z::orbitalG(Z, atom::defaultN(Z)));
         // each component carries a third of the line (3j-squared of J = 1 -> 0); across the field sigma : pi : sigma = 1 : 2 : 1
         bool third = s.size() == 3;
         for (const double x : s) third = third && std::fabs(x - 1.0 / 3) < 1e-12;
@@ -71,25 +73,36 @@ static void testZeemanWeakPatterns() {
         // B = 1 T exactly one Lorentz unit for every B (no fine-structure partner: linear at every field)
         const std::vector<z::Component> c50 = z::components(r->line, 50.0, z::gsCodata());
         bool lin = c50.size() == 3;
-        for (const z::Component& k : c50) lin = lin && std::fabs(k.shiftCm - k.q * 50.0 * z::lorentzCmPerT()) < 1e-12;
+        for (const z::Component& k : c50) lin = lin && std::fabs(k.shiftCm - k.q * gLs * 50.0 * z::lorentzCmPerT()) < 1e-12;
         checkTrue("Zeeman: the singlet triplet stays linear at 50 T", lin);
     }
-    // (2) sodium D lines with g_s = 2 exactly: D1 at +-2/3, +-4/3 and D2 at +-1/3, +-1, +-5/3 (Bethe & Salpeter; any textbook's anomalous Zeeman pattern)
+    // (2) sodium D lines with g_s = 2 exactly: D1 at +-2/3, +-4/3 and D2 at +-1/3, +-1, +-5/3 (Bethe & Salpeter; any textbook's anomalous Zeeman pattern) when g_L = 1.
+    // 0.96.0: with g_L = 1 - m_e / m_nuc the same pattern is built from g(2P1/2) = 4 g_L / 3 - g_s / 3, g(2P3/2) = 2 g_L / 3 + g_s / 3, g(2S1/2) = g_s (Steck Eq. (21))
     const std::vector<z::LineRef> na = z::labLines(11, atom::defaultN(11), 1);
     const z::LineRef* d1 = zt::findLine(na, "3p ²P°", "3s ²S", 1, 1);
     const z::LineRef* d2 = zt::findLine(na, "3p ²P°", "3s ²S", 3, 1);
     checkTrue("Zeeman: sodium D1 and D2 are lab lines", d1 && d2);
     if (d1 && d2) {
         std::vector<int> q1, q2; std::vector<double> s1, s2;
-        checkTrue("Zeeman: Na D1, g_s = 2: 4 components at +-2/3, +-4/3", sameSet(weakSlopes(d1->line, 2.0, &q1, &s1), {-4. / 3, -2. / 3, 2. / 3, 4. / 3}, 1e-9));
-        checkTrue("Zeeman: Na D2, g_s = 2: 6 components at +-1/3, +-1, +-5/3", sameSet(weakSlopes(d2->line, 2.0, &q2, &s2), {-5. / 3, -1, -1. / 3, 1. / 3, 1, 5. / 3}, 1e-9));
+        const double gLn = d1->line.up.gL;
+        const auto pattern = [](double gL, bool d2line) {   // g_s = 2
+            const double gu = d2line ? 2 * gL / 3 + 2.0 / 3 : 4 * gL / 3 - 2.0 / 3;
+            std::vector<double> t;
+            const int Ju = d2line ? 3 : 1;
+            for (int Mu = -Ju; Mu <= Ju; Mu += 2) for (int Ml = -1; Ml <= 1; Ml += 2) if (std::abs(Mu - Ml) <= 2) t.push_back(gu * Mu / 2.0 - 2.0 * Ml / 2.0);
+            return t;
+        };
+        checkTrue("Zeeman: Na D1/D2 pattern with g_L = 1 is the textbook +-2/3, +-4/3 and +-1/3, +-1, +-5/3", sameSet(pattern(1.0, false), {-4. / 3, -2. / 3, 2. / 3, 4. / 3}, 1e-12) &&
+                  sameSet(pattern(1.0, true), {-5. / 3, -1, -1. / 3, 1. / 3, 1, 5. / 3}, 1e-12));
+        checkTrue("Zeeman: Na D1, g_s = 2: the 4 components with g_L of 23Na", sameSet(weakSlopes(d1->line, 2.0, &q1, &s1), pattern(gLn, false), 1e-9));
+        checkTrue("Zeeman: Na D2, g_s = 2: the 6 components with g_L of 23Na", sameSet(weakSlopes(d2->line, 2.0, &q2, &s2), pattern(gLn, true), 1e-9));
         // the strengths: D1 pi : sigma = 1 : 2 (each pi 1/6, each sigma 1/3 of the line); D2 sigma(3/2 -> 1/2) : pi : sigma(1/2 -> -1/2) = 3 : 2 : 1 (twelfths: 3, 2, 1)
         std::vector<double> want1, want2;
         for (std::size_t i = 0; i < q1.size(); i++) want1.push_back(q1[i] == 0 ? 1.0 / 6 : 1.0 / 3);
         checkTrue("Zeeman: Na D1 strengths pi 1/6, sigma 1/3", sameSet(s1, want1, 1e-9));
         checkTrue("Zeeman: Na D2 strengths 3/12, 2/12, 1/12 (each twice)", sameSet(s2, {3. / 12, 3. / 12, 2. / 12, 2. / 12, 1. / 12, 1. / 12}, 1e-9));
-        // with CODATA's g_s the shifts are g_u M_u - g_l M_l with Lande's formula: g(2P1/2) = 1 - (g_s - 1)/3, g(2P3/2) = 1 + (g_s - 1)/3, g(2S1/2) = g_s
-        const double gs = z::gsCodata(), gP1 = 1 - (gs - 1) / 3, gP3 = 1 + (gs - 1) / 3, gS = gs;
+        // with CODATA's g_s the shifts are g_u M_u - g_l M_l with Lande's formula: g(2P1/2) = g_L - (g_s - g_L)/3, g(2P3/2) = g_L + (g_s - g_L)/3, g(2S1/2) = g_s (0.96.0: g_L; until 0.95.0 g_L = 1)
+        const double gs = z::gsCodata(), gP1 = gLn - (gs - gLn) / 3, gP3 = gLn + (gs - gLn) / 3, gS = gs;
         std::vector<double> e1, e2;
         for (int Mu = -1; Mu <= 1; Mu += 2) for (int Ml = -1; Ml <= 1; Ml += 2) e1.push_back(gP1 * Mu / 2.0 - gS * Ml / 2.0);
         for (int Mu = -3; Mu <= 3; Mu += 2) for (int Ml = -1; Ml <= 1; Ml += 2) if (std::abs(Mu - Ml) <= 2) e2.push_back(gP3 * Mu / 2.0 - gS * Ml / 2.0);
@@ -104,7 +117,7 @@ static void testZeemanWeakPatterns() {
     }
 }
 
-// the closed form of a 2P doublet (L = 1, S = 1/2) for every M, built here from H = E_c + zeta L.S + mu_B B (L_z + g_s S_z) in the uncoupled basis |M_L, M_S>
+// the closed form of a 2P doublet (L = 1, S = 1/2) for every M, built here from H = E_c + zeta L.S + mu_B B (g_L L_z + g_s S_z) in the uncoupled basis |M_L, M_S> (0.96.0: g_L, until 0.95.0 1)
 // (Bethe & Salpeter; the matrix of L.S from L_z S_z + (L+ S- + L- S+)/2): E_c = (2 E(3/2) + E(1/2)) / 3, zeta = 2 (E(3/2) - E(1/2)) / 3.
 // M = +-3/2: one state, E_c + zeta/2 + b (+-1 +- g_s/2). M = +-1/2: the 2x2 block of |M -+ 1/2... > solved by the quadratic formula.
 static void testZeemanDoublet() {
@@ -113,17 +126,17 @@ static void testZeemanDoublet() {
         const z::Term t = z::termAlkali(Z, Z == 3 ? 2 : 3, 1);
         checkTrue(std::string("Zeeman: ") + atom::name(Z) + " p term has a matrix", t.mode == z::Mode::Matrix && t.J2.size() == 2);
         if (t.mode != z::Mode::Matrix) continue;
-        const double E1 = t.cm[0], E3 = t.cm[1], Ec = (2 * E3 + E1) / 3, zeta = 2 * (E3 - E1) / 3, gs = z::gsCodata();
+        const double E1 = t.cm[0], E3 = t.cm[1], Ec = (2 * E3 + E1) / 3, zeta = 2 * (E3 - E1) / 3, gs = z::gsCodata(), gL = t.gL;
         double worst = 0;
         for (const double B : {0.0, 0.01, 0.3, 1.0, 3.0, 10.0, 100.0}) {
             const double b = B * z::lorentzCmPerT();
             std::map<int, std::vector<double>> want;
-            want[3] = {Ec + zeta / 2 + b * (1 + gs / 2)};
-            want[-3] = {Ec + zeta / 2 - b * (1 + gs / 2)};
+            want[3] = {Ec + zeta / 2 + b * (gL + gs / 2)};
+            want[-3] = {Ec + zeta / 2 - b * (gL + gs / 2)};
             for (const int M2 : {1, -1}) {
                 // states: a = |M_L = (M2 - 1)/2 ... with M_S = +1/2|, c = |M_L = (M2 + 1)/2, M_S = -1/2|
                 const double MLa = (M2 - 1) / 2.0, MLc = (M2 + 1) / 2.0;
-                const double Haa = Ec + zeta * MLa * 0.5 + b * (MLa + gs * 0.5), Hcc = Ec - zeta * MLc * 0.5 + b * (MLc - gs * 0.5);
+                const double Haa = Ec + zeta * MLa * 0.5 + b * (gL * MLa + gs * 0.5), Hcc = Ec - zeta * MLc * 0.5 + b * (gL * MLc - gs * 0.5);
                 // <c| L+ S- |a> /2: L+ |M_L> = sqrt(2 - M_L (M_L + 1)) |M_L + 1> for L = 1; S- |+1/2> = |-1/2>
                 const double Hac = zeta * 0.5 * std::sqrt(2 - MLa * (MLa + 1));
                 const double m = (Haa + Hcc) / 2, d = std::sqrt((Haa - Hcc) * (Haa - Hcc) / 4 + Hac * Hac);
@@ -141,7 +154,7 @@ static void testZeemanDoublet() {
     }
 }
 
-// weak-limit slopes = Lande, strong-limit slopes = M_L + g_s M_S, the trace of each M block linear in B, no crossing of equal M
+// weak-limit slopes = Lande, strong-limit slopes = g_L M_L + g_s M_S, the trace of each M block linear in B, no crossing of equal M (0.96.0: g_L = 1 - m_e / m_nuc of the term; until 0.95.0 1)
 static void testZeemanLimits() {
     namespace z = atom::zeeman;
     std::vector<z::Term> terms = {z::termAlkali(3, 2, 1), z::termAlkali(11, 3, 1), z::termAlkali(11, 3, 2), z::termOneElectron(1, 0, 2, 1), z::termOneElectron(1, 0, 3, 2)};
@@ -160,20 +173,20 @@ static void testZeemanLimits() {
         const std::vector<z::Sub> p = z::sublevels(t, Bw, gs), m = z::sublevels(t, -Bw, gs);
         double worstW = 0;
         for (std::size_t k = 0; k < p.size(); k++) {
-            const double J = p[k].J2 / 2.0, S = t.S2 / 2.0, gJ = 1 + (gs - 1) * (J * (J + 1) + S * (S + 1) - t.L * (t.L + 1.0)) / (2 * J * (J + 1));
+            const double J = p[k].J2 / 2.0, S = t.S2 / 2.0, gJ = t.gL + (gs - t.gL) * (J * (J + 1) + S * (S + 1) - t.L * (t.L + 1.0)) / (2 * J * (J + 1));
             worstW = std::max(worstW, std::fabs((p[k].rel - m[k].rel) / (2 * Bw * L) - gJ * p[k].M2 / 2.0));
         }
         checkNum("Zeeman: " + t.name + " weak-field slopes = Lande g_J M", worstW, 0, 0, 1e-9);
-        // strong: slopes at mu_B B = 1e7 gap; per M block, sorted, against the sorted M_L + g_s M_S
+        // strong: slopes at mu_B B = 1e7 gap; per M block, sorted, against the sorted g_L M_L + g_s M_S
         const double B1 = 1e7 * gap / L, B2 = 2 * B1;
         const std::vector<z::Sub> a = z::sublevels(t, B1, gs), b = z::sublevels(t, B2, gs);
         std::map<int, std::vector<double>> got, want;
         for (std::size_t k = 0; k < a.size(); k++) got[a[k].M2].push_back((b[k].rel - a[k].rel) / ((B2 - B1) * L));
-        for (int ML2 = -2 * t.L; ML2 <= 2 * t.L; ML2 += 2) for (int MS2 = -t.S2; MS2 <= t.S2; MS2 += 2) want[ML2 + MS2].push_back(ML2 / 2.0 + gs * MS2 / 2.0);
+        for (int ML2 = -2 * t.L; ML2 <= 2 * t.L; ML2 += 2) for (int MS2 = -t.S2; MS2 <= t.S2; MS2 += 2) want[ML2 + MS2].push_back(t.gL * ML2 / 2.0 + gs * MS2 / 2.0);
         bool ok = got.size() == want.size();
         for (auto& [M2, v] : got) ok = ok && zt::sameSet(v, want[M2], 1e-6);
-        checkTrue("Zeeman: " + t.name + " strong-field slopes = M_L + g_s M_S", ok);
-        // trace of each M block = sum of E_J + b sum (M_L + g_s M_S) over the block: linear in B (checked at 5 fields against that line)
+        checkTrue("Zeeman: " + t.name + " strong-field slopes = g_L M_L + g_s M_S", ok && t.gL < 1 && t.gL > 0.999);
+        // trace of each M block = sum of E_J + b sum (g_L M_L + g_s M_S) over the block: linear in B (checked at 5 fields against that line)
         double worstT = 0;
         for (const double B : {0.0, 0.5 * gap / L, gap / L, 7 * gap / L, 300 * gap / L}) {
             std::map<int, double> tr, lin;
@@ -264,6 +277,47 @@ static void testZeemanStrengths() {
     double w0 = 0;
     for (const z::LineRef& r : na2) for (const z::Component& c : z::components(r.line, 0, gs)) w0 = std::max(w0, std::fabs(c.shiftCm));
     checkNum("Zeeman: at B = 0 no component is shifted", w0, 0, 0, 1e-9);
+}
+
+// 0.96.0 (outside review of 28 Nov 2026, part F): the orbital g-factor with the nucleus's motion, g_L = 1 - m_e / m_nuc, and the Lande g_J with it,
+// g_J = g_L [J(J+1) - S(S+1) + L(L+1)] / (2J(J+1)) + g_S [J(J+1) + S(S+1) - L(L+1)] / (2J(J+1)) (D. A. Steck, "Sodium D Line Data" rev. 2.3.4, Eqs. (19) and (21), citing
+// Bethe & Salpeter 1957; extract native/data/jumps/steck/steck_sodium_d_line_2.3.4.extract.txt). Against: the formula by hand, Steck's Table 6 g_L of 23Na, and the measured g_J of
+// Na 3P1/2 and 3P3/2 (Arimondo, Inguscio & Violino 1977, in Steck's Table 6). NIST ASD lists no Lande g for any atom lighter than K (data/jumps/README.txt); K's are checked below.
+static void testZeemanReducedMass() {
+    namespace z = atom::zeeman;
+    const double gs = z::gsCodata();
+    // by hand: hydrogen 2p 2P3/2, g_L = 1 - 1 / 1836.152673426 (CODATA 2022 m_p / m_e) with the proton as the nucleus (N = 0)
+    const double gLH = 1 - 1 / 1836.152673426;
+    checkNum("Lande: hydrogen's g_L = 1 - m_e / m_p", z::orbitalG(1, 0), gLH, 0, 1e-12);
+    checkNum("Lande: hydrogen 2P3/2 by hand, g_L 2/3 + g_S 1/3", z::landeLS(1, 1, 3, gs, gLH), gLH * 2 / 3 + gs / 3, 0, 1e-15);
+    checkNum("Lande: hydrogen 2P1/2 by hand, g_L 4/3 - g_S 1/3", z::landeLS(1, 1, 1, gs, gLH), gLH * 4 / 3 - gs / 3, 0, 1e-15);
+    checkNum("Lande: an S level (L = 0) has no orbital part: g = g_S", z::landeLS(0, 1, 1, gs, gLH), gs, 0, 1e-15);
+    checkNum("Lande: g_L = 1 gives the old formula 1 + (g_S - 1)[...] exactly (3P1)", z::landeLS(1, 2, 2, gs, 1.0), 1 + (gs - 1) * (2.0 + 2.0 - 2.0) / 4.0, 0, 1e-15);
+    // Steck's Table 6: g_L of 23Na 0.999 976 13 (8 decimals printed)
+    const double gLNa = z::orbitalG(11, 12);
+    std::printf("Lande: 23Na g_L from the lab's nuclear mass %.10f (Steck 0.99997613)\n", gLNa);
+    checkNum("Lande: 23Na g_L = 1 - m_e / m_nuc from the lab's nuclear mass, against Steck's Table 6 0.999 976 13", gLNa, 0.99997613, 0, 5e-9);
+    // the measured g_J of sodium 3P (Arimondo et al. 1977 via Steck Table 6): the formula with g_L is inside the measurement's 1-sigma
+    const double p12 = z::landeLS(1, 1, 1, gs, gLNa), p32 = z::landeLS(1, 1, 3, gs, gLNa);
+    std::printf("Lande: Na 3P1/2 %.6f (measured 0.66581(12)), 3P3/2 %.6f (measured 1.33420(20))\n", p12, p32);
+    checkTrue("Lande: Na 3P1/2 and 3P3/2 with g_L within the measured g_J's 1-sigma", std::fabs(p12 - 0.66581) <= 0.00012 && std::fabs(p32 - 1.33420) <= 0.00020);
+    // the lab's terms carry it: one-electron atoms by their isotope, the others by the usual isotope
+    checkNum("Lande: the hydrogen 2p term carries g_L of the proton", z::termOneElectron(1, 0, 2, 1).gL, gLH, 0, 1e-15);
+    checkNum("Lande: the sodium 3p term carries g_L of 23Na", z::termAlkali(11, 3, 1).gL, z::orbitalG(11, atom::defaultN(11)), 0, 1e-15);
+    checkTrue("Lande: deuterium's g_L is nearer 1 than hydrogen's (heavier nucleus)", z::orbitalG(1, 1) > gLH && z::orbitalG(1, 1) < 1);
+    // the matrix with g_L: hydrogen 2p in a weak field (1e-7 T, far below the 0.365 cm^-1 fine-structure gap: the mixing's share of the slope is about 1e-7): each level's slope dE/dM is its g with g_L
+    const z::Term h2p = z::termOneElectron(1, 0, 2, 1);
+    const double B = 1e-7, b = B * z::lorentzCmPerT();
+    double worst = 0;
+    for (const z::Sub& u : z::sublevels(h2p, B, gs)) {
+        if (u.M2 == 0) continue;
+        double e0 = 0;
+        for (const z::Sub& v : z::sublevels(h2p, 0, gs)) if (v.J2 == u.J2 && v.M2 == u.M2) e0 = v.rel;
+        const double g = (u.rel - e0) / (b * u.M2 / 2.0);
+        worst = std::max(worst, std::fabs(g - z::landeLS(1, 1, u.J2, gs, gLH)));
+    }
+    checkNum("Lande: hydrogen 2p's matrix in 1e-7 T: every sublevel moves with g_J (g_L = 1 - m_e/m_p) to 1e-6", worst, 0, 0, 1e-6);
+    checkTrue("Lande: ... and the difference g_L makes (3.6e-4 for 2P3/2) is far above that", std::fabs(z::landeLS(1, 1, 3, gs, gLH) - z::landeLS(1, 1, 3, gs, 1.0)) > 3e-4);
 }
 
 // measured g: the table equals the saved NIST files (rows read here by eye from data/jumps/asd_g/<X>I_levels_g.tsv.gz, zcat); LS against measured within per-atom limits

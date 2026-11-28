@@ -1074,10 +1074,19 @@ int main(int argc, char** argv) {
         }
         // (0.63.0: and no card program's guarded step open or waiting for its turn: one runs at a time, so at a first start the sky can wait for the light paths)
         bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() && !app::gpuGuardBusy() ? bhSettled + 1 : 0;
+        // 0.96.0 (automatic checks): PL_ATOM_SETTLE="from:n": the run ends once the Atom Lab's cloud has all its dots for n frames after frame from (or at
+        // PL_EXIT_AFTER_FRAMES). The cloud fills by the clock (the processor stops at each frame's deadline, the card's batches arrive when done), so a
+        // picture taken at a fixed frame held half the cloud on a slow machine (check_atom_chip cardstark on GitHub, 0.95.0).
+        static int atomSettleFrom = -1, atomSettleN = 0, atomSettled = 0;
+        if (atomSettleFrom < 0) {
+            atomSettleFrom = 0;
+            if (const char* q = SDL_getenv("PL_ATOM_SETTLE")) std::sscanf(q, "%d:%d", &atomSettleFrom, &atomSettleN);
+        }
+        atomSettled = atomSettleN > 0 && frame >= atomSettleFrom && app.lab == 1 && app.atom.s.k >= app.atom.cloudCap() ? atomSettled + 1 : 0;
         // 0.85.3: the frame counter counts always. It counted only with PL_EXIT_AFTER_FRAMES, so outside tests frame stayed 0 and the Orbit Lab
         // never used its kept picture, which needs frame > 0 (native/docs/hardware/pc_0.85.2.md C3). It stops at its largest value.
         if (frame < std::numeric_limits<int>::max()) ++frame;
-        if ((maxFrames && frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN)) {
+        if ((maxFrames && frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN) || (atomSettleN > 0 && atomSettled >= atomSettleN)) {
             running = false;
             if (screenshot) {                           // 0.59.0: read back from the swapchain's image (RGBA, top row first)
                 std::vector<uint8_t> px;

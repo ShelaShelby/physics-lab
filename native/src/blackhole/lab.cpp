@@ -258,8 +258,9 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["gasclumpr"] = text(s.gasClumpR);
 }
 
-Settings loadSettings(const std::map<std::string, std::string>& in) {
-    Settings s = settingsDefaults();
+Settings loadSettings(const std::map<std::string, std::string>& in) { return loadSettings(in, settingsDefaults()); }
+Settings loadSettings(const std::map<std::string, std::string>& in, const Settings& base) {
+    Settings s = base;
     double v;
     if (const auto it = in.find("preset"); it != in.end()) { if (it->second == "none") s.preset.clear(); else applyPreset(s, it->second); }
     if (num(in, "mass", kMassMin, kMassMax, v)) setMass(s, v);
@@ -278,11 +279,11 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (num(in, "exposurestops", kEvMin, kEvMax, v)) s.expEV = v;
     if (num(in, "spin", 0, kSpinTop, v)) s.spin = v;
     if (const auto it = in.find("look"); it != in.end()) { Look l; if (lookFromKey(it->second, l)) s.look = l; }   // (a file without the line: Real)
-    if (const auto it = in.find("skybeside"); it != in.end() && (it->second == "true" || it->second == "shown")) s.trueSky = it->second == "true";   // 0.55.4: a file without it: Shown
+    if (const auto it = in.find("skybeside"); it != in.end() && (it->second == "true" || it->second == "shown")) s.trueSky = it->second == "true";   // 0.55.4 (0.96.0: a file without it keeps base: the app's True brightness)
     if (const auto it = in.find("glare"); it != in.end() && (it->second == "eye" || it->second == "off")) s.glare = it->second == "eye";            // (without it: the eye's, the default)
     if (const auto it = in.find("light"); it != in.end() && (it->second == "all" || it->second == "eye")) s.allLight = it->second == "all";          // 0.58.0 (without it: the eye's)
     const auto onOff = [&](const char* key, bool& b) { if (const auto it = in.find(key); it != in.end() && (it->second == "on" || it->second == "off")) b = it->second == "on"; };
-    onOff("gas", s.gasMoving); onOff("gasrun", s.gasRun); onOff("gasclump", s.gasClump); onOff("gaspattern", s.gasPattern);   // 0.72.0 (without them: on)
+    onOff("gas", s.gasMoving); onOff("gasrun", s.gasRun); onOff("gasclump", s.gasClump); onOff("gaspattern", s.gasPattern);   // 0.72.0 (0.96.0: without them, base: the app's clump and streaks off)
     if (const auto it = in.find("gasrate"); it != in.end() && it->second == "auto") s.gasRateAuto = true;
     else if (num(in, "gasrate", kGasRateMin, kGasRateMax, v)) { s.gasRate = v; s.gasRateAuto = false; }
     if (num(in, "gasclumpr", 1, kGasClumpRMax, v)) s.gasClumpR = v;

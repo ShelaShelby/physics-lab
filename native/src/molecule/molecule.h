@@ -137,5 +137,6 @@ struct Settings {
 constexpr int kSettingsVersion = 1;
 std::string saveSettings(const Settings& s);
 Settings loadSettings(const std::string& text);
+Settings loadSettings(const std::string& text, const Settings& base);   // 0.96.0: a key the text does not have keeps base's value (the app: app/realistic.h freshMolecule)
 
 }  // namespace molecule

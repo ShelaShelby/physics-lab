@@ -1,4 +1,5 @@
 #include "renderer2d.h"
+#include "render/giant_photometry.h"
 
 #include <algorithm>
 #include <chrono>
@@ -127,6 +128,12 @@ void Renderer2D::planet(double x, double y, double r, Color base, double lx, dou
     for (int i = 0; i < 3 * sg.nring; i++) sg.ring[i] = rings[i];
     sg.lunar = lunar;
     if (has) { const MapAlbedo* ma = mapAlbedo(map); sg.albedoK = ma ? static_cast<float>(ma->factor) : 1.0f; }   // 0.77.0: the map's measured brightness
+    if (has && (map == Map::Jupiter || map == Map::Saturn)) {   // 0.96.0: Jupiter's and Saturn's own laws (render/giant_photometry.h), from the phase angle acos(L.z)
+        const double ll = std::sqrt(lx * lx + ly * ly + lz * lz);
+        const GiantLight g = giantLight(map == Map::Jupiter ? 1 : 2, ll > 0 ? lz / ll : 1.0);
+        sg.giant = g.kind;
+        for (int c = 0; c < 3; c++) sg.giantP[c] = static_cast<float>(g.p[c]);
+    }
     if (light) {
         sg.nocc = std::clamp(light->nOcc, 0, 4);
         for (int i = 0; i < 4 * sg.nocc; i++) sg.occ[i] = light->occ[i];

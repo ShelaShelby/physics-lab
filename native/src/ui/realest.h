@@ -1,6 +1,6 @@
 // 0.25: "closest to reality" (the owner's decision of 5 Nov 2026): for each setting where one choice is clearly closer to the real thing, which one and why, in ONE table, so the
 // mark on that choice (ui::sh::markReal) and the lab's "Most realistic" button can never disagree. Settings where no choice is more real (trails, labels, spin, outlines,
-// colours, the app's look) are not in it. The defaults are not changed.
+// colours, the app's look) are not in it. 0.96.0: the list is app/realistic.h, and every lab opens with it (the owner, 28 Nov 2026; ui/settings.cpp).
 #pragma once
 
 #include <initializer_list>
@@ -23,6 +23,7 @@ void applyAtom(AppState& app);
 void applyMolecule(AppState& app);
 void applyBlackHole(AppState& app);   // 0.55.0
 void applyLab(AppState& app);         // 0.55.0: the lab on screen's
+void applyAll(AppState& app);         // 0.96.0: all four labs (the one-time switch of 0.96.0, ui/settings.cpp)
 const char* buttonCaption();         // the words under the button: what the dot means
 
 }  // namespace ui::real

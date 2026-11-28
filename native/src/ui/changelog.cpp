@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.96.0", "Every lab opens most realistic, Jupiter and Saturn shaded as measured, an absorbance spectrum, the Moon outside 1800 to 2100",
+     "Every lab now opens in its Most realistic settings. This happens once, at the first start of this version; your later choices are kept. Orbit Lab: Jupiter and "
+     "Saturn are shaded by laws measured from space: Jupiter by Cassini's brightness against the phase angle, Saturn by a law fitted to Pioneer 11. Their edges "
+     "darken and their crescents dim as measured, for the whole disc, not belt by belt. Outside 1800 to 2100 the Moon no longer starts at a made-up angle: it moves on "
+     "a turning ellipse fitted to the real Moon, within about 2.4 degrees of it, and shows its phase. Molecule Lab: the rotation spectrum can show Absorbance as well "
+     "as Line strength. Atom Lab: the magnetic splitting now includes the nucleus's motion in the orbit's g-factor (hydrogen: 0.05 % smaller). Benchmark: a new hard "
+     "scene flies close to Jupiter; the black hole's over-the-poles scene moved to All scenes."},
     {"0.95.0", "Black Hole Lab: the spinning hole's disc at its true thickness, and a faster spinning sky",
      "Round a spinning hole the Real look now draws the gas disc at its calculated thickness, as it already did without spin. Seen edge on it is a band, not "
      "a line. Each ray's meeting with the disc's surface is worked out from its exact path near where it crosses the disc's plane. The faint rings of light "

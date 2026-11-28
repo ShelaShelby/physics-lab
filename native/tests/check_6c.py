@@ -48,9 +48,12 @@ def part_nucdens(binary, work):
 # from the nucleon's size in points. The check runs the scene at his window size with the helper on, from a fresh settings folder (as his first start): the log says the whole path
 # succeeded and the scene's turning half made new grids (a still half: one).
 def part_nucdenscard(binary, work):
+    # 0.96.0: PL_FIXED_DT 0.1 (was 0: the real clock). On GitHub in 0.95.0 the busy runner drew 4 still and 3 turning frames in the 6 s window, too few for
+    # the turning half's 3 grids and for the card path's steps to finish. With a fixed step each half holds at least 30 frames on any machine
+    # (here 31 and 31; on one core 32 and 56). The checks are the same.
     import shutil
     home = os.path.join(os.path.abspath(work), "home_ndc"); shutil.rmtree(home, ignore_errors=True); os.makedirs(home, exist_ok=True)
-    env = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.nucleus_density", "PL_BENCH_WARMUP": "0.5", "PL_BENCH_MEASURE": "6.0",
+    env = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.1", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.nucleus_density", "PL_BENCH_WARMUP": "0.5", "PL_BENCH_MEASURE": "6.0",
            "PL_NO_GPU_HELPER": "0", "HOME": home}
     r = run_app(binary, work, "c_ndcard", env, frames=100000, size="2560x1369", timeout=1800)
     log = ""

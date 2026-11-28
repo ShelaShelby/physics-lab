@@ -2182,7 +2182,7 @@ std::vector<std::string> AtomLab::fieldInfo() const {
     if (t.mode == zeeman::Mode::None) { out.push_back(b + t.why); return out; }
     for (std::size_t i = 0; i < js.size(); i++) {
         const std::string J = js[i] % 2 ? std::to_string(js[i]) + "/2" : std::to_string(js[i] / 2);
-        const double gls = zeeman::landeLS(t.L, t.S2, js[i], zeeman::gsCodata());
+        const double gls = zeeman::landeLS(t.L, t.S2, js[i], zeeman::gsCodata(), t.gL);   // 0.96.0: with g_L = 1 - m_e / m_nuc
         std::string line = std::string(b) + t.name + " J=" + J + ": g (LS) = " + fmt::fixed(gls, 5);
         if (std::isfinite(meas[i])) {
  char g[32]; std::snprintf(g, sizeof g, "%.7g", meas[i]);

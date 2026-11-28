@@ -39,8 +39,10 @@ def notes(r, prefix):
 
 def main(binary, work):
     base = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1"}
+    # (0.96.0, corrected on purpose: the lab now opens in Density, the Most realistic choice (the owner, 28 Nov 2026). The checks of ball-and-stick ask for it
+    # with PL_MOLECULE_STYLE=ball, the default up to 0.95.0. REPORT 0.96.0)
     # 1. water, ball-and-stick, Dark
-    r = run_app(binary, work, "molecule_dark", dict(base, PL_MOLECULE="H2O", PL_SETTINGS=os.path.join(work, "s_dark.txt")), frames=20, theme="dark")
+    r = run_app(binary, work, "molecule_dark", dict(base, PL_MOLECULE="H2O", PL_MOLECULE_STYLE="ball", PL_SETTINGS=os.path.join(work, "s_dark.txt")), frames=20, theme="dark")
     st = stats(r)
     check(len(st) >= 10, "dark: the draw counts were printed")
     if st:
@@ -76,7 +78,7 @@ def main(binary, work):
         mx, my = (ox + hx) / 2, (oy + hy) / 2
         sel = []
         for nm, xy in (("molecule_click_atom", (hx, hy)), ("molecule_click_bond", (mx, my))):
-            r3 = run_app(binary, work, nm, dict(base, PL_MOLECULE="H2O", PL_SCRIPT=f"6:clickxy={xy[0]:.0f},{xy[1]:.0f}"), frames=12)
+            r3 = run_app(binary, work, nm, dict(base, PL_MOLECULE="H2O", PL_MOLECULE_STYLE="ball", PL_SCRIPT=f"6:clickxy={xy[0]:.0f},{xy[1]:.0f}"), frames=12)
             s3 = [n.split("sel=")[1] for n in notes(r3, "molecule H2O")]
             sel.append(s3[-1] if s3 else None)
         check(sel[0] == "1,-1", f"a click on H1 picks atom 1 ({sel[0]})")
@@ -95,7 +97,8 @@ def main(binary, work):
     open(bad, "w").write("lab=Molecule Lab\nmolecule=v1 mol=C60 style=wire zoom=nan pan=1e400,2 rot=0,0,0,0,0,0,0,0,0\n")
     r5 = run_app(binary, work, "molecule_bad", dict(base, PL_SETTINGS=bad), frames=8)
     st5 = stats(r5)
-    check(bool(st5) and st5[-1]["mol"] == "H2O" and bool(notes(r5, "molecule H2O style=ball")), "damaged settings: water, ball-and-stick (the defaults), no crash")
+    # (0.96.0, corrected on purpose: the defaults are now the Most realistic list's, Density; the file has no realest= line, so the one-time switch also sets it. REPORT 0.96.0)
+    check(bool(st5) and st5[-1]["mol"] == "H2O" and bool(notes(r5, "molecule H2O style=real")), "damaged settings: water, Density (the defaults), no crash")
 
 def spheres(binary, work):
     """0.40: Space-filling balls are true spheres. Hydrogen chloride, seen as the lab first shows it: at pixels inside BOTH discs, the colour must be that of the
@@ -140,8 +143,9 @@ def cardnote(r):
     return dict(kv.split("=", 1) for kv in n[-1].split()[1:]) if n else None
 
 def rotation(binary, work):
+    # (0.96.0: these runs ask for ball-and-stick, PL_MOLECULE_STYLE=ball: the lab now opens in Density, where the Turn and the vibration levels are not offered)
     import math
-    hcl = run_app(binary, work, "rot_hcl", {"PL_MOLECULE": "HCl", "PL_SCRIPT": "8:click=molecule.rot.card"}, frames=20)
+    hcl = run_app(binary, work, "rot_hcl", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "HCl", "PL_SCRIPT": "8:click=molecule.rot.card"}, frames=20)
     # (a segmented control's parts are logged as seg.<id>...; the level's buttons by their words)
     has = lambda r, k: any(t[2] == "Most populated" for t in r.texts) if k == "molecule.rot.jup" else any(n.startswith("seg." + k + ".") for n in r.rects)
     check(not hcl.scripted_missing() and has(hcl, "molecule.rot.jup") and has(hcl, "molecule.rot.iso") and has(hcl, "molecule.rot.spec"), f"HCl: the Rotation section has the level, isotope and spectrum controls ({hcl.scripted_missing()})")
@@ -151,18 +155,27 @@ def rotation(binary, work):
     check(rn is not None and rn["linear"] == "1" and rn["J"] == "3" and rn["iso"] == "4", f"HCl at 298 K: the level shown is the most populated, J = 3; the natural mix ({rn})")
     if c:
         x, y = float(c["x"]), float(c["y"])
-        pt = run_app(binary, work, "rot_hover", {"PL_MOLECULE": "HCl", "PL_MOTION": "off", "PL_SCRIPT": f"8:click=molecule.rot.card;12:click=molecule.rot.turn;16:move={x},{y}"}, frames=40)
+        pt = run_app(binary, work, "rot_hover", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "HCl", "PL_MOTION": "off", "PL_SCRIPT": f"8:click=molecule.rot.card;12:click=molecule.rot.turn;16:move={x},{y}"}, frames=40)
         c2, r2 = cardnote(pt), rotnote(pt)
         check(c2 is not None and c2["hover"] == c["strong"], f"pointing at the strongest line names it ({c['strong']}: {c2})")
         # the turn: J = 3 of H35Cl, 2 pi t / T on screen (T from the app's own formula, checked in rotation_tests); the click lands 2 frames after frame 12, 0.016 s a frame
         ok = r2 is not None and r2["on"] == "1" and 0 < float(r2["angle"]) < 2 * math.pi * 30 * 0.016 / 2.0
         check(ok, f"Turn: the molecule turns, slowed down ({r2})")
         check(differ_ok(hcl, pt), "Turn: the picture changes")
-    h2 = run_app(binary, work, "rot_h2", {"PL_MOLECULE": "H2"}, frames=12)
+    # 0.96.0 (part D): Line strength / Absorbance. HCl's pure rotation at 298 K: Absorbance weighs each line by nu (1 - exp(-hc nu / kT)), so its strongest line is at
+    # a higher J than the strongest transition (the numbers: tests/test_rotation.cpp testAbsorbance)
+    ps = run_app(binary, work, "rot_strength", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "HCl", "PL_SCRIPT": "8:click=molecule.rot.card;12:click=molecule.rot.spec.pure"}, frames=20)
+    pa = run_app(binary, work, "rot_absorb", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "HCl", "PL_SCRIPT": "8:click=molecule.rot.card;12:click=molecule.rot.spec.pure;16:click=molecule.rot.measure.absorbance"}, frames=24)
+    cs, ca = cardnote(ps), cardnote(pa)
+    jof = lambda c: int(c["strong"].split("_")[1]) if c and c["strong"].startswith("J_") else -1   # (the note writes "J 3 → 4" as J_3_→_4)
+    check(not pa.scripted_missing() and cs is not None and ca is not None and cs["meas"] == "0" and ca["meas"] == "1" and jof(ca) > jof(cs) >= 0,
+          f"HCl pure rotation: Absorbance moves the strongest line to a higher J ({cs and cs['strong']} -> {ca and ca['strong']}; {pa.scripted_missing()})")
+    check(any("ν(1 − e^(−hcν/kT))" in t[2] for t in pa.texts) or any("HITRAN" in t[2] for t in pa.texts), "Absorbance: the caption says the factor and its source")
+    h2 = run_app(binary, work, "rot_h2", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "H2"}, frames=12)
     has = lambda r, k: any(t[2] == "Most populated" for t in r.texts) if k == "molecule.rot.jup" else any(n.startswith("seg." + k + ".") for n in r.rects)
     check(has(h2, "molecule.rot.jup") and not has(h2, "molecule.rot.iso") and not has(h2, "molecule.rot.spec"), "H2: the section has the level, and no isotope or spectrum choice")
     check(rotnote(h2) is not None and rotnote(h2)["J"] == "1", f"H2 at 298 K: J = 1 (ortho) holds most ({rotnote(h2)})")
-    w = run_app(binary, work, "rot_h2o", {"PL_MOLECULE": "H2O"}, frames=12)
+    w = run_app(binary, work, "rot_h2o", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "H2O"}, frames=12)
     check(rotnote(w) is not None and rotnote(w)["linear"] == "0" and any("non-linear molecules is not shown yet" in t[2] for t in w.texts) and not has(w, "molecule.rot.jup"),
           "water: one line, no controls")
 
@@ -171,7 +184,9 @@ def vibnote(r, i=-1):
     return dict(kv.split("=") for kv in n[i].split()[1:]) if n else None
 
 def anharm(binary, work):
-    hcl = run_app(binary, work, "anh_hcl", {"PL_MOLECULE": "HCl", "PL_SCRIPT": "6:click=molecule.vib.0;14:click=molecule.vib.anharm;22:click=molecule.vib.vtop;30:click=molecule.vib.vup"}, frames=38)
+    # (0.96.0: ball-and-stick asked for, PL_MOLECULE_STYLE=ball, as in rotation above. Anharmonic is now on from the start, the Most realistic choice: the tick box is
+    # clicked twice, off at frame 14 and on again at 18, so the box itself is still what turns it on. Corrected on purpose, REPORT 0.96.0)
+    hcl = run_app(binary, work, "anh_hcl", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "HCl", "PL_SCRIPT": "6:click=molecule.vib.0;14:click=molecule.vib.anharm;18:click=molecule.vib.anharm;22:click=molecule.vib.vtop;30:click=molecule.vib.vup"}, frames=38)
     check(not hcl.scripted_missing(), f"HCl: the mode, the tick box and the level buttons were there to click ({hcl.scripted_missing()})")
     check(any("Anharmonic (real bond)" in t[2] for t in hcl.texts), "HCl: the tick box is offered")
     check(any("above v = 27: dissociated" in t[2] for t in hcl.texts), "HCl: Last bound went to v = 27 = floor(we / 2wexe - 1/2), and + one above it")
@@ -179,7 +194,7 @@ def anharm(binary, work):
     check(v is not None and v["anh"] == "1" and v["lev"] == "28" and v["diss"] == "1" and any("Dissociated" in t[2] for t in hcl.texts), f"HCl: one above the last bound level the readout says dissociated ({v})")
     bc = hcl.note("bondcard ")
     check(bool(bc) and "mol=HCl" in bc[-1] and any(n.startswith("card.molecule.bond") for n in hcl.rects), f"HCl: the Bond energy card shows ({bc[-1] if bc else None})")
-    w = run_app(binary, work, "anh_h2o", {"PL_MOLECULE": "H2O", "PL_SCRIPT": "6:click=molecule.vib.0"}, frames=12)
+    w = run_app(binary, work, "anh_h2o", {"PL_MOLECULE_STYLE": "ball", "PL_MOLECULE": "H2O", "PL_SCRIPT": "6:click=molecule.vib.0"}, frames=12)
     wv = vibnote(w)
     check(wv is not None and wv["on"] == "1" and wv["anhbox"] == "0" and not any("Anharmonic (real bond)" in t[2] for t in w.texts) and not w.note("bondcard "), f"water: no tick box, no card ({wv})")
 

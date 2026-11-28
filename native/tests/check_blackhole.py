@@ -271,6 +271,10 @@ def precision_sky(binary, work):
     # fixed before looking)
     tn = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECKTONE ")]
     check(bool(tn) and int(tn[0]["px"]) == 2 * 48 * 40 and tn[0]["bad"] == "0", f"the start-up check's camera curve: every probe pixel within its limit ({tn[:1]})")
+
+def precision_skyfull(binary, work):
+    # 0.96.0: split from part sky (its second run). In 0.95.0 the two runs together reached the 300 s part limit on GitHub, with the thick disc's cases
+    # (94 s alone on the build machine). The checks are the same.
     # 0.56.2: the owner's window (2560 x 1369), Film's hole (0.6, 74.1 M) at 30 deg across the height, the paper's view and 88, 90, 92 deg from the spin axis,
     # EVERY pixel against traceClosed in double, no allowance: no ray lost, none ending elsewhere more than 1.5 px from the edge, the far direction within
     # 2e-3 rad, the disc's first image the same (a radius within 1e-3 of rIn or rOut excepted: the radius's own limit), its r and g within 1e-3, and every
@@ -457,7 +461,8 @@ def part_gasrow(binary, work):
     # above this row. On a loaded machine (GitHub, 4 parts at once) it went away between the frame that read the row's place and the press: the click missed
     # (0.83.0's full run: Off read On; reproduced here with 4 runs at once). The check itself is unchanged.
     GAS = dict(BASE, PL_BH_GAS=None, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_GAST="3000", PL_BH_SETTLE="16:6", PL_BH_SPINWAIT="1")   # (the same clock, and the run ends once the picture has settled)
-    st = "preset=feeding;glare=off;look=film;gasrun=off"   # (0.84.0: the gas held at t = 3000 in every run: with the picture made at once its clock, on the wall's time, moved between runs)
+    # (0.96.0, corrected on purpose: the lab now opens with the clump and the streaks off, the Most realistic choice; this check starts from them on, the default up to 0.95.0. REPORT 0.96.0)
+    st = "preset=feeding;glare=off;look=film;gasrun=off;gasclump=on;gaspattern=on"   # (0.84.0: the gas held at t = 3000 in every run: with the picture made at once its clock, on the wall's time, moved between runs)
     on = run_app(binary, work, "bh_gas_on", dict(GAS, PL_BH_SET=st), frames=80)
     off = run_app(binary, work, "bh_gas_off", dict(GAS, PL_BH_SET=st, PL_SCRIPT="6:click=blackhole.gas.off"), frames=80)
     ref = run_app(binary, work, "bh_gas_ref", dict(GAS, PL_BH_SET=st + ";gas=off"), frames=80)
@@ -519,7 +524,9 @@ def part_disc(binary, work):
         check(not r.scripted_missing() and s is not None and s["preset"] == key and s["disc"] == want, f"preset {key}: the disc {'on' if want == '1' else 'off'} ({s}, {r.scripted_missing()})")
     # switching it on draws it where the module says the disc is (Sagittarius A*: also its label), nearly face-on and steep
     for name, pitch in (("faceon", 0.35), ("steep", 1.40)):
-        e = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"pitch={pitch};glare=off")   # (0.55.4: the eye's glare, on by default, veils the sky round the disc)
+        e = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"pitch={pitch};glare=off;skybeside=shown")   # (0.55.4: the eye's glare, on by default, veils the sky round the disc)
+        # (0.96.0, corrected on purpose: the lab now opens with True brightness beside the disc, the Most realistic choice, which puts the sky on the disc's exposure, so the sky
+        # elsewhere changes when the disc is switched on. This check is of the disc's place: it keeps the sky as Shown, the default up to 0.95.0. REPORT 0.96.0)
         off = run_app(binary, work, f"bh_disc_{name}_off", e, frames=12)
         on = run_app(binary, work, f"bh_disc_{name}_on", dict(e, PL_SCRIPT="6:click=blackhole.disc.on"), frames=16)
         check(not on.scripted_missing(), f"{name}: the switch was there ({on.scripted_missing()})")
@@ -784,7 +791,7 @@ def part_whiteout(binary, work):
         check(len(w) >= 64 and not r.scripted_missing() and not bad, f"{args[2]}: no frame over 30 % pure white ({len(w)} frames, worst {max(w or [1]):.3f}, "
               f"over: {bad[:5]}, missing clicks: {r.scripted_missing()})")
 
-PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
+PARTS = {"sky": precision_sky, "skyfull": precision_skyfull, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "precision": part_precision, "precisioncard": precision_card, "disc": part_disc, "gasrow": part_gasrow, "edgeon": part_edgeon, "spin": part_spin, "alllight": part_alllight, "whiteout": part_whiteout}
 
 if __name__ == "__main__":

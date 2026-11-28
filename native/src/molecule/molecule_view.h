@@ -104,6 +104,7 @@ struct MoleculeLab {
     int rotJ = -1;                           // the level shown; -1: the most populated at liveK
     int rotIso = rot::kNatural;              // HCl's isotope
     int rotSpec = 1;                         // the card's spectrum: 0 pure rotation, 1 the fundamental band (where the molecule has it)
+    int rotMeasure = 0;                      // 0.96.0: the lines' heights: 0 Line strength, 1 Absorbance (rotation.h Measure)
     int rotLine = -1;                        // the card's tapped line (index into its list), -1: none
     double rotAngle = 0;                     // radians
     Molecule rotShown;

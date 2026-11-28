@@ -486,6 +486,9 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             const int air = (sg.mode != 2 && sg.mode != 3) && sg.air ? 1 : 0;
             V.setI(VkDraw2D::kPlanet, "uAir", &air, 1);
             V.setF(VkDraw2D::kPlanet, "uLightK", &sg.lightK, 1);                 // 0.85.0 (R1)
+            const int giant = sg.mode == 1 ? sg.giant : 0;                       // 0.96.0: Jupiter's and Saturn's laws (render/giant_photometry.h)
+            V.setI(VkDraw2D::kPlanet, "uGiant", &giant, 1);
+            V.setF(VkDraw2D::kPlanet, "uGiantP", sg.giantP, 3);
             {   // 0.85.0 (R2): the Sun's measured edge (the Sun's disc, uMode 4, and the eclipses), and (R3) the sunspot groups' outlines
                 const SunLimb& lim = sunLimb();
                 float limb[18], sc[3];

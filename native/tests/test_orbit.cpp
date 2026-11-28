@@ -25,6 +25,7 @@
 #include "orbit/card_text.h"
 #include "orbit/date_text.h"
 #include "orbit/format.h"
+#include "orbit/moon_elp.h"
 #include "orbit/kepler.h"
 #include "orbit/label_clip.h"
 #include "orbit/real_errors.h"
@@ -37,6 +38,7 @@
 #include "orbit/iau_rotation.h"
 #include "render/ellipsoid.h"
 #include "render/shading.h"
+#include "render/giant_photometry.h"
 #include "orbit/far_occlusion.h"
 #include "orbit/comet_tail.h"
 #include "orbit/saturn_profile.h"
@@ -415,7 +417,10 @@ static void testMoonMeanElements() {
         check(t->find("made-up places") == std::string::npos && t->find("made-up start") == std::string::npos, "date text outside 1800-2100: no 'made-up places'");
         check(t->find("JPL") != std::string::npos && t->find("mean elements") != std::string::npos, "date text outside 1800-2100 names JPL's mean elements");
     }
-    check(out.find("Moon") != std::string::npos && out.find("simple ellipse") != std::string::npos, "date text outside 1800-2100 still says our Moon is on a simple ellipse");
+    // 0.96.0 (part E): our Moon is on the ellipse fitted to ELP2000-82B, with its worst error over 1800-2100 (until 0.95.0 this checked "simple ellipse")
+    for (const std::string* t : {&out, &outAfter, &moonsOut})
+        check(t->find("Moon") != std::string::npos && t->find("turning ellipse fitted") != std::string::npos && t->find("2.4") != std::string::npos && t->find("made-up") == std::string::npos &&
+              std::fabs(kMoonEllipseWorstDeg - 2.4) < 0.05, "date text outside 1800-2100: our Moon is on the ellipse fitted to ELP, within 2.4 deg (moon_elp.h kMoonEllipseWorstDeg), no made-up angle");
     // the card of a moon in 2200 says what the code does (1 June 2200 UT)
     SolarSystem sys; sys.loadAt(7271164800000LL);
     for (const Body& b : sys.bodies) {
@@ -425,7 +430,23 @@ static void testMoonMeanElements() {
         std::string txt;
         for (const auto& l : c.lines) txt += l + "\n";
         if (b.name == "Jupiter") check(txt.find("JPL") != std::string::npos && txt.find("mean elements") != std::string::npos && txt.find("made-up") == std::string::npos && txt.find("roughly right") == std::string::npos, "Io's card in 2200: JPL's mean elements, no made-up angle, no 'roughly right' plane");
-        else check(txt.find("made-up starting angle") != std::string::npos, "our Moon's card in 2200: unchanged, still a simple ellipse with a made-up angle");
+        else {   // 0.96.0 (part E): until 0.95.0 this checked "made-up starting angle"
+            check(txt.find("made-up") == std::string::npos && txt.find("fitted to ELP2000-82B") != std::string::npos && txt.find(fmt::fixed(kMoonEllipseWorstDeg, 1) + "°") != std::string::npos &&
+                  txt.find(fmt::km(kMoonEllipseWorstKm)) != std::string::npos &&
+                  txt.find(fmt::fixed(kMoonEllipseOutsideDeg, 1) + "°") != std::string::npos && txt.find(fmt::km(kMoonEllipseOutsideKm)) != std::string::npos && txt.find("Phase now") != std::string::npos && txt.find("no eclipses") != std::string::npos,
+                  "our Moon's card in 2200: the ellipse fitted to ELP2000-82B with its measured worst error, a phase, no eclipses, no made-up angle");
+        }
+    }
+    // 0.96.0 (part E): in 2200 the Moon is placed by the ellipse (not ELP, not a made-up angle), in Simple and in Real; Earth is drawn off the barycentre
+    for (int real = 0; real < 2; real++) {
+        SolarSystem s2; s2.loadAt(7271164800000LL);
+        if (real) s2.setRealPlanets(true);
+        const double jd = s2.julianDayTDB();
+        check(s2.moonPlaced() && !s2.realMoon() && length(s2.moonGeocentric() - moonGeocentricEllipse(jd)) < 1.0 && s2.earthOffBary(),
+              std::string(real ? "Real" : "Simple") + " in 2200: the Moon from moonGeocentricEllipse, realMoon() false, Earth off the barycentre");
+        SolarSystem s3; s3.loadAt(946728000000LL);   // 2000-01-01 12:00 UT
+        if (real) s3.setRealPlanets(true);
+        check(s3.moonPlaced() && s3.realMoon() && length(s3.moonGeocentric() - moonGeocentricElp(s3.julianDayTDB())) < 1.0, std::string(real ? "Real" : "Simple") + " in 2000: the Moon from ELP2000-82B");
     }
 }
 
@@ -1510,7 +1531,126 @@ static void testCometTail078() {
     }
 }
 
+// 0.96.0 (outside review of 28 Nov 2026, part C): Jupiter's and Saturn's discs (render/giant_photometry.h). The references: the numbers of Dyudina et al. 2016
+// (Tables 2-4) and Mayorga et al. 2016 (Tables 1-2), read from their extracts; the albedos as integrals over the disc (Ag = p(0), AS = 2 int p(a) sin a da,
+// p(a) = (1 / pi) int I/F over the disc seen), worked here by a midpoint grid and checked first on Lambert's ball (Table 4: 0.667 and 1.00) and on the
+// paper's own Henyey-Greenstein fits of Jupiter (Table 4: 0.549 / 0.56, CB3 0.466 / 0.57). Bounds: 2.5 % against the paper's albedos (its discs were
+// rendered at about 80 px across, where the edge pixels are about 5 % of the area); 1 % against Mayorga's own curves (their stated accuracy, section 4).
+static std::vector<double> numbersOnLine(const std::string& t, const std::string& key, int skip, int n) {   // the n numbers after the key's line's first `skip` numbers
+    std::vector<double> v;
+    const std::size_t at = t.find(key);
+    if (at == std::string::npos) return v;
+    const std::size_t end = t.find('\n', at);
+    std::string line = t.substr(at + key.size(), end == std::string::npos ? std::string::npos : end - at - key.size());
+    const char* q = line.c_str();
+    int seen = 0;
+    while (*q && static_cast<int>(v.size()) < n) {
+        char* e = nullptr;
+        const double x = std::strtod(q, &e);
+        if (e == q) { q++; continue; }
+        if (seen++ >= skip) v.push_back(x);
+        q = e;
+    }
+    return v;
+}
+// p(alpha): the disc's reflectance at phase alpha (deg) under a law f(ch, mu0, mu, alpha), the Sun at (sin a, 0, cos a), the viewer along +z
+template <class F> static double discP(const F& f, double alphaDeg, int N = 600) {
+    const double a = alphaDeg * render::kGiantPi / 180, L[3] = {std::sin(a), 0, std::cos(a)};
+    double sum = 0, h = 2.0 / N;
+    for (int j = 0; j < N; j++)
+        for (int i = 0; i < N; i++) {
+            const double x = -1 + (i + 0.5) * h, y = -1 + (j + 0.5) * h, rr = x * x + y * y;
+            if (rr >= 1) continue;
+            const double mu = std::sqrt(1 - rr), mu0 = x * L[0] + mu * L[2];
+            sum += f(mu0, mu, alphaDeg);
+        }
+    return sum * h * h / render::kGiantPi;
+}
+template <class F> static double sphericalA(const F& f, int N = 240) {   // AS = 2 int_0^pi p(a) sin a da (midpoint, 1 deg steps would do; 0.75 deg here)
+    double s = 0;
+    for (int k = 0; k < N; k++) { const double a = (k + 0.5) * 180.0 / N; s += discP(f, a, 300) * std::sin(a * render::kGiantPi / 180); }
+    return 2 * s * render::kGiantPi / N;
+}
+static void testGiantPhotometry() {
+    using namespace render;
+    const std::string dy = readAll(PL_DATA_DIR "/planets/photometry/1511.04415_dyudina2016.extract.txt");
+    const std::string ma = readAll(PL_DATA_DIR "/planets/photometry/1610.07679_mayorga2016.extract.txt");
+    check(!dy.empty() && !ma.empty(), "giants: the extracts of Dyudina et al. 2016 and Mayorga et al. 2016 are there");
+    // the constants are the papers' numbers
+    const auto Ared = numbersOnLine(dy, "A (red, 0.64 ", 0, 7), Bred = numbersOnLine(dy, "B (red, 0.64 ", 0, 7);
+    bool okAB = Ared.size() == 7 && Bred.size() == 7;
+    for (int i = 0; okAB && i < 7; i++) okAB = Ared[i] == kSaturnA[i] && Bred[i] == kSaturnB[i];
+    check(okAB, "giants: Saturn's A and B are Table 3's red row (Dones et al. 1993)");
+    const char* rows[3] = {"RED ", "GRN ", "BL1 "};
+    bool okM = true;
+    for (int c = 0; c < 3; c++) {
+        const std::size_t t2 = ma.find("#--- begin Table 2");
+        const auto v = numbersOnLine(ma.substr(t2), std::string("             ") + rows[c], 0, 6);
+        okM = okM && v.size() == 6;
+        for (int i = 0; okM && i < 6; i++) okM = v[i] == kMayorgaJupiter[c][i];
+    }
+    check(okM, "giants: Jupiter's red, green and blue curves are Mayorga's Table 2 rows RED, GRN, BL1");
+    const auto wRed = numbersOnLine(ma, "RED ", 0, 1), wGrn = numbersOnLine(ma, "GRN ", 0, 1), wBl = numbersOnLine(ma, "BL1 ", 0, 1);
+    check(wRed.size() == 1 && wRed[0] == 647 && wGrn.size() == 1 && wGrn[0] == 568 && wBl.size() == 1 && wBl[0] == 463,
+          "giants: the channels' wavelengths are Table 1's (WAC): RED 647, GRN 568, BL1 463 nm");
+    const auto t4 = [&](const std::string& key, int skip) { const auto v = numbersOnLine(dy, key, skip, 2); return v.size() == 2 ? v : std::vector<double>{-1, -1}; };
+    const auto lam = t4("Lambertian ", 0), sat = t4("Saturn 0.64 (0.59-0.72)", 0), jr = t4("Jupiter 0.64 (0.59-0.72)", 0), cb3 = t4("Jupiter atm. window 0.938", 1);
+    // the integrator on Lambert's ball and on the paper's Henyey-Greenstein fits (Eqs. 1-3, Table 2 solid rows)
+    const auto lambert = [](double mu0, double mu, double) { return mu > 0 && mu0 > 0 ? mu0 : 0.0; };
+    const double lAg = discP(lambert, 0), lAS = sphericalA(lambert);
+    checkSay(std::fabs(lAg - lam[0]) < 0.002 && std::fabs(lAS - lam[1]) < 0.005, "giants: Lambert's ball integrates to Ag " + std::to_string(lAg) + ", AS " + std::to_string(lAS) + " (Table 4: 0.667, 1.00)");
+    const auto hg = [](double g, double a) { const double c = std::cos(a * kGiantPi / 180); return (1 - g * g) / std::pow(1 + g * g + 2 * g * c, 1.5); };
+    const auto dyHG = [&](double A, double g1, double g2, double f) {
+        return [=](double mu0, double mu, double a) { return mu > 0 && mu0 > 0 ? mu0 * A * (f * hg(g1, a) + (1 - f) * hg(g2, a)) : 0.0; };
+    };
+    const auto pr = numbersOnLine(dy, "0.595-0.72 µm      solid", 0, 4), pc = numbersOnLine(dy, "0.938 µm         solid", 0, 4);
+    check(pr.size() == 4 && pc.size() == 4, "giants: Table 2's Pioneer red and Cassini CB3 solid rows were read");
+    if (pr.size() == 4 && pc.size() == 4) {
+        const auto j1 = dyHG(pr[0], pr[1], pr[2], pr[3]), j2 = dyHG(pc[0], pc[1], pc[2], pc[3]);
+        const double a1 = discP(j1, 0), s1 = sphericalA(j1), a2 = discP(j2, 0), s2 = sphericalA(j2);
+        checkSay(std::fabs(a1 / jr[0] - 1) < 0.025 && std::fabs(s1 / jr[1] - 1) < 0.025, "giants: Dyudina's Jupiter red fit integrates to Ag " + std::to_string(a1) + ", AS " + std::to_string(s1) + " (Table 4: 0.549, 0.56)");
+        checkSay(std::fabs(a2 / cb3[0] - 1) < 0.025 && std::fabs(s2 / cb3[1] - 1) < 0.025, "giants: Dyudina's Jupiter CB3 fit integrates to Ag " + std::to_string(a2) + ", AS " + std::to_string(s2) + " (Table 4: 0.466, 0.57)");
+    }
+    // Saturn: the Barkstrom law with Table 3's red row
+    const auto satLaw = [](double mu0, double mu, double a) { double A, B; saturnAB(a, A, B); return barkstrom(A, B, mu0, mu); };
+    const double sAg = discP(satLaw, 0), sAS = sphericalA(satLaw);
+    checkSay(std::fabs(sAg / sat[0] - 1) < 0.025 && std::fabs(sAS / sat[1] - 1) < 0.025, "giants: Saturn's red Barkstrom law integrates to Ag " + std::to_string(sAg) + ", AS " + std::to_string(sAS) + " (Table 4: 0.483, 0.67)");
+    check(std::fabs(sAg - barkstromAg0(kSaturnA[0], kSaturnB[0])) < 0.002, "giants: the Barkstrom law's Ag at phase 0 is 2 A / (2^B (B + 1)) (" + std::to_string(barkstromAg0(kSaturnA[0], kSaturnB[0])) + ")");
+    double A30, B30, A45, B45; saturnAB(30, A30, B30); saturnAB(45, A45, B45);
+    check(A30 == 1.59 && B30 == 1.48 && std::fabs(A45 - 1.52) < 1e-12 && std::fabs(B45 - 1.47) < 1e-12, "giants: A and B at the table's 30 deg and halfway to 60 deg");
+    check(barkstrom(1.69, 1.48, 0.5, 0.5) > 0 && std::fabs(barkstrom(1.69, 1.48, 0.3, 0.7) - 1.69 / 0.7 * std::pow(0.21, 1.48)) < 1e-12 && barkstrom(1.69, 1.48, -0.1, 0.5) == 0,
+          "giants: the Barkstrom law is Eq. (4), (A / mu) (mu mu0 / (mu + mu0))^B, and 0 on the night side");
+    // the drawn laws (giantLight / giantLit): at phase 0 the full disc reflects 2/3 of the map (a Lambert ball's), so the maps keep their calibration
+    for (int kind = 1; kind <= 2; kind++)
+        for (int c = 0; c < 3; c++) {
+            const GiantLight g = giantLight(kind, 1.0);
+            const auto drawn = [&](double mu0, double mu, double) { return giantLit(g, c, mu0, mu); };
+            const double p0 = discP(drawn, 0);
+            check(std::fabs(p0 - 2.0 / 3.0) < 0.002, std::string(kind == 1 ? "Jupiter" : "Saturn") + ": the drawn disc at phase 0 reflects 2/3 of its map, as Lambert's (channel " + std::to_string(c) + ": " + std::to_string(p0) + ")");
+        }
+    // Jupiter: the drawn disc's phase curve is Mayorga's, (2/3) Phi_c(alpha), to 1 % (or 0.002 where the curve is under 0.2), 0 to 135 deg
+    double worstJ = 0;
+    bool okJ = true;
+    for (int c = 0; c < 3; c++)
+        for (double a = 0; a <= 135; a += 15) {
+            const GiantLight g = giantLight(1, std::cos(a * kGiantPi / 180));
+            const auto drawn = [&](double mu0, double mu, double) { return giantLit(g, c, mu0, mu); };
+            const double got = discP(drawn, a) / (2.0 / 3.0), want = mayorgaPhase(kMayorgaJupiter[c], a);
+            const double err = want > 0.2 ? std::fabs(got / want - 1) : std::fabs(got - want) / 0.2;
+            worstJ = std::max(worstJ, err);
+            okJ = okJ && err < 0.01;
+        }
+    checkSay(okJ, "Jupiter: the drawn disc follows Mayorga's measured curves 0-135 deg in red, green and blue (worst " + std::to_string(100 * worstJ) + " %)");
+    check(std::fabs(jupiterP(0, 150) - jupiterP(0, 135)) < 1e-15 && jupiterP(2, 0) == 1, "Jupiter: P is 1 at full phase and keeps its 135 deg value past 135 deg");
+    // Saturn's drawn disc: its phase curve is the paper's law's, scaled by (2/3) / Ag
+    const GiantLight g90 = giantLight(2, std::cos(90 * kGiantPi / 180));
+    const auto satDrawn = [&](double mu0, double mu, double) { return giantLit(g90, 0, mu0, mu); };
+    check(std::fabs(discP(satDrawn, 90) / discP(satLaw, 90) - saturnScale()) < 1e-9, "Saturn: the drawn law is the paper's times (2/3) / Ag(0) = " + std::to_string(saturnScale()));
+    check(giantLight(0, 0.3).kind == 0 && giantLit(giantLight(0, 0.3), 1, 0.4, 0.9) == 0.4, "giants: other bodies keep Lambert's cos i");
+}
+
 int main() {
+    testGiantPhotometry();
     testPickList094();
     testReview085();
     testSun094();

@@ -77,11 +77,11 @@ inline std::string physicsGuideText(bool real) {
 
 // 0.75.2 (outside review): time running past the edges. A jump stops at 1800 / 2100, but the fastest time speed runs on. Chosen: the lab keeps running and says so under the date, instead of a stop at
 // the edge (a stop would end a long run at the fastest speed with no way to look further; the owner can still read the date). Beyond the edge: Delta T (UT - TDB) is held at its value after the last
-// leap second, 69.2 s (it has been held there since 2017, not only after 2100: ROADMAP), the 13 big moons follow JPL's table of mean elements (0.88.0: orbit/moon_sats.h; their angle along the orbit is not real), the Moon falls back to its Kepler ellipse, and the
+// leap second, 69.2 s (it has been held there since 2017, not only after 2100: ROADMAP), the 13 big moons follow JPL's table of mean elements (0.88.0: orbit/moon_sats.h; their angle along the orbit is not real), the Moon (0.96.0) is on the turning ellipse fitted to ELP2000-82B (moon_elp.h), and the
 // accuracy of Real was never measured (real_errors.h: 1800-2100). Empty inside 1800-2100.
 inline std::string outsideRangeNote(int64_t nowMs) {
     if (nowMs >= kDateMinMs && nowMs <= kDateMaxMs) return "";
-    return std::string(nowMs > kDateMaxMs ? "Past 2100" : "Before 1800") + ": outside the years this lab checks against JPL. The Moon is on a simple ellipse, the 13 other big moons follow JPL's mean elements "
+    return std::string(nowMs > kDateMaxMs ? "Past 2100" : "Before 1800") + ": outside the years this lab checks against JPL. The Moon is on a turning ellipse fitted to the real Moon of 1800-2100 (within about 2.4 degrees of it there), the 13 other big moons follow JPL's mean elements "
            "(their orbits' size, shape, tilt and period; where each one is on its orbit is not the real place), the Earth's turning (Delta T) is held at today's value, and Real's accuracy was never measured here. "
            "Treat what you see as a picture, not a prediction.";
 }
@@ -104,7 +104,7 @@ inline std::string dateNotes(bool after2050, bool real, bool realMoon) {
     else n += "Dwarf planets and comets move on a simple orbit fixed at one date, so they drift away from their real places the further the date is from it (Pluto is about 1 AU off in 1800). ";
     // 0.46.3: Earth's Moon is real in Simple too, and the 13 other big moons have been real since 0.27 (orbit/moon_sats.h); the belt rocks are real asteroids on fixed orbits (orbit/belts.h)
     if (realMoon) n += "Earth’s Moon and the 13 other big moons are at their real places (1800 to 1 Jan 2100). ";
-    else n += "The moons are real only from 1800 to 1 Jan 2100. Here our Moon is on a simple orbit that starts at a made-up angle, and the 13 other big moons follow JPL’s mean elements: "
+    else n += "The moons are real only from 1800 to 1 Jan 2100. Here our Moon is on a turning ellipse fitted to the real Moon of 1800 to 2100 (within about 2.4° of it there; further away not checked), and the 13 other big moons follow JPL’s mean elements: "
               "their orbits' size, shape, tilt and period are JPL’s, but where each one is on its orbit is not the real place. ";
     n += "The belt rocks are real asteroids on fixed orbits (they drift like the comets); the Oort cloud’s dots are a sample of a published model (no object in it has been seen).";
     return n;

@@ -587,7 +587,55 @@ static void testMorseGap() {
     check(n == 4 && morse::morseGapWords("H2O").empty(), "Morse gap: all four diatomics have a measured D0; none for a molecule without one");
 }
 
+// 0.96.0 (outside review of 28 Nov 2026, part D): the spectrum's Absorbance. HITRAN's spectral line intensity (data/molecules/hitran/
+// hitran_definitions_2026-11-28.extract.txt): S = I_a A / (8 pi c nu^2) g' exp(-c2 E''/T) (1 - exp(-c2 nu/T)) / Q, with the electric dipole's
+// g'A = 64 pi^4 nu^3 g'' R / (3h): S = (8 pi^3 / 3hc) nu [g'' exp(-c2 E''/T) / Q] R (1 - exp(-c2 nu/T)). The lab's Line strength is the lower level's share
+// times the Honl-London factor over 2J+1, which is the [..] R part; so the absorbance is the strength times nu (1 - exp(-c2 nu/T)), scaled again so the
+// strongest line is 1. References: the factor worked by hand, its two limits (c2 nu << T: c2 nu^2 / T; c2 nu >> T: nu), and HITRAN's c2.
+static void testAbsorbance() {
+    using namespace molecule::rot;
+    std::ifstream f(PL_DATA_DIR "/molecules/hitran/hitran_definitions_2026-11-28.extract.txt");
+    std::stringstream ss; ss << f.rdbuf();
+    const std::string ex = ss.str();
+    const std::size_t at = ex.find("$c_2 = ");
+    const double c2Hitran = at == std::string::npos ? 0 : std::atof(ex.c_str() + at + 7);
+    check(c2Hitran == 1.4387769, "absorbance: HITRAN's c2 read from the extract (1.4387769 cm K)");
+    check(std::fabs(kC2 / c2Hitran - 1) < 1e-7, "absorbance: the lab's c2 = hc/k (CODATA 2022) is HITRAN's 1.4387769 cm K to its 8 digits");
+    check(ex.find("\\left( 1 - e^{-c_2\\nu_{ij}/T} \\right)") != std::string::npos && ex.find("\\frac{A_{ji}}{8 \\pi c \\nu_{ij}^2}") != std::string::npos
+          && ex.find("g'A_{ji} = \\frac{64\\pi^4}{3h}\\nu_{ij}^3g''") != std::string::npos, "absorbance: the extract holds HITRAN's S_ij and the dipole A (nu^3 / nu^2 = nu)");
+    // the factor by hand: nu = 1000 cm^-1 at 300 K: c2 nu / T = 1438.7769 / 300 = 4.795923, exp(-4.795923) = 0.0082634, 1000 (1 - 0.0082634) = 991.7366
+    check(std::fabs(absorbanceFactor(1000, 300) - 991.7366) < 1e-3, "absorbance: nu (1 - exp(-c2 nu / T)) at 1000 cm^-1, 300 K is 991.7366 (by hand)");
+    check(absorbanceFactor(20, 0) == 20, "absorbance: at T = 0 no level above is held, the factor is nu");
+    // two lines: HCl's pure rotation J = 0 -> 1 and J = 5 -> 6 at 296 K; the ratio of absorbances is the ratio of strengths times the ratio of the factors
+    const auto find = [](const std::vector<Line>& v, char br, int J) { for (const Line& l : v) if (l.branch == br && l.J == J && l.iso == kH35Cl) return l; return Line{}; };
+    const std::vector<Line> s296 = lines("HCl", kH35Cl, Spectrum::PureRotation, 296), a296 = lines("HCl", kH35Cl, Spectrum::PureRotation, 296, 1e-3, Measure::Absorbance);
+    const Line s0 = find(s296, 'J', 0), s5 = find(s296, 'J', 5), a0 = find(a296, 'J', 0), a5 = find(a296, 'J', 5);
+    const double want = s0.strength / s5.strength * (s0.nu * (1 - std::exp(-1.4387769 * s0.nu / 296))) / (s5.nu * (1 - std::exp(-1.4387769 * s5.nu / 296)));
+    check(s0.nu > 0 && s5.nu > 0 && a5.strength > 0 && std::fabs(a0.strength / a5.strength / want - 1) < 1e-6,
+          "absorbance: HCl at 296 K, J 0 -> 1 over J 5 -> 6 is the strengths' ratio times nu (1 - exp(-c2 nu / T))'s (" + std::to_string(a0.strength / a5.strength) + ")");
+    double topA = 0; for (const Line& l : a296) topA = std::max(topA, l.strength);
+    check(std::fabs(topA - 1) < 1e-12, "absorbance: the strongest line is 1");
+    const auto strongest = [](const std::vector<Line>& v) { std::size_t k = 0; for (std::size_t i = 0; i < v.size(); i++) if (v[i].strength > v[k].strength) k = i; return v[k].J; };
+    check(strongest(a296) > strongest(s296), "absorbance: weighted by nu, the strongest pure-rotation line is at a higher J than the strongest transition (" + std::to_string(strongest(s296)) + " -> " + std::to_string(strongest(a296)) + ")");
+    // the limits. High T (c2 nu << T): the factor is c2 nu^2 / T, so the ratio is the strengths' times (nu0 / nu5)^2
+    const std::vector<Line> sHot = lines("HCl", kH35Cl, Spectrum::PureRotation, 2e5, 1e-9), aHot = lines("HCl", kH35Cl, Spectrum::PureRotation, 2e5, 1e-9, Measure::Absorbance);
+    const Line h0 = find(sHot, 'J', 0), h5 = find(sHot, 'J', 5), g0 = find(aHot, 'J', 0), g5 = find(aHot, 'J', 5);
+    check(h5.strength > 0 && std::fabs(g0.strength / g5.strength / (h0.strength / h5.strength * std::pow(h0.nu / h5.nu, 2)) - 1) < 1e-3,
+          "absorbance: high temperature (c2 nu / T < 1e-3): the ratio tends to the strengths' times (nu ratio)^2");
+    // low T (c2 nu >> T): the factor is nu. HCl's fundamental band at 296 K (c2 nu / T about 14): R(0) over P(1)
+    const std::vector<Line> sB = lines("HCl", kH35Cl, Spectrum::Fundamental, 296), aB = lines("HCl", kH35Cl, Spectrum::Fundamental, 296, 1e-3, Measure::Absorbance);
+    const Line r0 = find(sB, 'R', 0), p1 = find(sB, 'P', 1), ar0 = find(aB, 'R', 0), ap1 = find(aB, 'P', 1);
+    check(p1.strength > 0 && ap1.strength > 0 && std::fabs(ar0.strength / ap1.strength / (r0.strength / p1.strength * r0.nu / p1.nu) - 1) < 2e-6,
+          "absorbance: low temperature (c2 nu / T about 14): R(0) over P(1) is the strengths' times the nu ratio");
+    // Line strength stays as it was
+    const std::vector<Line> sDef = lines("HCl", kH35Cl, Spectrum::PureRotation, 296, 1e-3, Measure::Strength);
+    bool same = sDef.size() == s296.size();
+    for (std::size_t i = 0; same && i < sDef.size(); i++) same = sDef[i].strength == s296[i].strength && sDef[i].nu == s296[i].nu;
+    check(same, "absorbance: Line strength is unchanged (the default)");
+}
+
 int main() {
+    testAbsorbance();
     testConstants();
     testWeights();
     testLevels();

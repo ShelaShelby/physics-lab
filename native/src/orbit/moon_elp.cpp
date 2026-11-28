@@ -183,4 +183,22 @@ MoonPhase moonPhase(Vec3 moonFromEarth, Vec3 sunFromEarth) {
     return {std::acos(cosE) * rad, fraction, idx, kNames[idx]};
 }
 
+// 0.96.0: the precessing ellipse (moon_elp.h). The same steps as native/tools/fit_moon_ellipse.py model(): Kepler's equation by Newton from E = M + e sin M, then the
+// orbit-plane point turned by the argument of perigee, the inclination and the node.
+Vec3 moonGeocentricEllipse(double jdTDB) {
+    const MoonEllipse& k = kMoonEllipse;
+    const double t = jdTDB - 2451545.0;
+    const double twoPi = 2.0 * kElp_cpi;
+    const double w = k.w0 + k.wdot * t, O = k.O0 + k.Odot * t;
+    const double M = std::remainder(k.L0 + k.Ldot * t - w, twoPi);
+    double E = M + k.e * std::sin(M);
+    for (int i = 0; i < 6; i++) E -= (E - k.e * std::sin(E) - M) / (1 - k.e * std::cos(E));
+    const double xo = k.a * (std::cos(E) - k.e), yo = k.a * std::sqrt(1 - k.e * k.e) * std::sin(E);
+    const double om = w - O;
+    const double co = std::cos(om), so = std::sin(om), cO = std::cos(O), sO = std::sin(O), ci = std::cos(k.i), si = std::sin(k.i);
+    return {(cO * co - sO * so * ci) * xo + (-cO * so - sO * co * ci) * yo,
+            (sO * co + cO * so * ci) * xo + (-sO * so + cO * co * ci) * yo,
+            (so * si) * xo + (co * si) * yo};
+}
+
 }  // namespace orbit
